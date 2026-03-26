@@ -233,10 +233,13 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
                 campus=self.campus,
             )
 
+        # Use population RNG for initial schedule — NOT temporal.
+        # The temporal stream must start at position 0 for both
+        # factual and counterfactual branches (fork gives fresh streams).
         schedule = _generate_schedule(
             patients, day=0, clinic_config=cc,
             noshow_variability=self.noshow_variability,
-            rng=self.rng.temporal,
+            rng=self.rng.population,
         )
 
         overbook_budget = {
