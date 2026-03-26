@@ -129,3 +129,92 @@ def calibration_slope(
 
     slope = np.polyfit(pred_arr, obs_arr, 1)[0]
     return float(slope), pred_arr, obs_arr
+
+
+# -- Prevalence-aware performance bounds ----------------------------------
+
+def theoretical_ppv(
+    prevalence: float,
+    sensitivity: float,
+    specificity: float,
+) -> float:
+    """Compute PPV from prevalence, sensitivity, and specificity.
+
+    Bayes' theorem:
+    PPV = (sens * prev) / (sens * prev + (1-spec) * (1-prev))
+    """
+    numer = sensitivity * prevalence
+    denom = numer + (1 - specificity) * (1 - prevalence)
+    if denom < 1e-12:
+        return 0.0
+    return numer / denom
+
+
+def theoretical_ppv_bounds(
+    prevalence: float,
+    sensitivity_range: np.ndarray = None,
+    specificities: list = None,
+) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+    """Compute PPV bounds across sensitivity and specificity values.
+
+    Returns (sensitivity_range, dict of PPV arrays keyed by specificity).
+    Shows the maximum achievable PPV at each operating point.
+    """
+    if sensitivity_range is None:
+        sensitivity_range = np.linspace(0.1, 1.0, 50)
+    if specificities is None:
+        specificities = [0.70, 0.80, 0.90, 0.95, 0.99]
+
+    results = {}
+    for spec in specificities:
+        ppvs = np.array([
+            theoretical_ppv(prevalence, sens, spec)
+            for sens in sensitivity_range
+        ])
+        results[f"spec_{spec:.2f}"] = ppvs
+
+    return sensitivity_range, results
+
+
+def check_target_feasibility(
+    prevalence: float,
+    target_ppv: float,
+    target_sensitivity: float = 0.80,
+) -> Dict[str, float]:
+    """Check if target PPV is achievable given prevalence.
+
+    Returns dict with:
+    - feasible: bool (achievable at specificity < 1.0)
+    - max_ppv_at_spec_95: maximum PPV at 95% specificity
+    - max_ppv_at_spec_99: maximum PPV at 99% specificity
+    - required_specificity: specificity needed to achieve target PPV
+    """
+    max_95 = theoretical_ppv(prevalence, target_sensitivity, 0.95)
+    max_99 = theoretical_ppv(prevalence, target_sensitivity, 0.99)
+
+    # Find required specificity for target PPV
+    # PPV = (sens * prev) / (sens * prev + (1-spec) * (1-prev))
+    # Solve for spec:
+    # PPV * (sens*prev + (1-spec)*(1-prev)) = sens * prev
+    # PPV * (1-spec) * (1-prev) = sens*prev * (1 - PPV)
+    # (1-spec) = sens*prev*(1-PPV) / (PPV*(1-prev))
+    # spec = 1 - sens*prev*(1-PPV) / (PPV*(1-prev))
+    if target_ppv > 0 and (1 - prevalence) > 0:
+        required_spec = 1 - (
+            target_sensitivity * prevalence * (1 - target_ppv)
+            / (target_ppv * (1 - prevalence))
+        )
+    else:
+        required_spec = 1.0
+
+    feasible = required_spec < 1.0 and required_spec > 0
+
+    return {
+        "feasible": feasible,
+        "max_ppv_at_spec_95": max_95,
+        "max_ppv_at_spec_99": max_99,
+        "required_specificity": max(0.0, required_spec),
+        "prevalence": prevalence,
+        "target_ppv": target_ppv,
+        "target_sensitivity": target_sensitivity,
+    }

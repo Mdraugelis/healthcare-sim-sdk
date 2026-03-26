@@ -25,7 +25,7 @@ from sdk.core.scenario import (
     Predictions,
     TimeConfig,
 )
-from sdk.ml.probability_model import ControlledProbabilityModel
+from sdk.ml.model import ControlledMLModel
 
 
 # -- Demographic distributions (realistic clinical proportions) -----------
@@ -166,12 +166,15 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         self.clinic_config = clinic_config or ClinicConfig()
         self.campus = campus
 
+        self.model_auc = model_auc
         if model_type == "predictor":
-            self._model = ControlledProbabilityModel(
-                target_auc=model_auc
+            self._model = ControlledMLModel(
+                mode="discrimination",
+                target_auc=model_auc,
             )
         else:
             self._model = None
+        self._model_fitted = False
 
     def create_population(self, n_entities: int) -> NoShowState:
         """Create patient panel with realistic demographics."""
@@ -330,8 +333,20 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
             )
             predicted = np.clip(predicted + noise, 0.01, 0.99)
         else:
+            # Fit model on first prediction call
+            if not self._model_fitted:
+                true_labels = (
+                    self.rng.prediction.random(len(true_probs))
+                    < true_probs
+                ).astype(int)
+                self._model.fit(
+                    true_labels, true_probs,
+                    self.rng.prediction, n_iterations=3,
+                )
+                self._model_fitted = True
+
             predicted = self._model.predict(
-                true_probs, self.rng.prediction
+                true_probs, self.rng.prediction,
             )
 
         for i, slot in enumerate(state.schedule):

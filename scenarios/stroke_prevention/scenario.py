@@ -22,7 +22,7 @@ from sdk.core.scenario import (
     Predictions,
     TimeConfig,
 )
-from sdk.ml.binary_classifier import ControlledBinaryClassifier
+from sdk.ml.model import ControlledMLModel
 from sdk.population.risk_distributions import beta_distributed_risks
 from sdk.population.temporal_dynamics import (
     annual_risk_to_hazard,
@@ -87,11 +87,12 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
         )
         super().__init__(time_config=time_config, seed=seed)
 
-        self._classifier = ControlledBinaryClassifier(
+        self._classifier = ControlledMLModel(
+            mode="classification",
             target_sensitivity=c.target_sensitivity,
             target_ppv=c.target_ppv,
         )
-        self._classifier_optimized = False
+        self._classifier_fitted = False
 
     def create_population(self, n_entities: int) -> np.ndarray:
         c = self.config
@@ -147,14 +148,15 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
             self.rng.prediction.random(len(risks)) < window_probs
         ).astype(int)
 
-        if not self._classifier_optimized:
-            self._classifier.optimize(
-                true_labels, risks, self.rng.prediction, n_iterations=3,
+        if not self._classifier_fitted:
+            self._classifier.fit(
+                true_labels, risks, self.rng.prediction,
+                n_iterations=3,
             )
-            self._classifier_optimized = True
+            self._classifier_fitted = True
 
-        scores, labels = self._classifier.predict(
-            true_labels, risks, self.rng.prediction,
+        scores, labels = self._classifier.predict_binary(
+            risks, self.rng.prediction, true_labels,
         )
         return Predictions(
             scores=scores,
