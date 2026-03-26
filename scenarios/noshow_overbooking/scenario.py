@@ -1,16 +1,16 @@
 """No-Show Overbooking Scenario — Reference Implementation #2.
 
-Simulates a clinic where an ML model predicts patient no-shows.
-High no-show probability slots are double-booked, improving
-utilization but potentially increasing wait times and creating
-equity concerns through compounding overbooking burden.
+Simulates a clinic where a predictive model identifies likely no-shows.
+High no-show probability slots are double-booked, improving utilization
+but potentially increasing wait times and creating equity concerns
+through compounding overbooking burden.
+
+Supports two model types:
+- 'baseline': Uses patient's historical no-show rate as the predictor
+- 'predictor': Uses a ControlledProbabilityModel (simulates Epic-like ML)
 
 Unit of analysis: appointment
 State: NoShowState dataclass (patient dict + schedule list + counters)
-
-This scenario validates SDK generality: fundamentally different state
-representation (dataclass graph vs numpy arrays), different unit of
-analysis, multiple outcome dimensions, and compounding effects.
 """
 
 from dataclasses import dataclass
@@ -28,9 +28,35 @@ from sdk.core.scenario import (
 from sdk.ml.probability_model import ControlledProbabilityModel
 
 
+# -- Demographic distributions (realistic clinical proportions) -----------
+
+RACE_ETHNICITY = {
+    "White": {"prob": 0.58, "noshow_mult": 0.90},
+    "Black": {"prob": 0.13, "noshow_mult": 1.35},
+    "Hispanic": {"prob": 0.18, "noshow_mult": 1.25},
+    "Asian": {"prob": 0.06, "noshow_mult": 0.80},
+    "Other": {"prob": 0.05, "noshow_mult": 1.10},
+}
+
+INSURANCE_TYPE = {
+    "Commercial": {"prob": 0.45, "noshow_mult": 0.80},
+    "Medicare": {"prob": 0.25, "noshow_mult": 0.95},
+    "Medicaid": {"prob": 0.20, "noshow_mult": 1.40},
+    "Self-Pay": {"prob": 0.10, "noshow_mult": 1.60},
+}
+
+AGE_BAND = {
+    "18-29": {"prob": 0.15, "noshow_mult": 1.40},
+    "30-44": {"prob": 0.22, "noshow_mult": 1.15},
+    "45-64": {"prob": 0.35, "noshow_mult": 0.90},
+    "65+": {"prob": 0.28, "noshow_mult": 0.80},
+}
+
+
 @dataclass
 class ClinicConfig:
     """Configuration for a clinic."""
+    name: str = "Primary Care"
     n_providers: int = 8
     slots_per_provider_per_day: int = 12
     max_overbook_per_provider: int = 2
@@ -46,7 +72,17 @@ class Patient:
     n_past_appointments: int = 0
     n_past_noshows: int = 0
     n_times_overbooked: int = 0
-    subgroup: str = "unknown"
+    race_ethnicity: str = "Unknown"
+    insurance_type: str = "Unknown"
+    age_band: str = "Unknown"
+    campus: str = "Unknown"
+
+    @property
+    def historical_noshow_rate(self) -> float:
+        """Patient's own historical no-show rate."""
+        if self.n_past_appointments == 0:
+            return 0.13  # population default
+        return self.n_past_noshows / self.n_past_appointments
 
 
 @dataclass
@@ -70,26 +106,35 @@ class AppointmentSlot:
 class NoShowState:
     """Complete state for the no-show overbooking scenario.
 
-    All mutable data lives here — not on the scenario object —
-    to satisfy the step purity contract.
+    All mutable data lives here to satisfy the step purity contract.
+
+    `resolved_slots` holds the previous day's slots AFTER resolution
+    (show/no-show determined). `schedule` holds the current day's
+    slots for predict/intervene. measure() reports from resolved_slots.
     """
     day: int
     patients: Dict[int, Patient]
-    schedule: List[AppointmentSlot]
+    schedule: List[AppointmentSlot]  # current day (for predict/intervene)
+    resolved_slots: List[AppointmentSlot]  # previous day (resolved)
     clinic_config: ClinicConfig
     overbook_budget: Dict[int, int]
     total_slots_resolved: int = 0
     total_noshows: int = 0
     total_collisions: int = 0
     total_overbooked_slots: int = 0
+    total_overbooked_showed: int = 0
 
 
 class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
     """No-show prediction with overbooking policy simulation.
 
-    State is a NoShowState dataclass containing patients, schedule,
-    and counters. step() uses only rng.temporal and the passed-in
-    state for purity.
+    Args:
+        model_type: 'baseline' (patient historical rate) or
+            'predictor' (ML model with target AUC).
+        model_auc: Target AUC for 'predictor' mode.
+        base_noshow_rate: Population-level no-show rate (default 0.13).
+        overbooking_threshold: Predicted prob above which to overbook.
+        campus: Clinic campus label for subgroup analysis.
     """
 
     unit_of_analysis = "appointment"
@@ -98,15 +143,16 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         self,
         time_config: TimeConfig,
         seed: Optional[int] = None,
-        n_patients: int = 1000,
-        base_noshow_rate: float = 0.12,
+        n_patients: int = 2000,
+        base_noshow_rate: float = 0.13,
         noshow_concentration: float = 0.3,
         noshow_variability: float = 0.03,
-        model_auc: float = 0.75,
+        model_type: str = "predictor",
+        model_auc: float = 0.83,
         overbooking_threshold: float = 0.30,
-        max_individual_overbooks: int = 3,
-        intervention_effectiveness: float = 1.0,
+        max_individual_overbooks: int = 5,
         clinic_config: Optional[ClinicConfig] = None,
+        campus: str = "Main",
     ):
         super().__init__(time_config=time_config, seed=seed)
 
@@ -114,43 +160,62 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         self.base_noshow_rate = base_noshow_rate
         self.noshow_concentration = noshow_concentration
         self.noshow_variability = noshow_variability
+        self.model_type = model_type
         self.overbooking_threshold = overbooking_threshold
         self.max_individual_overbooks = max_individual_overbooks
-        self.intervention_effectiveness = intervention_effectiveness
         self.clinic_config = clinic_config or ClinicConfig()
+        self.campus = campus
 
-        self._model = ControlledProbabilityModel(target_auc=model_auc)
+        if model_type == "predictor":
+            self._model = ControlledProbabilityModel(
+                target_auc=model_auc
+            )
+        else:
+            self._model = None
 
     def create_population(self, n_entities: int) -> NoShowState:
-        """Create patient panel and initial schedule."""
+        """Create patient panel with realistic demographics."""
         rng = self.rng.population
         cc = self.clinic_config
 
-        # Beta-distributed no-show probabilities
+        # Beta-distributed base no-show probabilities
         alpha = self.noshow_concentration
         beta_p = alpha * (1 / self.base_noshow_rate - 1)
         raw_probs = rng.beta(alpha, beta_p, self.n_patients)
         scaling = self.base_noshow_rate / np.mean(raw_probs)
         base_probs = np.clip(raw_probs * scaling, 0.01, 0.80)
 
-        # Subgroup assignments with disparity multipliers
-        subgroups = rng.choice(
-            ["group_A", "group_B", "group_C", "group_D"],
-            size=self.n_patients,
-            p=[0.55, 0.20, 0.15, 0.10],
-        )
-        multipliers = {
-            "group_A": 0.85, "group_B": 1.10,
-            "group_C": 1.30, "group_D": 1.50,
-        }
-        for i, sg in enumerate(subgroups):
-            base_probs[i] *= multipliers[sg]
+        # Assign demographics
+        race_names = list(RACE_ETHNICITY.keys())
+        race_probs = [RACE_ETHNICITY[r]["prob"] for r in race_names]
+        races = rng.choice(race_names, self.n_patients, p=race_probs)
+
+        ins_names = list(INSURANCE_TYPE.keys())
+        ins_probs = [INSURANCE_TYPE[i]["prob"] for i in ins_names]
+        insurances = rng.choice(ins_names, self.n_patients, p=ins_probs)
+
+        age_names = list(AGE_BAND.keys())
+        age_probs = [AGE_BAND[a]["prob"] for a in age_names]
+        ages = rng.choice(age_names, self.n_patients, p=age_probs)
+
+        # Apply demographic disparity multipliers
+        for i in range(self.n_patients):
+            mult = (
+                RACE_ETHNICITY[races[i]]["noshow_mult"]
+                * INSURANCE_TYPE[insurances[i]]["noshow_mult"]
+                * AGE_BAND[ages[i]]["noshow_mult"]
+            ) ** (1 / 3)  # geometric mean to avoid extreme compounding
+            base_probs[i] *= mult
         base_probs = np.clip(base_probs, 0.01, 0.80)
 
-        # Create patients
+        # Re-scale to hit target population rate
+        scaling = self.base_noshow_rate / np.mean(base_probs)
+        base_probs = np.clip(base_probs * scaling, 0.01, 0.80)
+
+        # Create patients with history
         patients: Dict[int, Patient] = {}
         for i in range(self.n_patients):
-            past_appts = int(rng.poisson(6))
+            past_appts = int(rng.poisson(8))
             past_noshows = int(rng.binomial(
                 max(past_appts, 0), base_probs[i]
             ))
@@ -159,10 +224,12 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
                 base_noshow_probability=float(base_probs[i]),
                 n_past_appointments=past_appts,
                 n_past_noshows=past_noshows,
-                subgroup=str(subgroups[i]),
+                race_ethnicity=str(races[i]),
+                insurance_type=str(insurances[i]),
+                age_band=str(ages[i]),
+                campus=self.campus,
             )
 
-        # Initial schedule (uses temporal RNG via helper)
         schedule = _generate_schedule(
             patients, day=0, clinic_config=cc,
             noshow_variability=self.noshow_variability,
@@ -178,6 +245,7 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
             day=0,
             patients=patients,
             schedule=schedule,
+            resolved_slots=[],
             clinic_config=cc,
             overbook_budget=overbook_budget,
         )
@@ -185,31 +253,26 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
     def step(self, state: NoShowState, t: int) -> NoShowState:
         """Resolve appointments, update histories, generate new schedule.
 
-        PURITY: uses only self.rng.temporal and state. All mutable
-        counters and patient histories live in the state object.
+        PURITY: uses only self.rng.temporal and state.
         """
         rng = self.rng.temporal
 
-        # Resolve current schedule
         for slot in state.schedule:
             if slot.resolved:
                 continue
 
-            # Original patient show/no-show
             slot.original_showed = (
                 rng.random() >= slot.true_noshow_prob
             )
 
-            # Overbooked patient show/no-show
             if (slot.is_overbooked
                     and slot.overbooked_patient_id is not None):
                 ob_patient = state.patients[slot.overbooked_patient_id]
                 ob_prob = ob_patient.base_noshow_probability
                 ob_prob += rng.normal(0, self.noshow_variability)
-                ob_prob = np.clip(ob_prob, 0.01, 0.80)
+                ob_prob = float(np.clip(ob_prob, 0.01, 0.80))
                 slot.overbooked_showed = (rng.random() >= ob_prob)
 
-                # Collision: both showed
                 if slot.original_showed and slot.overbooked_showed:
                     slot.wait_time_minutes = float(
                         state.clinic_config.appointment_duration_minutes
@@ -217,11 +280,11 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
                     )
                     state.total_collisions += 1
 
-                # Track overbooking burden
                 ob_patient.n_times_overbooked += 1
                 state.total_overbooked_slots += 1
+                if slot.overbooked_showed:
+                    state.total_overbooked_showed += 1
 
-            # Update patient history
             patient = state.patients[slot.patient_id]
             patient.n_past_appointments += 1
             if not slot.original_showed:
@@ -231,7 +294,9 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
             state.total_slots_resolved += 1
             slot.resolved = True
 
-        # Generate new schedule for day t
+        # Save resolved slots for measure() to report on
+        state.resolved_slots = list(state.schedule)
+
         state.day = t
         state.schedule = _generate_schedule(
             state.patients, day=t,
@@ -240,7 +305,6 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
             rng=rng,
         )
 
-        # Reset daily overbook budget
         state.overbook_budget = {
             pid: state.clinic_config.max_overbook_per_provider
             for pid in range(state.clinic_config.n_providers)
@@ -249,12 +313,26 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         return state
 
     def predict(self, state: NoShowState, t: int) -> Predictions:
-        """Run probability model on current schedule."""
+        """Generate predictions using configured model type."""
         true_probs = np.array([
             s.true_noshow_prob for s in state.schedule
         ])
 
-        predicted = self._model.predict(true_probs, self.rng.prediction)
+        if self.model_type == "baseline":
+            # Use each patient's historical no-show rate
+            predicted = np.array([
+                state.patients[s.patient_id].historical_noshow_rate
+                for s in state.schedule
+            ])
+            # Add small noise for variability
+            noise = self.rng.prediction.normal(
+                0, 0.02, len(predicted)
+            )
+            predicted = np.clip(predicted + noise, 0.01, 0.99)
+        else:
+            predicted = self._model.predict(
+                true_probs, self.rng.prediction
+            )
 
         for i, slot in enumerate(state.schedule):
             slot.predicted_noshow_prob = float(predicted[i])
@@ -264,17 +342,17 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
             metadata={
                 "slot_ids": [s.slot_id for s in state.schedule],
                 "true_probs": true_probs,
+                "model_type": self.model_type,
             },
         )
 
     def intervene(
         self, state: NoShowState, predictions: Predictions, t: int,
     ) -> tuple[NoShowState, Interventions]:
-        """Overbook high no-show probability slots."""
+        """Overbook high no-show probability slots with guardrails."""
         rng = self.rng.intervention
         overbooked_indices: List[int] = []
 
-        # Sort by predicted no-show prob (highest first)
         scored = sorted(
             enumerate(state.schedule),
             key=lambda x: x[1].predicted_noshow_prob,
@@ -290,7 +368,6 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
             if state.overbook_budget.get(slot.provider_id, 0) <= 0:
                 continue
 
-            # Find candidate not already scheduled today
             candidates = [
                 p for pid, p in state.patients.items()
                 if pid not in scheduled_ids
@@ -318,30 +395,51 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         )
 
     def measure(self, state: NoShowState, t: int) -> Outcomes:
-        """Record appointment-level outcomes."""
-        slot_ids = np.array([s.slot_id for s in state.schedule])
+        """Record appointment-level outcomes with demographics.
+
+        Reports from resolved_slots (previous day's resolved
+        appointments). On day 0 before any resolution, reports
+        from the current schedule (unresolved).
+        """
+        slots = (
+            state.resolved_slots if state.resolved_slots
+            else state.schedule
+        )
+
+        slot_ids = np.array([s.slot_id for s in slots])
         noshows = np.array([
             0.0 if s.original_showed else 1.0
-            for s in state.schedule
+            for s in slots
         ])
 
         utilized = np.array([
             1.0 if s.original_showed
-            else (1.0 if s.is_overbooked and s.overbooked_showed else 0.0)
-            for s in state.schedule
+            else (
+                1.0 if s.is_overbooked and s.overbooked_showed
+                else 0.0
+            )
+            for s in slots
         ])
 
         wait_times = np.array([
-            s.wait_time_minutes for s in state.schedule
+            s.wait_time_minutes for s in slots
         ])
 
-        # Per-patient overbooking burden (for equity analysis)
         patient_ids = np.array([
-            s.patient_id for s in state.schedule
+            s.patient_id for s in slots
         ])
-        patient_subgroups = np.array([
-            state.patients[s.patient_id].subgroup
-            for s in state.schedule
+
+        race = np.array([
+            state.patients[s.patient_id].race_ethnicity
+            for s in slots
+        ])
+        insurance = np.array([
+            state.patients[s.patient_id].insurance_type
+            for s in slots
+        ])
+        age_band = np.array([
+            state.patients[s.patient_id].age_band
+            for s in slots
         ])
 
         return Outcomes(
@@ -350,16 +448,22 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
             secondary={
                 "utilization": utilized,
                 "wait_times": wait_times,
-                "subgroup": patient_subgroups,
+                "race_ethnicity": race,
+                "insurance_type": insurance,
+                "age_band": age_band,
             },
             metadata={
                 "patient_ids": patient_ids,
+                "campus": self.campus,
                 "total_collisions": state.total_collisions,
                 "total_overbooked": state.total_overbooked_slots,
-                "mean_overbooking_burden": np.mean([
+                "total_overbooked_showed": state.total_overbooked_showed,
+                "total_noshows": state.total_noshows,
+                "total_resolved": state.total_slots_resolved,
+                "mean_overbooking_burden": float(np.mean([
                     p.n_times_overbooked
                     for p in state.patients.values()
-                ]),
+                ])),
             },
         )
 

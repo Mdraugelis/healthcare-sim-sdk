@@ -109,33 +109,33 @@ class TestNoShowGenerality:
 
 
 class TestNoShowEquity:
-    def test_subgroup_labels_present(self):
-        """Subgroup labels are available for equity analysis."""
+    def test_demographic_labels_present(self):
+        """Demographic labels are available for equity analysis."""
         sc = _make_scenario(n_days=5, n_patients=200)
         results = BranchedSimulationEngine(
             sc, CounterfactualMode.BRANCHED
         ).run(200)
 
-        # Check subgroup data in secondary outcomes
-        out = results.outcomes[0]
-        assert "subgroup" in out.secondary
-        subgroups = out.secondary["subgroup"]
-        unique = set(subgroups)
-        assert len(unique) > 1, "Should have multiple subgroups"
+        out = results.outcomes[1]  # t=1 has resolved slots
+        assert "race_ethnicity" in out.secondary
+        assert "insurance_type" in out.secondary
+        assert "age_band" in out.secondary
+        races = set(out.secondary["race_ethnicity"])
+        assert len(races) > 1, "Should have multiple race/ethnicity groups"
 
     def test_subgroup_panel_export(self):
-        """to_subgroup_panel works with no-show subgroup data."""
+        """to_subgroup_panel works with demographic data."""
         sc = _make_scenario(n_days=5, n_patients=200)
         results = BranchedSimulationEngine(
             sc, CounterfactualMode.BRANCHED
         ).run(200)
 
         panel = results.to_analysis().to_subgroup_panel(
-            subgroup_key="subgroup"
+            subgroup_key="race_ethnicity"
         )
         assert "subgroup" in panel
         unique = set(panel["subgroup"])
-        assert "group_A" in unique or "group_B" in unique
+        assert "White" in unique or "Black" in unique
 
 
 class TestNoShowPopulation:
