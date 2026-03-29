@@ -16,7 +16,6 @@ Usage:
 import argparse
 import json
 import logging
-import sys
 import time
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
@@ -27,14 +26,14 @@ from typing import Any, Dict, List
 import numpy as np
 
 
-from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
     ClinicConfig,
     RealisticNoShowScenario,
 )
-from healthcare_sim_sdk.core.engine import (  # noqa: E402
+from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine, CounterfactualMode,
 )
-from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +434,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir", type=str,
-        default="experiments/outputs",
+        default="outputs",
     )
     args = parser.parse_args()
 
