@@ -19,8 +19,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-CATALOG_PATH = Path(__file__).parent / "catalog.json"
-OUTPUTS_DIR = Path(__file__).parent / "outputs"
+# Default to CWD so users' experiments stay in their project directory
+CATALOG_PATH = Path("catalog.json")
+OUTPUTS_DIR = Path("outputs")
 
 
 class ExperimentCatalog:

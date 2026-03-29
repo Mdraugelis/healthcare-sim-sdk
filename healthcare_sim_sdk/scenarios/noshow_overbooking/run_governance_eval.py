@@ -19,7 +19,6 @@ Usage:
 
 import json
 import logging
-import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -29,14 +28,14 @@ from typing import Any, Dict, List
 import numpy as np
 
 
-from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
     ClinicConfig, RealisticNoShowScenario,
 )
-from healthcare_sim_sdk.core.engine import (  # noqa: E402
+from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine, CounterfactualMode,
 )
-from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
-from healthcare_sim_sdk.ml.performance import (  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.ml.performance import (
     auc_score, calibration_slope, confusion_matrix_metrics,
 )
 
@@ -514,7 +513,7 @@ def main():
 
     config = GovernanceConfig()
     output_dir = (
-        Path("experiments/outputs")
+        Path("outputs")
         / f"{config.experiment_name}_{config.timestamp}"
     )
     output_dir.mkdir(parents=True, exist_ok=True)

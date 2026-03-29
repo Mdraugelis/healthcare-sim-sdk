@@ -23,11 +23,11 @@ from typing import Any, Dict, List
 import numpy as np
 
 
-from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
     RACE_ETHNICITY, INSURANCE_TYPE, AGE_BAND, VISIT_TYPES,
     ClinicConfig, RealisticNoShowScenario,
 )
-from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig
 
 
 @dataclass
@@ -52,7 +52,7 @@ def validate_experiment(
     then checks every config parameter against observed output.
     """
     if experiments_dir is None:
-        experiments_dir = Path(__file__).parent / "outputs"
+        experiments_dir = Path("outputs")
 
     # Find the experiment directory
     matches = list(experiments_dir.glob(f"*{timestamp}*"))

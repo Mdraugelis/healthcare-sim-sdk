@@ -14,7 +14,6 @@ Usage:
 import argparse
 import json
 import logging
-import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -23,17 +22,15 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-# Add project root to path
-
-from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
     ClinicConfig,
     RealisticNoShowScenario,
 )
-from healthcare_sim_sdk.core.engine import (  # noqa: E402
+from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine, CounterfactualMode,
 )
-from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
-from healthcare_sim_sdk.ml.performance import (  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.ml.performance import (
     auc_score, confusion_matrix_metrics,
 )
 
@@ -373,7 +370,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir", type=str,
-        default="experiments/outputs",
+        default="outputs",
     )
     args = parser.parse_args()
 

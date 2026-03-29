@@ -9,15 +9,13 @@ Usage:
     print(report)
 
     # Or from CLI:
-    python experiments/report.py 20260328_220210
+    python -m healthcare_sim_sdk.experiments.report 20260328_220210
 """
 
 import sys
-from pathlib import Path
 from typing import List, Optional
 
-
-from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog  # noqa: E402
+from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
 
 
 def generate_report(
