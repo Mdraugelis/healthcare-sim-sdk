@@ -143,6 +143,11 @@ class ClinicState:
     clinic_config: ClinicConfig
     overbook_budget: Dict[int, int]
 
+    # AR(1) modifiers: per-patient temporal drift of no-show probability.
+    # Stored in state (not Patient) for step purity.
+    # current_noshow_prob = base_noshow_prob * noshow_modifiers[pid]
+    noshow_modifiers: Dict[int, float] = None  # type: ignore
+
     # Cumulative counters
     total_slots_resolved: int = 0
     total_noshows: int = 0
@@ -150,7 +155,7 @@ class ClinicState:
     total_overbooked: int = 0
     total_overbooked_showed: int = 0
     total_waitlist_served: int = 0
-    cumulative_wait_days: int = 0  # sum of days waited by served patients
+    cumulative_wait_days: int = 0
 
 
 class RealisticNoShowScenario(BaseScenario["ClinicState"]):
@@ -184,6 +189,8 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
         overbooking_threshold: float = 0.50,
         max_individual_overbooks: int = 10,
         clinic_config: Optional[ClinicConfig] = None,
+        ar1_rho: float = 0.95,
+        ar1_sigma: float = 0.04,
     ):
         super().__init__(time_config=time_config, seed=seed)
         self.n_patients = n_patients
@@ -195,6 +202,8 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
         self.overbooking_threshold = overbooking_threshold
         self.max_individual_overbooks = max_individual_overbooks
         self.clinic_config = clinic_config or ClinicConfig()
+        self.ar1_rho = ar1_rho
+        self.ar1_sigma = ar1_sigma
 
         if model_type == "predictor":
             self._model = ControlledMLModel(
@@ -256,7 +265,7 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
             # Daily probability of being scheduled ≈ 1/interval
             daily_weight = 1.0 / interval
 
-            past_appts = int(rng.poisson(6))
+            past_appts = int(rng.poisson(3))
             past_noshows = int(rng.binomial(
                 max(past_appts, 0), base_probs[i]
             ))
@@ -272,15 +281,17 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
                 age_band=str(ages[i]),
             )
 
+        # Initialize AR(1) modifiers at 1.0 (no drift yet)
+        noshow_modifiers = {i: 1.0 for i in range(self.n_patients)}
+
         # Generate initial schedule using POPULATION rng
         schedule = _build_daily_schedule(
             patients, day=0, clinic_config=cc,
-            noshow_variability=self.noshow_variability, rng=rng,
+            noshow_variability=self.noshow_variability,
+            noshow_modifiers=noshow_modifiers, rng=rng,
         )
 
-        # Initial empty waitlist
         waitlist: List[WaitlistEntry] = []
-
         overbook_budget = {
             pid: cc.max_overbook_per_provider
             for pid in range(cc.n_providers)
@@ -290,6 +301,7 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
             day=0, patients=patients, schedule=schedule,
             resolved_slots=[], waitlist=waitlist,
             clinic_config=cc, overbook_budget=overbook_budget,
+            noshow_modifiers=noshow_modifiers,
         )
 
     def step(self, state: ClinicState, t: int) -> ClinicState:
@@ -313,7 +325,10 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
             if (slot.is_overbooked
                     and slot.overbooked_patient_id is not None):
                 ob_patient = state.patients[slot.overbooked_patient_id]
-                ob_prob = ob_patient.base_noshow_prob
+                ob_mod = state.noshow_modifiers.get(
+                    slot.overbooked_patient_id, 1.0
+                )
+                ob_prob = ob_patient.base_noshow_prob * ob_mod
                 ob_prob += rng.normal(0, self.noshow_variability)
                 ob_prob = float(np.clip(ob_prob, 0.01, 0.80))
                 slot.overbooked_showed = (rng.random() >= ob_prob)
@@ -342,7 +357,16 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
 
         state.resolved_slots = list(state.schedule)
 
-        # 2. New waitlist requests arrive
+        # 2. Evolve AR(1) modifiers for ALL patients
+        # Behavior drifts every day, even when not scheduled.
+        # modifier_t = rho * modifier_{t-1} + (1-rho) * 1.0 + N(0, sigma)
+        for pid in state.noshow_modifiers:
+            mod = state.noshow_modifiers[pid]
+            noise = rng.normal(0, self.ar1_sigma)
+            mod = self.ar1_rho * mod + (1 - self.ar1_rho) * 1.0 + noise
+            state.noshow_modifiers[pid] = float(np.clip(mod, 0.5, 2.0))
+
+        # 4. New waitlist requests arrive
         n_new = int(rng.poisson(cc.new_waitlist_requests_per_day))
         # New requests come from patients not recently scheduled
         eligible = [
@@ -359,14 +383,15 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
                     priority=priority,
                 ))
 
-        # 3. Generate new schedule
+        # 5. Generate new schedule (uses current drifted modifiers)
         state.day = t
         state.schedule = _build_daily_schedule(
             state.patients, day=t, clinic_config=cc,
-            noshow_variability=self.noshow_variability, rng=rng,
+            noshow_variability=self.noshow_variability,
+            noshow_modifiers=state.noshow_modifiers, rng=rng,
         )
 
-        # 4. Reset daily overbook budget
+        # 6. Reset daily overbook budget
         state.overbook_budget = {
             pid: cc.max_overbook_per_provider
             for pid in range(cc.n_providers)
@@ -547,26 +572,28 @@ def _build_daily_schedule(
     day: int,
     clinic_config: ClinicConfig,
     noshow_variability: float,
+    noshow_modifiers: Dict[int, float],
     rng: np.random.Generator,
 ) -> List[Slot]:
     """Build a day's schedule using visit-frequency weighting.
 
     Patients are selected with probability proportional to their
-    daily_schedule_weight. Chronic patients appear more often.
+    daily_schedule_weight. The true no-show probability reflects the
+    current AR(1) drift: base_prob * modifier + appointment noise.
     """
     cc = clinic_config
     total_slots = cc.n_providers * cc.slots_per_provider_per_day
 
-    # Build weighted selection
     pids = list(patients.keys())
-    weights = np.array([patients[pid].daily_schedule_weight for pid in pids])
+    weights = np.array([
+        patients[pid].daily_schedule_weight for pid in pids
+    ])
 
     # Don't schedule someone who was just scheduled
     for i, pid in enumerate(pids):
         if (day - patients[pid].last_scheduled_day) < 3:
             weights[i] = 0.0
 
-    # Normalize
     w_sum = weights.sum()
     if w_sum < 1e-10:
         weights = np.ones(len(pids)) / len(pids)
@@ -581,9 +608,10 @@ def _build_daily_schedule(
     schedule: List[Slot] = []
     for i, pid in enumerate(selected):
         patient = patients[pid]
-        appt_prob = patient.base_noshow_prob + rng.normal(
-            0, noshow_variability
-        )
+        modifier = noshow_modifiers.get(pid, 1.0)
+        # Current drifted probability + per-appointment noise
+        current_prob = patient.base_noshow_prob * modifier
+        appt_prob = current_prob + rng.normal(0, noshow_variability)
         appt_prob = float(np.clip(appt_prob, 0.01, 0.80))
 
         schedule.append(Slot(
