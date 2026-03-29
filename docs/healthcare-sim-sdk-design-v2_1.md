@@ -1394,21 +1394,18 @@ addresses the core simulation question raised in the evaluation's Section 8:
 > | Overbooked-patient-show rate                   | When a clinic overbooks a slot, how often does the overbooked patient actually show up? |
 > | Collision rate                                 | How often do both the original patient and the overbooked patient show up (the failure case)? |
 > | Subgroup breakdown                             | All the above metrics are stratified by targeted subgroups (race/ethnicity, insurance type, campus/geography, age). |
-> | Dynamism of actual no-show rate                | Since operations use actual no-show rates as predictor, how dynamic is this value over time? (i.e., does a patient's actual no-show rate change meaningfully, or is it essentially static?) This is needed to compare against the Epic predictor's dynamism (see Phase 2). |
 > | Overbooking volume                             | Average number of overbookings per week by clinic.           |
 > | Utilization rate                               | Current slot utilization rate by clinic.                     |
->
->  **Evaluate the Prediction Model (Retrospective)** 
->
-> Compare the Epic No-Show Predictor against the current baseline established in Phase 1. 
->
-> | Metric                     | Description                                                  |
+> 
+>**Evaluate the Prediction Model (Retrospective)** 
+>  
+>Compare the Epic No-Show Predictor against the current baseline established in Phase 1. 
+> 
+>| Metric                     | Description                                                  |
 > | -------------------------- | ------------------------------------------------------------ |
 > | Model discrimination       | C-statistic (AUC) overall and by subgroup. Compare directly against the accuracy of the actual no-show rate as a predictor from Phase 1. |
-> | Subgroup performance       | Model performance (AUC, PPV, calibration) across targeted subgroups. Identify any subgroups where performance is meaningfully worse. |
 > | Anticipated collision rate | Given the model's performance characteristics, what collision rate would result at various no-show probability thresholds? Compare against Phase 1 baseline collision rate. |
 > | Threshold selection        | Use the model performance data to select the no-show probability threshold that achieves the desired balance of collision rate vs. filled slots. <br /><br />The operational goal is to select the optimal threshold to improve utilization at clinics.  Some clinics are underbooking and have utilization of 80% and some have overbooking issues were they average over 100%.   We want to improve upon baseline and get near 100%. |
-> | Risk score dynamism        | Confirm that the patient's Epic risk score is more dynamic than their actual no-show rate. (Addresses Stephanie Kraft's concern: if the risk score is essentially static like the no-show rate, it will flag the same patients repeatedly with no path to "recovery," concentrating overbooking burden on the same individuals over time.) |
 
 **Realism tier:** This is an *architecture-validating* scenario. The domain logic
 (waitlist selection, overbooking mechanics) is realistic enough to stress-test

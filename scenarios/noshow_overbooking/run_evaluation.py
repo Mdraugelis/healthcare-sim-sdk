@@ -5,10 +5,10 @@ results to experiments/outputs/ with JSON summaries, CSV data,
 and configuration tracking.
 
 Usage:
-    python experiments/run_noshow_evaluation.py
+    python scenarios/noshow_overbooking/run_evaluation.py
 
     # Override parameters:
-    python experiments/run_noshow_evaluation.py --n-days 90 --model-auc 0.87
+    python scenarios/noshow_overbooking/run_evaluation.py --n-days 90 --model-auc 0.87
 """
 
 import argparse

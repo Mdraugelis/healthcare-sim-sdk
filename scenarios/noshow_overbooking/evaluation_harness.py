@@ -6,7 +6,7 @@ for both baseline (patient historical rate) and ML predictor
 evaluation.
 
 Usage:
-    from experiments.noshow_evaluation import (
+    from scenarios.noshow_overbooking.evaluation_harness import (
         run_evaluation_sweep, CLINIC_PROFILES, summarize_results
     )
     results = run_evaluation_sweep(

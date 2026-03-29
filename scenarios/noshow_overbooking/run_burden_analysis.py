@@ -9,8 +9,8 @@ Key questions:
 - How quickly do high-burden patients hit the individual cap?
 
 Usage:
-    python experiments/run_burden_analysis.py
-    python experiments/run_burden_analysis.py --n-days 365 --cap 5
+    python scenarios/noshow_overbooking/run_burden_analysis.py
+    python scenarios/noshow_overbooking/run_burden_analysis.py --n-days 365 --cap 5
 """
 
 import argparse
