@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "healthcare-sim-sdk"
-version = "0.1.0"
+version = "0.1.0-beta"
 description = "Healthcare Intervention Simulation SDK for AI deployment evaluation"
 readme = "README.md"
 requires-python = ">=3.10"
