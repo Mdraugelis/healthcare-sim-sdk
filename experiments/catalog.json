@@ -74,5 +74,24 @@
     "control_utilization": 0.8851224105461394,
     "notes": "",
     "registered_at": "2026-03-28T22:45:58.040396"
+  },
+  {
+    "timestamp": "20260328_225414",
+    "experiment_name": "overbooking_burden_analysis",
+    "output_dir": "experiments/outputs/overbooking_burden_analysis_20260328_225414",
+    "n_patients": 2000,
+    "n_days": 365,
+    "seed": 42,
+    "model_auc": 0.83,
+    "ar1_rho": 0.95,
+    "ar1_sigma": 0.04,
+    "baseline_threshold": null,
+    "baseline_auc": null,
+    "best_predictor_auc": null,
+    "best_predictor_threshold": null,
+    "collision_rate_reduction": null,
+    "control_utilization": null,
+    "notes": "Burden analysis: 365 days, policy=threshold",
+    "registered_at": "2026-03-28T22:54:33.801024"
   }
 ]

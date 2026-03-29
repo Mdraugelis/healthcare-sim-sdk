@@ -1,0 +1,22 @@
+2026-03-28 22:54:14,696 INFO Config: {
+  "experiment_name": "overbooking_burden_analysis",
+  "timestamp": "20260328_225414",
+  "seed": 42,
+  "n_patients": 2000,
+  "n_days": 365,
+  "base_noshow_rate": 0.13,
+  "n_providers": 6,
+  "slots_per_provider": 12,
+  "max_overbook_per_provider": 2,
+  "new_waitlist_requests_per_day": 5,
+  "model_type": "predictor",
+  "model_auc": 0.83,
+  "overbooking_threshold": 0.3,
+  "max_individual_overbooks": 10,
+  "overbooking_policy": "threshold",
+  "ar1_rho": 0.95,
+  "ar1_sigma": 0.04
+}
+2026-03-28 22:54:22,528 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
+2026-03-28 22:54:24,098 INFO Simulation complete in 9.4 seconds
+2026-03-28 22:54:32,267 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
