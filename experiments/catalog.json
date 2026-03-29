@@ -36,5 +36,43 @@
     "control_utilization": 0.8516949152542372,
     "notes": "",
     "registered_at": "2026-03-28T22:15:34.974138"
+  },
+  {
+    "timestamp": "20260328_222112",
+    "experiment_name": "noshow_overbooking_evaluation",
+    "output_dir": "experiments/outputs/noshow_overbooking_evaluation_20260328_222112",
+    "n_patients": 3000,
+    "n_days": 90,
+    "seed": 42,
+    "model_auc": 0.83,
+    "ar1_rho": 0.95,
+    "ar1_sigma": 0.04,
+    "baseline_threshold": 0.5,
+    "baseline_auc": 0.7596903389247835,
+    "best_predictor_auc": 0.707800556733855,
+    "best_predictor_threshold": 0.15,
+    "collision_rate_reduction": -0.2509719579783274,
+    "control_utilization": 0.852996254681648,
+    "notes": "",
+    "registered_at": "2026-03-28T22:22:11.013805"
+  },
+  {
+    "timestamp": "20260328_224503",
+    "experiment_name": "noshow_overbooking_evaluation",
+    "output_dir": "experiments/outputs/noshow_overbooking_evaluation_20260328_224503",
+    "n_patients": 2000,
+    "n_days": 60,
+    "seed": 42,
+    "model_auc": 0.83,
+    "ar1_rho": 0.95,
+    "ar1_sigma": 0.04,
+    "baseline_threshold": 0.5,
+    "baseline_auc": 0.7565237547585296,
+    "best_predictor_auc": 0.8451878695229842,
+    "best_predictor_threshold": 0.15,
+    "collision_rate_reduction": 0.19970109255823543,
+    "control_utilization": 0.8851224105461394,
+    "notes": "",
+    "registered_at": "2026-03-28T22:45:58.040396"
   }
 ]

@@ -188,6 +188,7 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
         model_auc: float = 0.83,
         overbooking_threshold: float = 0.50,
         max_individual_overbooks: int = 10,
+        overbooking_policy: str = "threshold",
         clinic_config: Optional[ClinicConfig] = None,
         ar1_rho: float = 0.95,
         ar1_sigma: float = 0.04,
@@ -201,6 +202,7 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
         self.model_auc = model_auc
         self.overbooking_threshold = overbooking_threshold
         self.max_individual_overbooks = max_individual_overbooks
+        self.overbooking_policy = overbooking_policy
         self.clinic_config = clinic_config or ClinicConfig()
         self.ar1_rho = ar1_rho
         self.ar1_sigma = ar1_sigma
@@ -446,13 +448,27 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
     def intervene(
         self, state: ClinicState, predictions: Predictions, t: int,
     ) -> tuple[ClinicState, Interventions]:
-        """Overbook high-risk slots using waitlist patients."""
-        # Consume intervention stream for RNG discipline (even though
-        # waitlist selection is deterministic by priority/wait time)
-        self.rng.intervention.random()
+        """Overbook slots using configured policy.
+
+        Policies:
+            'threshold': Scan slots with predicted no-show prob above
+                threshold, fill from waitlist (current practice model).
+            'urgent_first': Start from the waitlist demand side. Place
+                all urgent patients first into the highest no-show
+                slots, then routine patients if budget remains.
+        """
+        self.rng.intervention.random()  # RNG discipline
+
+        if self.overbooking_policy == "urgent_first":
+            return self._intervene_urgent_first(state, predictions, t)
+        return self._intervene_threshold(state, predictions, t)
+
+    def _intervene_threshold(
+        self, state: ClinicState, predictions: Predictions, t: int,
+    ) -> tuple[ClinicState, Interventions]:
+        """Threshold policy: overbook slots above predicted no-show threshold."""
         overbooked_indices: List[int] = []
 
-        # Sort slots by predicted no-show prob (highest first)
         scored = sorted(
             enumerate(state.schedule),
             key=lambda x: x[1].predicted_noshow_prob,
@@ -462,29 +478,21 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
         for idx, slot in scored:
             if slot.predicted_noshow_prob < self.overbooking_threshold:
                 break
-
             if state.overbook_budget.get(slot.provider_id, 0) <= 0:
                 continue
-
             if not state.waitlist:
-                break  # no one to overbook
+                break
 
-            # Pick from waitlist: urgent first, then longest-waiting
-            state.waitlist.sort(
-                key=lambda w: (
-                    0 if w.priority == "urgent" else 1,
-                    w.request_day,
-                )
-            )
-
-            # Find eligible candidate (not over individual cap)
+            state.waitlist.sort(key=lambda w: (
+                0 if w.priority == "urgent" else 1,
+                w.request_day,
+            ))
             candidate_entry = None
             for i, entry in enumerate(state.waitlist):
                 p = state.patients[entry.patient_id]
                 if p.n_times_overbooked < self.max_individual_overbooks:
                     candidate_entry = state.waitlist.pop(i)
                     break
-
             if candidate_entry is None:
                 continue
 
@@ -495,10 +503,91 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
             state.cumulative_wait_days += (t - candidate_entry.request_day)
             overbooked_indices.append(idx)
 
-        return state, Interventions(
+        return state, self._make_intervention_result(
+            overbooked_indices, state, t,
+        )
+
+    def _intervene_urgent_first(
+        self, state: ClinicState, predictions: Predictions, t: int,
+    ) -> tuple[ClinicState, Interventions]:
+        """Urgent-first policy: place waitlist patients into best slots.
+
+        1. Sort waitlist: urgent first, then by wait time (longest first)
+        2. For each waitlist patient, find the available slot with the
+           highest predicted no-show probability (best chance the
+           original patient won't show)
+        3. Urgent patients always get placed; routine patients only
+           if provider budget remains
+        """
+        overbooked_indices: List[int] = []
+
+        # Sort waitlist: urgent first, then longest-waiting
+        state.waitlist.sort(key=lambda w: (
+            0 if w.priority == "urgent" else 1,
+            w.request_day,
+        ))
+
+        # Build available slots ranked by no-show prob (highest first)
+        # Track which slots are already taken
+        available = sorted(
+            enumerate(state.schedule),
+            key=lambda x: x[1].predicted_noshow_prob,
+            reverse=True,
+        )
+        used_slots = set()
+
+        patients_to_place = []
+        for entry in state.waitlist:
+            p = state.patients[entry.patient_id]
+            if p.n_times_overbooked >= self.max_individual_overbooks:
+                continue
+            patients_to_place.append(entry)
+
+        placed_entries = []
+        for entry in patients_to_place:
+            # Find best available slot
+            best_idx = None
+            best_slot = None
+            for idx, slot in available:
+                if idx in used_slots:
+                    continue
+                if state.overbook_budget.get(slot.provider_id, 0) <= 0:
+                    continue
+                best_idx = idx
+                best_slot = slot
+                break  # already sorted, first available is best
+
+            if best_slot is None:
+                break  # no slots available
+
+            best_slot.is_overbooked = True
+            best_slot.overbooked_patient_id = entry.patient_id
+            state.overbook_budget[best_slot.provider_id] -= 1
+            state.total_waitlist_served += 1
+            state.cumulative_wait_days += (t - entry.request_day)
+            overbooked_indices.append(best_idx)
+            used_slots.add(best_idx)
+            placed_entries.append(entry)
+
+        # Remove placed patients from waitlist
+        placed_ids = {e.patient_id for e in placed_entries}
+        state.waitlist = [
+            w for w in state.waitlist
+            if w.patient_id not in placed_ids
+        ]
+
+        return state, self._make_intervention_result(
+            overbooked_indices, state, t,
+        )
+
+    def _make_intervention_result(
+        self, overbooked_indices, state, t,
+    ) -> Interventions:
+        return Interventions(
             treated_indices=np.array(overbooked_indices, dtype=int),
             metadata={
                 "n_overbooked": len(overbooked_indices),
+                "policy": self.overbooking_policy,
                 "waitlist_size": len(state.waitlist),
                 "avg_wait_days": (
                     state.cumulative_wait_days

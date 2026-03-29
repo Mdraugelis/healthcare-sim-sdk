@@ -1,0 +1,62 @@
+2026-03-28 22:45:03,089 INFO Starting experiment: noshow_overbooking_evaluation
+2026-03-28 22:45:03,089 INFO Config: {
+  "experiment_name": "noshow_overbooking_evaluation",
+  "timestamp": "20260328_224503",
+  "seed": 42,
+  "n_patients": 2000,
+  "n_days": 60,
+  "base_noshow_rate": 0.13,
+  "n_providers": 6,
+  "slots_per_provider": 12,
+  "max_overbook_per_provider": 2,
+  "new_waitlist_requests_per_day": 5,
+  "model_auc": 0.83,
+  "ar1_rho": 0.95,
+  "ar1_sigma": 0.04,
+  "baseline_threshold": 0.5,
+  "predictor_thresholds": [
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+    0.4,
+    0.5
+  ],
+  "max_individual_overbooks": 10,
+  "overbooking_policy": "urgent_first"
+}
+2026-03-28 22:45:03,089 INFO Running control (no overbooking)...
+2026-03-28 22:45:03,107 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:03,635 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:03,641 INFO Running baseline (historical rate >= 0.50)...
+2026-03-28 22:45:03,657 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:04,181 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:04,186 INFO Running predictor (AUC=0.83, threshold=0.15)...
+2026-03-28 22:45:04,204 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:12,559 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
+2026-03-28 22:45:13,080 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:13,085 INFO Running predictor (AUC=0.83, threshold=0.20)...
+2026-03-28 22:45:13,102 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:21,509 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
+2026-03-28 22:45:22,022 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:22,028 INFO Running predictor (AUC=0.83, threshold=0.25)...
+2026-03-28 22:45:22,044 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:30,502 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
+2026-03-28 22:45:31,028 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:31,038 INFO Running predictor (AUC=0.83, threshold=0.30)...
+2026-03-28 22:45:31,055 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:39,475 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
+2026-03-28 22:45:40,005 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:40,011 INFO Running predictor (AUC=0.83, threshold=0.40)...
+2026-03-28 22:45:40,028 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:48,445 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
+2026-03-28 22:45:48,967 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:48,973 INFO Running predictor (AUC=0.83, threshold=0.50)...
+2026-03-28 22:45:48,990 INFO Population created: 2000 entities, mode=branched
+2026-03-28 22:45:57,502 INFO ControlledMLModel fit: mode=discrimination, AUC=0.839, sens=0.333, PPV=0.500, threshold=0.500
+2026-03-28 22:45:58,030 INFO Simulation complete: 60 timesteps, mode=branched
+2026-03-28 22:45:58,036 INFO Experiment complete in 54.9 seconds
+2026-03-28 22:45:58,039 INFO Results saved to experiments/outputs/noshow_overbooking_evaluation_20260328_224503
+2026-03-28 22:45:58,040 INFO Registered in experiment catalog
+2026-03-28 22:45:58,041 INFO Report saved to experiments/outputs/noshow_overbooking_evaluation_20260328_224503/report.md
+2026-03-28 22:45:58,309 INFO Validation: 30/32 checks passed

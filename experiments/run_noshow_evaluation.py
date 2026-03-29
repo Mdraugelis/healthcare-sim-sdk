@@ -60,6 +60,7 @@ class ExperimentConfig:
     baseline_threshold: float = 0.50
     predictor_thresholds: List[float] = None
     max_individual_overbooks: int = 10
+    overbooking_policy: str = "threshold"  # or "urgent_first"
 
     def __post_init__(self):
         if not self.timestamp:
@@ -96,6 +97,7 @@ def run_single(config: ExperimentConfig, model_type: str,
         model_auc=config.model_auc,
         overbooking_threshold=threshold,
         max_individual_overbooks=config.max_individual_overbooks,
+        overbooking_policy=config.overbooking_policy,
         clinic_config=cc,
         ar1_rho=config.ar1_rho,
         ar1_sigma=config.ar1_sigma,
@@ -366,6 +368,11 @@ def main():
     parser.add_argument("--ar1-rho", type=float, default=0.95)
     parser.add_argument("--ar1-sigma", type=float, default=0.04)
     parser.add_argument(
+        "--policy", type=str, default="threshold",
+        choices=["threshold", "urgent_first"],
+        help="Overbooking policy: 'threshold' or 'urgent_first'",
+    )
+    parser.add_argument(
         "--output-dir", type=str,
         default="experiments/outputs",
     )
@@ -388,6 +395,7 @@ def main():
         base_noshow_rate=args.base_noshow_rate,
         ar1_rho=args.ar1_rho,
         ar1_sigma=args.ar1_sigma,
+        overbooking_policy=args.policy,
     )
 
     output_dir = Path(args.output_dir) / (
