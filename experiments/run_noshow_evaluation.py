@@ -429,9 +429,23 @@ def main():
         f.write(report_md)
     logger.info("Report saved to %s", report_path)
 
+    # Run validation and save appendix
+    from experiments.validate import validate_experiment
+    appendix_md = validate_experiment(config.timestamp)
+    appendix_path = output_dir / "validation_appendix.md"
+    with open(appendix_path, "w") as f:
+        f.write(appendix_md)
+    # Count pass/fail
+    n_pass = appendix_md.count("| PASS |")
+    n_fail = appendix_md.count("| **FAIL** |")
+    logger.info(
+        "Validation: %d/%d checks passed", n_pass, n_pass + n_fail,
+    )
+
     print_report(experiment)
     print(f"\nResults saved to: {output_dir}")
     print(f"Report: {report_path}")
+    print(f"Validation: {appendix_path} ({n_pass}/{n_pass+n_fail} checks)")
     return experiment
 
 
