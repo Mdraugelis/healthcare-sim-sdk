@@ -1,0 +1,40 @@
+[
+  {
+    "timestamp": "20260328_220210",
+    "experiment_name": "noshow_overbooking_evaluation",
+    "output_dir": "experiments/outputs/noshow_overbooking_evaluation_20260328_220210",
+    "n_patients": 2000,
+    "n_days": 60,
+    "seed": 42,
+    "model_auc": 0.83,
+    "ar1_rho": 0.95,
+    "ar1_sigma": 0.04,
+    "baseline_threshold": 0.5,
+    "baseline_auc": 0.7398312229630313,
+    "best_predictor_auc": 0.8532604920153875,
+    "best_predictor_threshold": 0.4,
+    "collision_rate_reduction": 0.4054940549405494,
+    "control_utilization": 0.8587570621468926,
+    "notes": "First structured run. Before AR(1) drift fix (predictor underperformed baseline).",
+    "registered_at": "2026-03-28T22:14:33.667602"
+  },
+  {
+    "timestamp": "20260328_221441",
+    "experiment_name": "noshow_overbooking_evaluation",
+    "output_dir": "experiments/outputs/noshow_overbooking_evaluation_20260328_221441",
+    "n_patients": 2000,
+    "n_days": 60,
+    "seed": 99,
+    "model_auc": 0.83,
+    "ar1_rho": 0.95,
+    "ar1_sigma": 0.04,
+    "baseline_threshold": 0.5,
+    "baseline_auc": 0.7776632820506097,
+    "best_predictor_auc": 0.6776095792801499,
+    "best_predictor_threshold": 0.5,
+    "collision_rate_reduction": -0.6309887869520896,
+    "control_utilization": 0.8516949152542372,
+    "notes": "",
+    "registered_at": "2026-03-28T22:15:34.974138"
+  }
+]

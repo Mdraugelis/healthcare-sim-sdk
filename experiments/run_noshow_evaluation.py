@@ -412,9 +412,26 @@ def main():
     logger.info("Experiment complete in %.1f seconds", total_time)
 
     save_results(experiment, output_dir)
-    print_report(experiment)
 
+    # Register in catalog
+    from experiments.catalog import ExperimentCatalog
+    catalog = ExperimentCatalog()
+    catalog.register(
+        output_dir, experiment["config"], experiment["summary"],
+    )
+    logger.info("Registered in experiment catalog")
+
+    # Generate and save markdown report
+    from experiments.report import generate_report
+    report_md = generate_report(config.timestamp, catalog)
+    report_path = output_dir / "report.md"
+    with open(report_path, "w") as f:
+        f.write(report_md)
+    logger.info("Report saved to %s", report_path)
+
+    print_report(experiment)
     print(f"\nResults saved to: {output_dir}")
+    print(f"Report: {report_path}")
     return experiment
 
 
