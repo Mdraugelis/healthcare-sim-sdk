@@ -93,5 +93,24 @@
     "control_utilization": null,
     "notes": "Burden analysis: 365 days, policy=threshold",
     "registered_at": "2026-03-28T22:54:33.801024"
+  },
+  {
+    "timestamp": "20260328_232038",
+    "experiment_name": "governance_evaluation",
+    "output_dir": "experiments/outputs/governance_evaluation_20260328_232038",
+    "n_patients": 2000,
+    "n_days": 90,
+    "seed": 42,
+    "model_auc": null,
+    "ar1_rho": 0.95,
+    "ar1_sigma": 0.04,
+    "baseline_threshold": null,
+    "baseline_auc": null,
+    "best_predictor_auc": null,
+    "best_predictor_threshold": null,
+    "collision_rate_reduction": null,
+    "control_utilization": null,
+    "notes": "Governance eval: 48 configs, 0 passing all checks",
+    "registered_at": "2026-03-28T23:27:37.445337"
   }
 ]
