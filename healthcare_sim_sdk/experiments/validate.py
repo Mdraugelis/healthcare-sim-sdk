@@ -5,7 +5,7 @@ outcomes within expected bounds. Generates a markdown validation
 appendix for the experiment report.
 
 Usage:
-    from experiments.validate import validate_experiment
+    from healthcare_sim_sdk.experiments.validate import validate_experiment
     appendix = validate_experiment("20260328_220210")
     print(appendix)
 
@@ -22,13 +22,12 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
     RACE_ETHNICITY, INSURANCE_TYPE, AGE_BAND, VISIT_TYPES,
     ClinicConfig, RealisticNoShowScenario,
 )
-from sdk.core.scenario import TimeConfig  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
 
 
 @dataclass

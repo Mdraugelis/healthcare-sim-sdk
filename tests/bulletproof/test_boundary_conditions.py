@@ -15,16 +15,16 @@ Categories:
 import numpy as np
 import pytest
 
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from sdk.core.scenario import TimeConfig
-from sdk.core.results import SimulationResults, AnalysisDataset
-from sdk.ml.model import ControlledMLModel
-from sdk.ml.performance import confusion_matrix_metrics, theoretical_ppv
-from scenarios.stroke_prevention.scenario import (
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.core.results import SimulationResults, AnalysisDataset
+from healthcare_sim_sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.ml.performance import confusion_matrix_metrics, theoretical_ppv
+from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
 )
-from scenarios.noshow_overbooking.scenario import (
+from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
     ClinicConfig,
     NoShowOverbookingScenario,
 )
@@ -220,7 +220,7 @@ class TestAnalysisExportEdgeCases:
     def test_panel_requires_entity_ids(self):
         """to_panel() should raise ValueError if entity_ids is None."""
         # Create results with None entity_ids
-        from sdk.core.scenario import Outcomes
+        from healthcare_sim_sdk.core.scenario import Outcomes
         results = SimulationResults(
             n_entities=5,
             time_config=TimeConfig(

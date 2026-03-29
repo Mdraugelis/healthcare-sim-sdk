@@ -2,14 +2,14 @@
 
 import numpy as np
 
-from sdk.ml.binary_classifier import ControlledBinaryClassifier
-from sdk.ml.performance import (
+from healthcare_sim_sdk.ml.binary_classifier import ControlledBinaryClassifier
+from healthcare_sim_sdk.ml.performance import (
     auc_score,
     calibration_slope,
     confusion_matrix_metrics,
     roc_curve,
 )
-from sdk.ml.probability_model import ControlledProbabilityModel
+from healthcare_sim_sdk.ml.probability_model import ControlledProbabilityModel
 
 
 def _make_population(rng, n=2000, prevalence=0.1):

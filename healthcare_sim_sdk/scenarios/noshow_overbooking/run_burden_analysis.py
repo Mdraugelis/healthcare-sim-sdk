@@ -26,16 +26,15 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
     ClinicConfig,
     RealisticNoShowScenario,
 )
-from sdk.core.engine import (  # noqa: E402
+from healthcare_sim_sdk.core.engine import (  # noqa: E402
     BranchedSimulationEngine, CounterfactualMode,
 )
-from sdk.core.scenario import TimeConfig  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -496,7 +495,7 @@ def main():
         f.write(report)
 
     # Register in catalog
-    from experiments.catalog import ExperimentCatalog
+    from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
     catalog = ExperimentCatalog()
     catalog.register(
         output_dir, asdict(config),

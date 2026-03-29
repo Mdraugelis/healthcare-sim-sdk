@@ -6,7 +6,7 @@ for both baseline (patient historical rate) and ML predictor
 evaluation.
 
 Usage:
-    from scenarios.noshow_overbooking.evaluation_harness import (
+    from healthcare_sim_sdk.scenarios.noshow_overbooking.evaluation_harness import (
         run_evaluation_sweep, CLINIC_PROFILES, summarize_results
     )
     results = run_evaluation_sweep(
@@ -26,13 +26,13 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from scenarios.noshow_overbooking.scenario import (
+from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
     ClinicConfig,
     NoShowOverbookingScenario,
 )
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from sdk.core.scenario import TimeConfig
-from sdk.ml.performance import auc_score
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.ml.performance import auc_score
 
 
 @dataclass

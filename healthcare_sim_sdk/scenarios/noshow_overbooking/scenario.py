@@ -18,14 +18,14 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from sdk.core.scenario import (
+from healthcare_sim_sdk.core.scenario import (
     BaseScenario,
     Interventions,
     Outcomes,
     Predictions,
     TimeConfig,
 )
-from sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.ml.model import ControlledMLModel
 
 
 # -- Demographic distributions (realistic clinical proportions) -----------

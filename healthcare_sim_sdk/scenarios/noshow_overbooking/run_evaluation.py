@@ -24,17 +24,16 @@ from typing import Any, Dict, List
 import numpy as np
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
     ClinicConfig,
     RealisticNoShowScenario,
 )
-from sdk.core.engine import (  # noqa: E402
+from healthcare_sim_sdk.core.engine import (  # noqa: E402
     BranchedSimulationEngine, CounterfactualMode,
 )
-from sdk.core.scenario import TimeConfig  # noqa: E402
-from sdk.ml.performance import (  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
+from healthcare_sim_sdk.ml.performance import (  # noqa: E402
     auc_score, confusion_matrix_metrics,
 )
 
@@ -422,7 +421,7 @@ def main():
     save_results(experiment, output_dir)
 
     # Register in catalog
-    from experiments.catalog import ExperimentCatalog
+    from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
     catalog = ExperimentCatalog()
     catalog.register(
         output_dir, experiment["config"], experiment["summary"],
@@ -430,7 +429,7 @@ def main():
     logger.info("Registered in experiment catalog")
 
     # Generate and save markdown report
-    from experiments.report import generate_report
+    from healthcare_sim_sdk.experiments.report import generate_report
     report_md = generate_report(config.timestamp, catalog)
     report_path = output_dir / "report.md"
     with open(report_path, "w") as f:
@@ -438,7 +437,7 @@ def main():
     logger.info("Report saved to %s", report_path)
 
     # Run validation and save appendix
-    from experiments.validate import validate_experiment
+    from healthcare_sim_sdk.experiments.validate import validate_experiment
     appendix_md = validate_experiment(config.timestamp)
     appendix_path = output_dir / "validation_appendix.md"
     with open(appendix_path, "w") as f:

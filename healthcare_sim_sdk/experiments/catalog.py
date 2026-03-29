@@ -5,7 +5,7 @@ registered after completion with key metadata for quick lookup.
 Supports loading, comparing, and querying past experiments.
 
 Usage:
-    from experiments.catalog import ExperimentCatalog
+    from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
 
     catalog = ExperimentCatalog()
     catalog.list_experiments()

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from sdk.core.scenario import (
+from healthcare_sim_sdk.core.scenario import (
     BaseScenario, Interventions, Outcomes, Predictions, TimeConfig,
 )
 

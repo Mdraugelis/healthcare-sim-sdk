@@ -10,3 +10,6 @@ build/
 .ipynb_checkpoints/
 .DS_Store
 .claude/
+
+# User experiment outputs (not committed)
+experiments/outputs/

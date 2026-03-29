@@ -7,16 +7,16 @@ reusable population/model fixtures across all test modules.
 import numpy as np
 import pytest
 
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from sdk.core.scenario import TimeConfig
-from sdk.core.rng import RNGPartitioner
-from sdk.ml.model import ControlledMLModel
-from sdk.ml.performance import auc_score, confusion_matrix_metrics
-from scenarios.stroke_prevention.scenario import (
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.core.rng import RNGPartitioner
+from healthcare_sim_sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.ml.performance import auc_score, confusion_matrix_metrics
+from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
 )
-from scenarios.noshow_overbooking.scenario import (
+from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
     ClinicConfig,
     NoShowOverbookingScenario,
 )

@@ -4,7 +4,7 @@ Generates a structured report from one or more experiment runs,
 suitable for sharing with stakeholders or archiving.
 
 Usage:
-    from experiments.report import generate_report
+    from healthcare_sim_sdk.experiments.report import generate_report
     report = generate_report("20260328_220210")
     print(report)
 
@@ -16,9 +16,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from experiments.catalog import ExperimentCatalog  # noqa: E402
+from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog  # noqa: E402
 
 
 def generate_report(

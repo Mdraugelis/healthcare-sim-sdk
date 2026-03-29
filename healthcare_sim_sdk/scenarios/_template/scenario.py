@@ -24,7 +24,7 @@ from typing import Optional
 
 import numpy as np
 
-from sdk.core.scenario import (
+from healthcare_sim_sdk.core.scenario import (
     BaseScenario,
     Interventions,
     Outcomes,

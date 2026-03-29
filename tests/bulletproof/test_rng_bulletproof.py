@@ -14,10 +14,10 @@ Categories:
 import numpy as np
 import pytest
 
-from sdk.core.rng import RNGPartitioner, RNGStreams
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from sdk.core.scenario import TimeConfig
-from scenarios.stroke_prevention.scenario import (
+from healthcare_sim_sdk.core.rng import RNGPartitioner, RNGStreams
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
 )

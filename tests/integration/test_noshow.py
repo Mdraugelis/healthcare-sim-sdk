@@ -2,11 +2,11 @@
 
 import numpy as np
 
-from scenarios.noshow_overbooking.scenario import (
+from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
     NoShowOverbookingScenario,
 )
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.scenario import TimeConfig
 
 
 def _make_scenario(

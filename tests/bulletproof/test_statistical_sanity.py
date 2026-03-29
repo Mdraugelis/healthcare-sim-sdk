@@ -15,26 +15,26 @@ Categories:
 import numpy as np
 import pytest
 
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from sdk.core.scenario import TimeConfig
-from sdk.ml.model import ControlledMLModel
-from sdk.ml.performance import (
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.ml.performance import (
     auc_score,
     confusion_matrix_metrics,
     theoretical_ppv,
     calibration_slope,
 )
-from sdk.population.risk_distributions import beta_distributed_risks
-from sdk.population.temporal_dynamics import (
+from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
+from healthcare_sim_sdk.population.temporal_dynamics import (
     annual_risk_to_hazard,
     hazard_to_timestep_probability,
     AR1Process,
 )
-from scenarios.stroke_prevention.scenario import (
+from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
 )
-from scenarios.noshow_overbooking.scenario import (
+from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
     ClinicConfig,
     NoShowOverbookingScenario,
 )

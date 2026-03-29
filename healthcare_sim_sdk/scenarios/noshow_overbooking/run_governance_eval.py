@@ -28,16 +28,15 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
+from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (  # noqa: E402
     ClinicConfig, RealisticNoShowScenario,
 )
-from sdk.core.engine import (  # noqa: E402
+from healthcare_sim_sdk.core.engine import (  # noqa: E402
     BranchedSimulationEngine, CounterfactualMode,
 )
-from sdk.core.scenario import TimeConfig  # noqa: E402
-from sdk.ml.performance import (  # noqa: E402
+from healthcare_sim_sdk.core.scenario import TimeConfig  # noqa: E402
+from healthcare_sim_sdk.ml.performance import (  # noqa: E402
     auc_score, calibration_slope, confusion_matrix_metrics,
 )
 
@@ -583,7 +582,7 @@ def main():
         f.write(report)
 
     # Register in catalog
-    from experiments.catalog import ExperimentCatalog
+    from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
     n_passing = sum(1 for r in all_results if r["all_checks_pass"])
     catalog = ExperimentCatalog()
     catalog.register(

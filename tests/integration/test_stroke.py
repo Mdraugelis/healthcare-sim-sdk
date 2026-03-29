@@ -1,10 +1,10 @@
 """Integration tests for the Stroke Prevention scenario."""
 
-from scenarios.stroke_prevention.scenario import (
+from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
 )
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from tests.integration.test_step_purity import assert_purity
 
 

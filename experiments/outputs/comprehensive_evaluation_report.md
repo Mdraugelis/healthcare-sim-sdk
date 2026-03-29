@@ -132,7 +132,7 @@ At the recommended threshold (0.25):
 - Maximum AUC gap: **3%** (Asian). All subgroups **PASS**.
 
 **Governance rule: Flagging proportional to no-show rate.**
-- All flag-to-noshow ratios between 1.0 and 1.6. All subgroups **PASS**.
+- All flag-to-noshow ratios are between 1.0 and 1.6. All subgroups **PASS**.
 - Black and Hispanic patients are flagged more often (21%) than White patients (14.5%), but this is proportional to their higher no-show rates (15.5% and 17.0% vs 12.9%).
 
 ### 5.2 Model Fairness by Insurance Type

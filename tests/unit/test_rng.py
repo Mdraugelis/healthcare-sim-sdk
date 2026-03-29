@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from sdk.core.rng import RNGPartitioner
+from healthcare_sim_sdk.core.rng import RNGPartitioner
 
 
 class TestRNGStreams:

@@ -15,16 +15,16 @@ from typing import Optional
 
 import numpy as np
 
-from sdk.core.scenario import (
+from healthcare_sim_sdk.core.scenario import (
     BaseScenario,
     Interventions,
     Outcomes,
     Predictions,
     TimeConfig,
 )
-from sdk.ml.model import ControlledMLModel
-from sdk.population.risk_distributions import beta_distributed_risks
-from sdk.population.temporal_dynamics import (
+from healthcare_sim_sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
+from healthcare_sim_sdk.population.temporal_dynamics import (
     annual_risk_to_hazard,
     hazard_to_timestep_probability,
 )

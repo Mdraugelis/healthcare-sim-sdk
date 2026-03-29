@@ -12,8 +12,8 @@ in the SDK. It simultaneously proves:
 import numpy as np
 import pytest
 
-from sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from sdk.core.scenario import (
+from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
+from healthcare_sim_sdk.core.scenario import (
     BaseScenario,
     Interventions,
     Outcomes,
