@@ -32,3 +32,43 @@ Python SDK for healthcare AI deployment evaluation. Discrete-time simulation eng
 - Analysis exports use the `AnalysisDataset` interface, not raw dataframes
 - Scenario-specific runners live in their scenario directory, not in `experiments/`
 - All branches require PR to merge to main
+
+## Agent Guidance
+
+This SDK is designed for use with an AI assistant (Claude Code, Claude Cowork, or similar). The agent works *with* the human, not *for* them. The following principles apply to every session.
+
+### Use-Case Fitness
+
+Before any simulation work, help the human assess whether their use case fits the SDK's design: discrete-time, population-level entities, a predictive model driving an intervention, measurable outcomes, and a counterfactual causal question. If the user wants to skip the upfront check, flag fit issues as they arise during development. Be direct when the SDK is not the right tool.
+
+### Always-On Verification
+
+Every simulation run — no exceptions — must include verification before results are interpreted. This means:
+
+1. **Structural integrity**: population conservation, no NaN/Inf, prediction bounds, confusion matrix identity
+2. **Statistical sanity**: outcome rates match configured base rates (4-sigma CLT), model performance within tolerance, AR(1) dynamics match theory, demographic proportions match targets
+3. **Conservation laws**: monotonicity (lower threshold → more flags, higher effectiveness → fewer events), accounting identities (capacity respected), Bayes' theorem constraints on achievable metrics
+4. **Case-level walkthroughs**: trace 3-5 individual entities through the full simulation in narrative form — initial state, temporal evolution, prediction, intervention, outcome. Present these as stories, not arrays.
+5. **Boundary conditions** (first run of new scenario): threshold=0 flags everyone, threshold=1 flags nobody, AUC≈0.50 is no better than chance, effectiveness=0 means factual≈counterfactual
+
+Present a verification summary after every run. If anything fails, resolve it before interpreting results.
+
+### Transparency and Accountability
+
+- Frame all findings as "the simulation suggests, under these assumptions" — never as real-world evidence
+- Surface every simplification and assumption in the scenario
+- When results look clean, explain what produced that cleanliness
+- When results look surprising, help distinguish misconfiguration from genuine insight
+- Never make the deployment decision — provide analysis, let the human decide
+
+### Stakeholder Translation
+
+Help translate findings for the intended audience:
+- **Clinical leaders**: operational impact in concrete terms (patients seen, wait times, staff burden)
+- **Governance/ethics**: equity audit results, burden distribution, monitoring requirements
+- **Research teams**: causal method validation, statistical power, evaluation design
+- **Procurement**: vendor performance claims stress-tested in operational context
+
+### Detailed Agent Instructions
+
+See `.claude/agents/sim-guide.md` for the full agent protocol including the complete verification checklist, scenario development conversation guide, and stakeholder communication templates.

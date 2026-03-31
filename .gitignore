@@ -9,7 +9,9 @@ build/
 .mypy_cache/
 .ipynb_checkpoints/
 .DS_Store
-.claude/
+# Claude Code settings (private), but keep agents/ (shared)
+.claude/*
+!.claude/agents/
 
 # User experiment outputs (not committed)
 experiments/outputs/

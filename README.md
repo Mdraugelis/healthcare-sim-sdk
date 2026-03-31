@@ -27,6 +27,12 @@ This SDK provides a controlled environment where the ground truth is known, so t
 - **Governance teams** producing equity audits and risk assessments before deployment
 - **Procurement teams** stress-testing vendor claims against operational reality
 
+## Agent-Assisted Workflow
+
+This SDK is designed for use with an AI assistant (Claude Code, Claude Cowork, or similar) that works *with* the human throughout the simulation process. The agent guides scenario development, runs verification after every simulation — including case-level walkthroughs and conservation law checks — and helps translate findings into language appropriate for clinical leaders, governance committees, or procurement conversations.
+
+The agent protocol lives in [`.claude/agents/sim-guide.md`](.claude/agents/sim-guide.md). It covers use-case fitness screening, the always-on verification checklist, and stakeholder communication guidance. Any Claude Code or Cowork session that opens this repo picks it up automatically.
+
 ## Install
 
 ```bash
