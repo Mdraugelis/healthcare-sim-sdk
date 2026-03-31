@@ -1,0 +1,56 @@
+# Threshold Optimizer Configuration
+# ----------------------------------
+# Sweep across clinic archetypes, model AUCs, and thresholds.
+#
+# Run single config:
+#   python run_threshold_optimizer.py clinic.noshow_rate=0.13 clinic.utilization=90
+#
+# Run full grid:
+#   python run_threshold_optimizer.py --multirun \
+#     clinic.noshow_rate=0.07,0.13,0.20 \
+#     clinic.utilization=80,90,110 \
+#     model.auc=0.65,0.75,0.83 \
+#     model.threshold=0.20,0.30,0.40,0.50,0.60,0.70,0.80
+#
+# Run just one clinic:
+#   python run_threshold_optimizer.py \
+#     clinic.noshow_rate=0.13 clinic.utilization=90 \
+#     model.auc=0.83 model.threshold=0.30
+
+# -- Simulation defaults --
+seed: 42
+n_days: 90
+n_patients: 2000
+
+# -- Clinic configuration --
+clinic:
+  noshow_rate: 0.13
+  utilization: 90        # 80, 90, or 110
+  n_providers: 6
+  slots_per_provider: 12
+
+# -- Model configuration --
+model:
+  type: predictor        # baseline or predictor
+  auc: 0.83              # target AUC (predictor only)
+  threshold: 0.30        # overbooking threshold
+
+# -- Policy parameters --
+policy:
+  max_individual_overbooks: 10
+  ar1_rho: 0.95
+  ar1_sigma: 0.04
+
+# -- Derived from utilization (overridden at runtime) --
+# These are set automatically based on clinic.utilization:
+#   80%  -> ob_cap=3, waitlist_per_day=2
+#   90%  -> ob_cap=2, waitlist_per_day=5
+#   110% -> ob_cap=1, waitlist_per_day=10
+
+# -- Hydra output --
+hydra:
+  run:
+    dir: outputs/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${clinic.noshow_rate}_${clinic.utilization}_${model.type}_auc${model.auc}_t${model.threshold}

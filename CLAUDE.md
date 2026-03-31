@@ -14,20 +14,21 @@ Python SDK for healthcare AI deployment evaluation. Discrete-time simulation eng
 
 ## Code Quality
 
-- Run `flake8 sdk/ scenarios/` before committing
-- Run `mypy sdk/ scenarios/` before committing
+- Run `flake8 healthcare_sim_sdk/` before committing
 - Run `pytest tests/` before committing
-- Tests go in `tests/unit/` or `tests/integration/`
+- Tests go in `tests/unit/`, `tests/integration/`, or `tests/bulletproof/`
 
 ## Key Directories
 
-- `sdk/core/` -- Engine, scenario interface, results, RNG (touch with care)
-- `sdk/ml/` -- ML model simulators (binary classifier, probability model, regression)
-- `scenarios/` -- Each scenario is self-contained with its own `scenario.py`, `config.yaml`, and `README.md`
-- `scenarios/_template/` -- Starting point for new scenarios
+- `healthcare_sim_sdk/core/` -- Engine, scenario interface, results, RNG (touch with care)
+- `healthcare_sim_sdk/ml/` -- ML model simulators
+- `healthcare_sim_sdk/scenarios/` -- Each scenario is self-contained
+- `healthcare_sim_sdk/experiments/` -- Catalog, report, validation infrastructure
 
 ## Conventions
 
 - Use NumPy vectorized operations over Python loops for population-level computation
-- Configuration uses Hydra (YAML configs in scenario directories)
+- **Experiment configuration uses Hydra** (YAML configs, not Python dataclasses). When building parameter sweeps, define the grid in YAML and use `@hydra.main` or `--multirun`. Never hardcode sweep parameters in Python loops.
 - Analysis exports use the `AnalysisDataset` interface, not raw dataframes
+- Scenario-specific runners live in their scenario directory, not in `experiments/`
+- All branches require PR to merge to main
