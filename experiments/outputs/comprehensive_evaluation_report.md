@@ -38,7 +38,7 @@ An ML predictor (target AUC 0.83, comparable to reported Epic No-Show Predictor 
 | Patient panel | 2,000-3,000 | Representative primary care clinic |
 | Duration | 60-365 days | 60d for threshold tuning, 365d for burden analysis |
 | Daily capacity | 72 slots (6 providers x 12) | Typical primary care |
-| No-show rate | 13% | Geisinger reported baseline |
+| No-show rate | 13% | Published primary care baseline |
 | Scheduling | Visit-frequency weighted | Chronic patients (20%) scheduled every 2-4 weeks |
 | Waitlist | Accumulating, 5 new requests/day | Models real access demand |
 | Behavioral drift | AR(1) (rho=0.95, sigma=0.04) | Patient risk changes over time |
