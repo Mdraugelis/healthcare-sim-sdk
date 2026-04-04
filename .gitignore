@@ -9,9 +9,10 @@ build/
 .mypy_cache/
 .ipynb_checkpoints/
 .DS_Store
-# Claude Code settings (private), but keep agents/ (shared)
+# Claude Code settings (private), but keep shared files
 .claude/*
 !.claude/agents/
+!.claude/invariants.yaml
 
 # Generated experiment/simulation outputs
 experiments/

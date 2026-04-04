@@ -1,0 +1,88 @@
+# SDK Architectural Invariants
+# ============================================================
+# This file is the machine-readable source of truth.
+# Pre-commit hooks and pytest structural tests validate
+# against these definitions.
+# ============================================================
+
+version: 1
+
+protected_files:
+  description: >
+    Files that define the SDK contract. Modifications require
+    maintainer review and should be rare. Scenario developers
+    should never need to touch these.
+  paths:
+    - healthcare_sim_sdk/core/scenario.py
+    - healthcare_sim_sdk/core/engine.py
+    - healthcare_sim_sdk/core/rng.py
+    - healthcare_sim_sdk/core/results.py
+
+scenario_contract:
+  class: BaseScenario
+  module: healthcare_sim_sdk.core.scenario
+  required_abstract_methods:
+    - create_population
+    - step
+    - predict
+    - intervene
+    - measure
+  optional_hooks:
+    - validate_population
+    - validate_results
+    - clone_state
+
+rng_contract:
+  streams_class: RNGStreams
+  partitioner_class: RNGPartitioner
+  module: healthcare_sim_sdk.core.rng
+  required_streams:
+    - population
+    - temporal
+    - prediction
+    - intervention
+    - outcomes
+
+banned_patterns:
+  - pattern: "np\\.random\\."
+    allowed_in:
+      - healthcare_sim_sdk/core/rng.py
+      - tests/
+    message: >
+      All randomness must flow through RNGPartitioner streams.
+      Use self.rng.temporal, self.rng.population, etc.
+
+  - pattern: "import random"
+    allowed_in: []
+    message: >
+      Do not use Python stdlib random. Use RNGPartitioner streams.
+
+engine_constraints:
+  - name: state_opacity
+    description: >
+      The engine must never inspect state internals.
+      No getattr, isinstance, hasattr, subscript, or
+      attribute access on state variables.
+    state_variable_names:
+      - state_factual
+      - state_counterfactual
+      - state
+      - state_snapshot
+
+  - name: counterfactual_isolation
+    description: >
+      The counterfactual branch must never call predict().
+      The causal question is: what if we had not deployed
+      the AI at all?
+
+fitness_criteria:
+  description: >
+    A use case fits the SDK if ALL of these are true.
+    If any are false, flag it to the user before building.
+  checks:
+    - Population-level intervention (not individual decision support)
+    - Predictive model drives the intervention
+    - Intervention is a state change (not purely informational)
+    - Measurable outcome at each timestep
+    - Counterfactual causal question (what if no AI?)
+    - Discrete-time dynamics (not fundamentally continuous)
