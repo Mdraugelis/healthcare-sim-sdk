@@ -210,10 +210,24 @@ def main(cfg: DictConfig) -> float:
         "sim_seconds": sim_time,
     }
 
-    # Save to Hydra's output directory
-    out_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
-    with open(out_dir / "metrics.json", "w") as f:
-        json.dump(metrics, f, indent=2)
+    # Save via lifecycle
+    from healthcare_sim_sdk.experiments.lifecycle import (
+        save_experiment, register_experiment,
+    )
+    out_dir = Path(
+        hydra.core.hydra_config.HydraConfig.get()
+        .runtime.output_dir
+    )
+    config_dict = OmegaConf.to_container(cfg, resolve=True)
+    config_dict["timestamp"] = out_dir.name
+    config_dict["scenario"] = "noshow_overbooking"
+    config_dict["experiment_name"] = "threshold_optimizer"
+
+    save_experiment(out_dir, config_dict, metrics)
+    try:
+        register_experiment(out_dir)
+    except Exception as e:
+        logger.warning("Catalog registration failed: %s", e)
 
     logger.info(
         "Result: util=%.1f%% coll=%.1f%% WL=%d burden=%d "

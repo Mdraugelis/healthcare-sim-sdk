@@ -14,7 +14,9 @@ build/
 !.claude/agents/
 !.claude/invariants.yaml
 
-# Generated experiment/simulation outputs
-experiments/
+# Generated experiment/simulation outputs (not the package code)
+/experiments/
 outputs/
+**/outputs/
+catalog.json
 *_dashboard.html
