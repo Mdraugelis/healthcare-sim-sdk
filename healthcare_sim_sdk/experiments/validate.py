@@ -57,6 +57,25 @@ def validate_generic(output_dir: Path) -> List[Check]:
         "exact", metrics_path.exists(),
     ))
 
+    # metrics.json is valid JSON
+    if metrics_path.exists():
+        try:
+            with open(metrics_path) as f:
+                json.load(f)
+            checks.append(Check(
+                "metrics.json valid JSON",
+                "Metrics must be parseable",
+                "valid JSON", "valid JSON",
+                "exact", True,
+            ))
+        except json.JSONDecodeError as e:
+            checks.append(Check(
+                "metrics.json valid JSON",
+                "Metrics must be parseable",
+                "valid JSON", f"parse error: {e}",
+                "exact", False,
+            ))
+
     # config is valid JSON
     config = {}
     if config_path.exists():
