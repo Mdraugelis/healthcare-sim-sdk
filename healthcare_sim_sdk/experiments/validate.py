@@ -167,8 +167,11 @@ def validate_experiment(
     config = {}
     config_path = output_dir / "config.json"
     if config_path.exists():
-        with open(config_path) as f:
-            config = json.load(f)
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+        except json.JSONDecodeError:
+            config = {}
 
     checks = validate_generic(output_dir)
 
