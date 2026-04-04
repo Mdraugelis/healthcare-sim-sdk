@@ -1,0 +1,75 @@
+# Sepsis Early Alert Scenario Configuration
+# All parameters grounded in published literature (see README.md for citations)
+
+# --- Population ---
+n_patients: 2000
+sepsis_incidence: 0.04          # 4% of admissions develop sepsis (published: 2-6%)
+risk_concentration: 0.5         # Beta distribution shape; lower = more heterogeneous
+mean_los_timesteps: 35          # ~5.8 days at 4hr timesteps (mean inpatient LOS)
+los_std_timesteps: 12           # Variation in length of stay
+
+# --- Demographics (proportions) ---
+demographics:
+  race_ethnicity:
+    White: 0.60
+    Black: 0.13
+    Hispanic: 0.18
+    Asian: 0.06
+    Other: 0.03
+  insurance_type:
+    Commercial: 0.40
+    Medicare: 0.25
+    Medicaid: 0.20
+    Self-Pay: 0.15
+  age_band:
+    18-44: 0.25
+    45-64: 0.35
+    65-79: 0.28
+    80+: 0.12
+
+# Demographic risk multipliers for sepsis (published disparities)
+risk_multipliers:
+  race_ethnicity:
+    White: 1.0
+    Black: 1.8             # ~80% higher sepsis incidence (Mayr et al. 2010)
+    Hispanic: 0.9
+    Asian: 0.8
+    Other: 1.0
+  age_band:
+    18-44: 0.5
+    45-64: 1.0
+    65-79: 1.8
+    80+: 2.5
+
+# --- Temporal Dynamics ---
+timestep_hours: 4               # 4-hour blocks (matches 3-6hr intervention window)
+ar1_rho: 0.90                   # Persistence of risk trajectory
+ar1_sigma: 0.06                 # Innovation volatility
+
+# --- ML Model ---
+model_auc: 0.76                 # Epic ESM published range: 0.63-0.83
+alert_threshold_percentile: 90  # Flag top 10% of active patient risk scores
+
+# --- Clinician Response (Alert Fatigue Model) ---
+initial_response_rate: 0.65     # ~65% initial response (TREWS: 89% evaluated, 38% confirmed)
+fatigue_coefficient: 0.002      # Decay per cumulative false alert
+floor_response_rate: 0.25       # Irreducible minimum response rate
+response_time_benefit_hours: 3  # Treatment must happen within this window for benefit
+
+# --- Intervention Effectiveness ---
+# OR 0.80 for mortality at 3hr (meta-analysis); translate to progression reduction
+treatment_effectiveness: 0.35   # 35% reduction in progression probability when treated
+rapid_response_capacity: 8      # Max alert responses per 4hr block (staffing constraint)
+
+# --- Outcomes ---
+# Stage transition probabilities per 4hr block (for untreated patients)
+progression_prob_at_risk: 0.008     # At-risk -> sepsis onset per 4hr
+progression_prob_sepsis: 0.025      # Sepsis -> severe per 4hr
+progression_prob_severe: 0.040      # Severe -> shock per 4hr
+mortality_prob_sepsis: 0.002        # Per 4hr mortality, sepsis
+mortality_prob_severe: 0.008        # Per 4hr mortality, severe
+mortality_prob_shock: 0.025         # Per 4hr mortality, shock
+
+# --- Simulation ---
+n_timesteps: 42                 # 7 days (42 x 4hr blocks)
+prediction_schedule: "all"      # Predict every timestep (continuous monitoring)

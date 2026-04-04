@@ -12,8 +12,34 @@ Python SDK for healthcare AI deployment evaluation. Discrete-time simulation eng
 - **Generic state type**: State can be any type (arrays, dataclasses, dicts). The engine never inspects state internals.
 - **No predictions on counterfactual branch**: Default causal question is "what if we hadn't deployed the AI?"
 
+## Invariant Enforcement
+
+Machine-readable invariant definitions live in
+`.claude/invariants.yaml`. Before modifying any file in
+`healthcare_sim_sdk/core/`, read that file and verify your
+change does not violate any listed invariant.
+
+Pre-commit hooks enforce these automatically:
+- `check_invariants.py` — verifies 5-method contract, RNG streams, state opacity
+- `check_no_bare_random.py` — blocks bare `np.random` outside `core/rng.py`
+- `check_core_modifications.py` — warns when core/ files are modified
+
+If your change REQUIRES modifying an invariant (e.g., adding
+a 6th scenario method), this is a design-level decision:
+
+1. Do NOT make the change in a scenario branch
+2. Open a discussion/RFC on the main repo
+3. Update `.claude/invariants.yaml` as part of the RFC
+4. The pre-commit hooks and structural tests will need
+   updating to match the new contract
+
+If a simulation use case does not fit the SDK (see
+`fitness_criteria` in invariants.yaml), say so directly.
+The SDK is not the right tool for every problem.
+
 ## Code Quality
 
+- Pre-commit hooks run automatically on every commit
 - Run `flake8 healthcare_sim_sdk/` before committing
 - Run `pytest tests/` before committing
 - Tests go in `tests/unit/`, `tests/integration/`, or `tests/bulletproof/`

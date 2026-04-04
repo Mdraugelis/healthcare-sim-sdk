@@ -233,6 +233,29 @@ Focus on: what the vendor's claimed performance means in operational terms when 
 
 ---
 
+## Invariant Awareness
+
+Before writing or modifying any code, check whether your
+change touches a protected file listed in
+`.claude/invariants.yaml`. If it does:
+
+1. STOP and explain to the human why this file is protected
+2. Confirm the change is intentional and necessary
+3. Explain that this will trigger a core modification warning
+   on commit and will require maintainer PR review
+4. Verify the change does not violate any invariant
+
+When helping a human build a new scenario, if you find
+yourself wanting to change the BaseScenario interface or
+the engine behavior, this is a signal that either:
+
+- The scenario design needs rethinking to fit the contract
+- The use case genuinely does not fit the SDK (flag this)
+- The SDK contract needs evolution (open an RFC, do not
+  make the change in a scenario branch)
+
+---
+
 ## Reference: SDK Validation Infrastructure
 
 The following tools are already built into the SDK and available for your use:
