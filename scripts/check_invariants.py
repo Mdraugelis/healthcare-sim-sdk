@@ -58,8 +58,12 @@ def find_dataclass_fields(filepath: Path, class_name: str) -> set:
 def check_scenario_contract():
     path = Path("healthcare_sim_sdk/core/scenario.py")
     if not path.exists():
-        print("SKIP: scenario.py not found (wrong CWD?)")
-        return True
+        print(
+            "INVARIANT VIOLATION: healthcare_sim_sdk/core/scenario.py "
+            "is missing. Core contract files must not be deleted.",
+            file=sys.stderr,
+        )
+        return False
     abstract = find_abstract_methods(path)
     if abstract != EXPECTED_ABSTRACT:
         added = abstract - EXPECTED_ABSTRACT
@@ -81,8 +85,12 @@ def check_scenario_contract():
 def check_rng_streams():
     path = Path("healthcare_sim_sdk/core/rng.py")
     if not path.exists():
-        print("SKIP: rng.py not found (wrong CWD?)")
-        return True
+        print(
+            "INVARIANT VIOLATION: healthcare_sim_sdk/core/rng.py "
+            "is missing. Core contract files must not be deleted.",
+            file=sys.stderr,
+        )
+        return False
     fields = find_dataclass_fields(path, "RNGStreams")
     if fields != EXPECTED_STREAMS:
         print(
@@ -126,8 +134,12 @@ def check_rng_streams():
 def check_engine_state_opacity():
     path = Path("healthcare_sim_sdk/core/engine.py")
     if not path.exists():
-        print("SKIP: engine.py not found (wrong CWD?)")
-        return True
+        print(
+            "INVARIANT VIOLATION: healthcare_sim_sdk/core/engine.py "
+            "is missing. Core contract files must not be deleted.",
+            file=sys.stderr,
+        )
+        return False
     tree = ast.parse(path.read_text())
 
     violations = []
