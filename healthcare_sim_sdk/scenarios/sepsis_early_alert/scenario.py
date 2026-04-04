@@ -409,7 +409,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
     # ------------------------------------------------------------------
     def intervene(
         self, state: np.ndarray, predictions: Predictions, t: int
-    ) -> tuple:
+    ) -> tuple[np.ndarray, Interventions]:
         """
         Process alerts: flag patients above threshold, simulate clinician
         response (with fatigue), apply treatment to responded patients.
