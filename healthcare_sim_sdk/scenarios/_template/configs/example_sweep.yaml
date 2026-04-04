@@ -1,0 +1,39 @@
+# Example Hydra experiment configuration
+# ========================================
+# Copy this to your scenario's configs/ directory and customize.
+#
+# Single run:
+#   python run_my_scenario.py
+#
+# Parameter sweep:
+#   python run_my_scenario.py --multirun \
+#     model.auc=0.65,0.75,0.85 \
+#     policy.threshold=0.20,0.30,0.40
+
+# -- Required fields (every experiment must have these) --
+seed: 42
+scenario: my_scenario_name
+experiment_name: my_experiment
+
+# -- Simulation parameters --
+n_entities: 1000
+n_timesteps: 52
+
+# -- Model configuration --
+model:
+  auc: 0.80
+  threshold: 0.30
+
+# -- Policy configuration --
+policy:
+  # Your scenario-specific policy parameters here
+  effectiveness: 0.50
+
+# -- Hydra output configuration --
+# These settings ensure outputs are organized and gitignored.
+hydra:
+  run:
+    dir: outputs/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${model.auc}_${policy.threshold}

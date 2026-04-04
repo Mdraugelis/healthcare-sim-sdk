@@ -57,6 +57,8 @@ The SDK is not the right tool for every problem.
 - **Experiment configuration uses Hydra** (YAML configs, not Python dataclasses). When building parameter sweeps, define the grid in YAML and use `@hydra.main` or `--multirun`. Never hardcode sweep parameters in Python loops.
 - Analysis exports use the `AnalysisDataset` interface, not raw dataframes
 - Scenario-specific runners live in their scenario directory, not in `experiments/`
+- **Experiment lifecycle**: All runners call `finalize_experiment()` from `experiments/lifecycle.py` after simulation completes. This saves config and metrics, and registers in the experiment catalog. For Hydra `--multirun` sweeps, run `scripts/register_sweep.py` after the sweep completes.
+- **Experiment outputs are ephemeral**: The `outputs/` directory is gitignored at all depths. Never commit simulation results. The repo contains only Hydra config YAML files (the experiment *structure*) and Python runner scripts (the experiment *logic*).
 - All branches require PR to merge to main
 
 ## Agent Guidance

@@ -260,7 +260,11 @@ the engine behavior, this is a signal that either:
 
 The following tools are already built into the SDK and available for your use:
 
-**`experiments/validate.py`** — `validate_experiment(timestamp)` re-runs a scenario with the same seed and checks 11 categories: population, clinic capacity, no-show rate, distributions, demographics, model performance, policy constraints, waitlist, AR(1) drift, accounting, and baseline threshold.
+**`experiments/lifecycle.py`** — `finalize_experiment(output_dir, config, metrics)` is the standard post-simulation call. Handles save and catalog registration. For sweeps, `register_sweep(sweep_dir)` batch-registers all cells.
+
+**`experiments/validate.py`** — Generic validation framework (`validate_generic()` + `format_appendix()`). Scenario-specific validators can be passed as callables. Checks config/metrics existence, seed, timestamp.
+
+**`scripts/register_sweep.py`** — CLI tool to register a completed Hydra `--multirun` sweep: `python scripts/register_sweep.py outputs/sweep_<timestamp>/`.
 
 **`tests/bulletproof/conftest.py`** — Reusable statistical assertions: `assert_mean_in_range()` (4-sigma CLT bounds), `assert_rate_in_range()` (binomial CI), `assert_no_nan_inf()`, `assert_in_unit_interval()`, `assert_monotone_nondecreasing()`.
 
