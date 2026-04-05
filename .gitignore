@@ -20,3 +20,9 @@ outputs/
 **/outputs/
 catalog.json
 *_dashboard.html
+
+# Task definition files (local working docs, not repo artifacts)
+*-task.md
+*-task.docx
+~$*
+tasks/
