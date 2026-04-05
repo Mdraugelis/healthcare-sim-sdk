@@ -81,6 +81,10 @@ class ControlledMLModel:
         self._fitted = False
         self._fit_report: Optional[Dict] = None
 
+        # Platt scaling parameters (set by fit())
+        self._platt_a: float = 1.0  # identity by default
+        self._platt_b: float = 0.0
+
     def predict(
         self,
         risk_scores: np.ndarray,
@@ -106,11 +110,28 @@ class ControlledMLModel:
                 UserWarning,
                 stacklevel=2,
             )
-        return self._generate_scores(
+        raw = self._generate_scores(
             risk_scores, rng, true_labels,
             self.noise_correlation, self.noise_scale,
             self.label_noise_strength,
         )
+        return self._apply_platt(raw)
+
+    def _apply_platt(self, raw_scores: np.ndarray) -> np.ndarray:
+        """Apply Platt scaling calibration.
+
+        Maps raw scores through sigmoid(a*logit(s) + b) to produce
+        calibrated probabilities. When a=1, b=0 (default before
+        fit), this is the identity transform.
+        """
+        eps = 1e-7
+        clipped = np.clip(raw_scores, eps, 1 - eps)
+        raw_logits = np.log(clipped / (1 - clipped))
+        calibrated_logits = (
+            self._platt_a * raw_logits + self._platt_b
+        )
+        calibrated = 1.0 / (1.0 + np.exp(-calibrated_logits))
+        return np.clip(calibrated, 0, 1)
 
     def predict_binary(
         self,
@@ -206,14 +227,18 @@ class ControlledMLModel:
         self.noise_scale = best_params[1]
         self.label_noise_strength = best_params[2]
         self.threshold = best_params[3]
-        self._fitted = True
 
-        # Generate final metrics report
-        final_scores = self._generate_scores(
+        # Fit Platt scaling for calibration
+        raw_scores = self._generate_scores(
             risk_scores, rng, true_labels,
             self.noise_correlation, self.noise_scale,
             self.label_noise_strength,
         )
+        self._fit_platt_scaling(raw_scores, true_labels)
+        self._fitted = True
+
+        # Generate final metrics report (with calibrated scores)
+        final_scores = self._apply_platt(raw_scores)
         report = self._build_report(
             true_labels, final_scores, feasibility,
         )
@@ -322,6 +347,44 @@ class ControlledMLModel:
         # Component 4: sigmoid calibration to [0, 1]
         scores = 1.0 / (1.0 + np.exp(-4.0 * (blended - 0.5)))
         return np.clip(scores, 0, 1)
+
+    def _fit_platt_scaling(
+        self,
+        raw_scores: np.ndarray,
+        true_labels: np.ndarray,
+    ) -> None:
+        """Fit Platt scaling: P(y=1|s) = sigmoid(a*s + b).
+
+        Maps raw prediction scores to calibrated probabilities
+        by fitting a logistic regression. Preserves ranking (AUC)
+        while fixing calibration slope to ~1.0.
+        """
+        from scipy.optimize import minimize
+
+        # Transform raw scores to log-odds for fitting
+        eps = 1e-7
+        clipped = np.clip(raw_scores, eps, 1 - eps)
+        raw_logits = np.log(clipped / (1 - clipped))
+
+        def neg_log_likelihood(params):
+            a, b = params
+            p = 1.0 / (1.0 + np.exp(-(a * raw_logits + b)))
+            p = np.clip(p, eps, 1 - eps)
+            return -np.mean(
+                true_labels * np.log(p)
+                + (1 - true_labels) * np.log(1 - p)
+            )
+
+        result = minimize(
+            neg_log_likelihood, [1.0, 0.0],
+            method="Nelder-Mead",
+        )
+        self._platt_a = float(result.x[0])
+        self._platt_b = float(result.x[1])
+        logger.debug(
+            "Platt scaling: a=%.3f, b=%.3f",
+            self._platt_a, self._platt_b,
+        )
 
     def _build_report(
         self,
