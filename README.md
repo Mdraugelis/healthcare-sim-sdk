@@ -89,6 +89,8 @@ The SDK gives you levers across four dimensions:
 |---|---|---|---|
 | **Stroke Prevention** | Patient | Binary classification (stroke risk) | Anticoagulants (risk reduction) |
 | **No-Show Overbooking** | Appointment | Probability estimation (no-show) | Double-book high-risk slots |
+| **No-Show Targeted Reminders** | Appointment | Probability estimation (no-show) | Phone reminders to high-risk patients |
+| **Sepsis Early Alert** | Patient-admission | Discrimination (sepsis progression) | Early treatment (antibiotics, fluids) |
 | **Template (Coin Flip)** | Entity | Any | Reduce event probability |
 
 ## Core Architecture
@@ -99,9 +101,67 @@ The SDK gives you levers across four dimensions:
 - **ControlledMLModel** -- Simulates ML models with target AUC, PPV, and sensitivity. 4-component noise injection with prevalence-aware feasibility checking.
 - **Experiment Infrastructure** -- Catalog, structured outputs (config/results/report/validation), markdown report generation.
 
+## Validated Replications
+
+The SDK has been validated against published studies. Each replication calibrates the simulation to match a paper's setting, then checks whether key findings are reproduced within tolerance.
+
+### 1. Chong et al. (2020) -- ML-Targeted MRI No-Show Reminders
+
+**Paper:** Chong LR et al., *American Journal of Roentgenology*, 2020. XGBoost model (AUC 0.74) predicted MRI appointment no-shows at a single center in Singapore. Top 25% of patients by predicted risk received phone reminders, reducing no-show rates from 19.3% to 15.9%.
+
+**Replication config:** [`scenarios/noshow_targeted_reminders/configs/chong_replication.yaml`](healthcare_sim_sdk/scenarios/noshow_targeted_reminders/configs/chong_replication.yaml)
+
+| Metric | Published | Simulated | Status |
+|--------|-----------|-----------|--------|
+| Baseline no-show rate | 19.3% | 19.7% | PASS |
+| Intervention no-show rate | 15.9% | 15.7% | PASS |
+| Absolute reduction | 3.4pp | 3.9pp | PASS |
+| Model AUC | 0.74 | 0.733 | PASS |
+
+Over 90 days: 2,160 phone calls made, 340 no-shows averted, ~1 additional patient seen per provider per week.
+
+### 2. Rosen et al. (2023) -- ML Reminders Reduce Racial Disparities
+
+**Paper:** Rosen et al., *JGIM*, 2023. RCT at VA Medical Centers testing ML-driven phone reminders for primary care. Overall no-show reduction from 36% to 33%, with a critical equity finding: Black patients experienced a larger reduction (6pp) than White patients (2pp), narrowing the racial no-show gap.
+
+**Replication config:** [`scenarios/noshow_targeted_reminders/configs/rosen_replication.yaml`](healthcare_sim_sdk/scenarios/noshow_targeted_reminders/configs/rosen_replication.yaml)
+
+| Metric | Published | Simulated | Status |
+|--------|-----------|-----------|--------|
+| Control no-show rate | 36% | 35.9% | PASS |
+| Intervention no-show rate | 33% | 32.0% | PASS |
+| Black absolute reduction | 6pp | 5.3pp | PASS |
+| White absolute reduction | ~2pp | 3.2pp | PASS |
+| Disparity reduction | Significant | 2.1pp narrowing | PASS |
+| Black called more often | Yes | 20% vs 15% | PASS |
+
+The equity mechanism: ML correctly identifies higher-risk patients (who are disproportionately from underserved populations), targets them for intervention, and the multiplicative effectiveness produces larger absolute reductions for higher-probability patients -- narrowing the disparity gap.
+
+### 3. Adams et al. (2022) -- TREWS Sepsis Early Warning
+
+**Paper:** Adams R et al., *Nature Medicine*, 2022. Prospective multi-site study of the Targeted Real-time Early Warning System (TREWS). AUC ~0.82 with 89% clinician engagement, demonstrating ~3pp mortality reduction for sepsis patients through targeted, high-confidence alerting.
+
+**Replication config:** [`scenarios/sepsis_early_alert/configs/trews_replication.yaml`](healthcare_sim_sdk/scenarios/sepsis_early_alert/configs/trews_replication.yaml)
+
+The sepsis scenario models a 6-stage disease progression (at-risk, sepsis, severe, shock, deceased, discharged), AR(1) risk dynamics, alert fatigue, and rapid response capacity constraints. Time-dependent treatment effectiveness follows the Kumar decay curve (effectiveness halves every 6 hours after sepsis onset).
+
+| Parameter | TREWS Config |
+|-----------|-------------|
+| Model AUC | 0.82 |
+| Alert threshold | 93rd percentile |
+| Initial clinician response | 89% |
+| Treatment effectiveness | 35% (flat) / 50% max (Kumar) |
+| Kumar half-life | 6 hours |
+
+A capacity sweep across 8 staffing levels (4-200 responses per 4hr block) reveals that rapid response capacity is the primary bottleneck -- both alert precision and population coverage are capacity-limited at realistic staffing levels. With Kumar decay enabled, the simulation produces qualitatively correct behavior: higher AUC enables earlier detection, which translates to higher per-patient treatment effectiveness.
+
+Full analysis: [`reports/paper/sepsis_case_study.md`](reports/paper/sepsis_case_study.md)
+
+---
+
 ## No-Show Overbooking Evaluation
 
-The primary reference use case: evaluate whether an ML no-show predictor improves overbooking decisions over the current practice of using patient historical rates.
+The original reference use case: evaluate whether an ML no-show predictor improves overbooking decisions over the current practice of using patient historical rates.
 
 **Run an evaluation:**
 ```bash
@@ -112,12 +172,6 @@ python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_evaluation \
 **Run a governance evaluation (48 configs, equity audit):**
 ```bash
 python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_governance_eval
-```
-
-**Run a 365-day burden analysis for bioethics:**
-```bash
-python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_burden_analysis \
-    --n-days 365 --cap 10
 ```
 
 Each run produces: `config.json`, `results.json`, `results.csv`, `report.md`, `validation_appendix.md`.
@@ -132,8 +186,6 @@ Each run produces: `config.json`, `results.json`, `results.csv`, `report.md`, `v
 
 Governance: 8/9 criteria met. All equity checks pass (no subgroup AUC gap > 3%, proportional flagging).
 
-See `experiments/outputs/comprehensive_evaluation_report.md` for the full analysis.
-
 ## Package Structure
 
 ```
@@ -142,14 +194,16 @@ healthcare_sim_sdk/
   ml/                 ML model simulator, performance metrics
   population/         Risk distributions, temporal dynamics (AR(1))
   scenarios/
-    stroke_prevention/      Reference scenario 1
-    noshow_overbooking/     Reference scenario 2 + evaluation runners
-    _template/              Starter template
+    stroke_prevention/          Reference scenario
+    noshow_overbooking/         Overbooking evaluation + runners
+    noshow_targeted_reminders/  Chong & Rosen replications
+    sepsis_early_alert/         TREWS replication + capacity sweep
+    _template/                  Starter template
   experiments/        Catalog, report generator, validation
 
 examples/             13 reference notebooks (read-only)
-tests/                266 tests (unit, integration, bulletproof)
-experiments/outputs/  Archived experiment results and reports
+reports/              Replication reports and paper drafts
+tests/                Unit, integration, and bulletproof tests
 ```
 
 ## Development
