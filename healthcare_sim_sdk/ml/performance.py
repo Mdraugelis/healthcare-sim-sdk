@@ -61,8 +61,9 @@ def roc_curve(
 def auc_score(y_true: np.ndarray, y_scores: np.ndarray) -> float:
     """Compute AUC using the trapezoidal rule on ROC curve."""
     fprs, tprs, _ = roc_curve(y_true, y_scores)
-    # Sort by fpr for correct integration
-    order = np.argsort(fprs)
+    # Sort by fpr then tpr for correct integration (stable sort preserves order
+    # among ties; secondary tpr sort ensures (0,0) precedes (0,1) etc.)
+    order = np.lexsort((tprs, fprs))
     trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
     return float(trapz(tprs[order], fprs[order]))
 
