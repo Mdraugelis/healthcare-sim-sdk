@@ -1,0 +1,32 @@
+# Chong et al. (AJR, 2020) — MRI outpatient replication
+# XGBoost AUC 0.74, top-25% targeting, 4.2x efficiency gain
+
+seed: 42
+n_days: 90
+n_patients: 3000
+
+population:
+  base_noshow_rate: 0.193
+  noshow_concentration: 0.3
+
+model:
+  type: predictor
+  auc: 0.74
+
+intervention:
+  targeting_mode: top_fraction
+  targeting_fraction: 0.25
+  call_capacity_per_day: 24
+  call_success_rate: 0.80        # MRI setting, higher engagement
+  reminder_effectiveness: 0.4437  # Calibrated: 19.7% -> 15.7% (target 15.9%)
+
+clinic:
+  n_providers: 8
+  slots_per_provider_per_day: 12
+
+hydra:
+  run:
+    dir: outputs/${now:%Y%m%d_%H%M%S}_chong
+  sweep:
+    dir: outputs/sweep_chong_${now:%Y%m%d_%H%M%S}
+    subdir: auc${model.auc}_eff${intervention.reminder_effectiveness}

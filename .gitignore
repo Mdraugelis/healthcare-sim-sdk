@@ -18,6 +18,9 @@ build/
 /experiments/
 outputs/
 **/outputs/
+reports/*
+!reports/trews_baseline_detection_sweep.md
+!reports/noshow_targeted_reminders_proof_points.md
 catalog.json
 *_dashboard.html
 

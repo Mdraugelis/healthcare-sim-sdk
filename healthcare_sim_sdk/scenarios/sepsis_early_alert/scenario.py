@@ -54,9 +54,11 @@ ROW_DEMO_INSURANCE = 8     # Encoded insurance (0-3)
 ROW_DEMO_AGE = 9           # Encoded age band (0-3)
 ROW_DEMO_RISK_MULT = 10   # Demographic risk multiplier (computed at creation)
 ROW_LOS_REMAINING = 11     # Timesteps remaining in admission (decrements in step)
-ROW_CUMULATIVE_ALERTS = 12 # Total alerts fired for this patient
-ROW_FALSE_ALERTS = 13      # False alerts (for fatigue tracking)
-N_STATE_ROWS = 14
+ROW_CUMULATIVE_ALERTS = 12  # Total alerts fired for this patient
+ROW_FALSE_ALERTS = 13       # False alerts (for fatigue tracking)
+ROW_ONSET_TIMESTEP = 14     # Timestep of first STAGE_SEPSIS (-1)
+ROW_BASELINE_DETECT_DELAY = 15  # Clinical detection delay (ts)
+N_STATE_ROWS = 16
 
 # Stage encoding
 STAGE_AT_RISK = 0
@@ -117,6 +119,21 @@ class SepsisConfig:
     treatment_effectiveness: float = 0.35
     rapid_response_capacity: int = 8
 
+    # Kumar time-dependent treatment effectiveness
+    # kumar_half_life_hours=0 means flat mode (backward compatible)
+    # kumar_half_life_hours>0 enables exponential decay: effectiveness
+    # halves every kumar_half_life_hours after sepsis onset
+    kumar_half_life_hours: float = 0.0
+    max_treatment_effectiveness: float = 0.50
+
+    # Baseline clinical detection (standard of care, both branches)
+    # Detection delay drawn from Beta(alpha, beta) * max_hours
+    # Default Beta(2,5) scaled to 24h: mean ~6.9h, median ~5.8h
+    baseline_detection_enabled: bool = True
+    baseline_detect_alpha: float = 2.0
+    baseline_detect_beta: float = 5.0
+    baseline_detect_max_hours: float = 24.0
+
     # Stage transition probabilities per 4hr block
     prog_at_risk: float = 0.008
     prog_sepsis: float = 0.025
@@ -146,10 +163,13 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         model_auc: float = 0.76,
         alert_threshold_percentile: float = 90.0,
         treatment_effectiveness: float = 0.35,
+        kumar_half_life_hours: float = 0.0,
+        max_treatment_effectiveness: float = 0.50,
         initial_response_rate: float = 0.65,
         fatigue_coefficient: float = 0.002,
         rapid_response_capacity: int = 8,
         sepsis_incidence: float = 0.04,
+        baseline_detection_enabled: bool = True,
     ):
         super().__init__(time_config=time_config, seed=seed)
 
@@ -161,10 +181,13 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
                 model_auc=model_auc,
                 alert_threshold_percentile=alert_threshold_percentile,
                 treatment_effectiveness=treatment_effectiveness,
+                kumar_half_life_hours=kumar_half_life_hours,
+                max_treatment_effectiveness=max_treatment_effectiveness,
                 initial_response_rate=initial_response_rate,
                 fatigue_coefficient=fatigue_coefficient,
                 rapid_response_capacity=rapid_response_capacity,
                 sepsis_incidence=sepsis_incidence,
+                baseline_detection_enabled=baseline_detection_enabled,
             )
 
         # ML model — discrimination mode targeting AUC
@@ -239,6 +262,21 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
 
         state[ROW_CUMULATIVE_ALERTS] = 0
         state[ROW_FALSE_ALERTS] = 0
+        state[ROW_ONSET_TIMESTEP] = -1.0
+
+        # Baseline clinical detection delay (drawn once, stored in state)
+        if self.cfg.baseline_detection_enabled:
+            raw_delay = rng.beta(
+                self.cfg.baseline_detect_alpha,
+                self.cfg.baseline_detect_beta,
+                n,
+            )
+            # Convert from [0,1] to timesteps: (delay_hours / 4.0), round up
+            state[ROW_BASELINE_DETECT_DELAY] = np.ceil(
+                raw_delay * self.cfg.baseline_detect_max_hours / 4.0
+            )
+        else:
+            state[ROW_BASELINE_DETECT_DELAY] = 9999.0  # effectively never
 
         return state
 
@@ -280,11 +318,43 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         draws = rng.random(n)
 
         # Treatment reduces progression probability
-        tx_factor = np.where(
-            state[ROW_TREATED] == 1,
-            1.0 - self.cfg.treatment_effectiveness,
-            1.0,
-        )
+        if self.cfg.kumar_half_life_hours > 0:
+            # Time-dependent effectiveness (Kumar decay curve):
+            # effectiveness halves every kumar_half_life_hours after onset
+            # treatment_start_t = t - treatment_timer
+            treatment_start_t = t - state[ROW_TREATMENT_TIMER]
+            delay_timesteps = np.where(
+                (state[ROW_TREATED] == 1) & (state[ROW_ONSET_TIMESTEP] >= 0),
+                np.maximum(treatment_start_t - state[ROW_ONSET_TIMESTEP], 0),
+                0,
+            )
+            delay_hours = delay_timesteps * 4.0
+            effectiveness = np.where(
+                state[ROW_TREATED] == 1,
+                self.cfg.max_treatment_effectiveness * np.power(
+                    0.5, delay_hours / self.cfg.kumar_half_life_hours,
+                ),
+                0.0,
+            )
+            # Preventive treatment (treated before onset): max effectiveness
+            no_onset = state[ROW_ONSET_TIMESTEP] < 0
+            effectiveness = np.where(
+                no_onset & (state[ROW_TREATED] == 1),
+                self.cfg.max_treatment_effectiveness,
+                effectiveness,
+            )
+            tx_factor = np.where(
+                state[ROW_TREATED] == 1,
+                1.0 - effectiveness,
+                1.0,
+            )
+        else:
+            # Flat mode (backward compatible)
+            tx_factor = np.where(
+                state[ROW_TREATED] == 1,
+                1.0 - self.cfg.treatment_effectiveness,
+                1.0,
+            )
 
         # Individual risk scaling: each patient's current_risk relative to
         # the population mean risk. Patients above the mean progress faster;
@@ -303,6 +373,12 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         new_state[ROW_STAGE, progressed] = STAGE_SEPSIS
         new_state[ROW_STAGE_TIMER, progressed] = 0
 
+        # Record onset timestep for patients newly entering SEPSIS
+        newly_septic = progressed & (state[ROW_ONSET_TIMESTEP] < 0)
+        new_state[ROW_ONSET_TIMESTEP] = np.where(
+            newly_septic, float(t), state[ROW_ONSET_TIMESTEP],
+        )
+
         # Sepsis -> severe
         draws2 = rng.random(n)
         sepsis_mask = active & (state[ROW_STAGE] == STAGE_SEPSIS)
@@ -318,6 +394,24 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         progressed3 = severe_mask & (draws3 < prog_prob3)
         new_state[ROW_STAGE, progressed3] = STAGE_SHOCK
         new_state[ROW_STAGE_TIMER, progressed3] = 0
+
+        # --- Baseline clinical detection (standard of care) ---
+        # Clinicians detect sepsis through routine care after a
+        # patient-specific delay (drawn from Beta distribution at creation).
+        # Runs on BOTH branches — this is standard care, not ML.
+        if self.cfg.baseline_detection_enabled:
+            eligible = (
+                (new_state[ROW_STAGE] >= STAGE_SEPSIS)
+                & (new_state[ROW_STAGE] < STAGE_DECEASED)
+                & (new_state[ROW_TREATED] == 0)
+                & (new_state[ROW_ONSET_TIMESTEP] >= 0)
+            )
+            time_since_onset = t - new_state[ROW_ONSET_TIMESTEP]
+            detected = eligible & (
+                time_since_onset >= new_state[ROW_BASELINE_DETECT_DELAY]
+            )
+            new_state[ROW_TREATED, detected] = 1
+            new_state[ROW_TREATMENT_TIMER, detected] = 0
 
         # --- Mortality (competing with progression) ---
         mort_draws = rng.random(n)
@@ -516,6 +610,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
                 "mortality": mortality,
                 "stage": state[ROW_STAGE].copy(),
                 "treated": state[ROW_TREATED].copy(),
+                "onset_timestep": state[ROW_ONSET_TIMESTEP].copy(),
                 "cumulative_alerts": state[ROW_CUMULATIVE_ALERTS].copy(),
                 "race_ethnicity": race_labels,
                 "insurance_type": insurance_labels,
@@ -555,6 +650,9 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             ],
             "all_at_risk": bool((state[ROW_STAGE] == STAGE_AT_RISK).all()),
             "mean_los": round(float(state[ROW_LOS_REMAINING].mean()), 1),
+            "mean_baseline_detect_delay_hrs": round(
+                float(state[ROW_BASELINE_DETECT_DELAY].mean()) * 4.0, 1
+            ),
             "demographic_check": {
                 "race_white_pct": round(
                     float((state[ROW_DEMO_RACE] == 0).sum()) / n, 2
