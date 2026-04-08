@@ -1,13 +1,17 @@
 # Paper 11: Chong et al. + Rosen et al. — No-Show Prediction for Targeted Reminders
 
 ## Classification: FIT
-## Reproducibility: PARTIALLY_REPRODUCED
+## Reproducibility: REPRODUCED
+
+*Upgraded from PARTIALLY_REPRODUCED on 2026-04-08. The initial `paper11_noshow/` scenario has been superseded by the more complete `noshow_targeted_reminders/` scenario (see `healthcare_sim_sdk/scenarios/noshow_targeted_reminders/`). The newer scenario includes calibrated Chong and Rosen replication configs, per-paper proof-point tables, and full equity analysis. See `reports/noshow_targeted_reminders_proof_points.md` for the full reproduction report.*
 
 ## Key Findings
 
-Two papers are evaluated jointly because they address the same intervention (ML-targeted phone reminders for no-show reduction) in different settings (Singapore MRI and VA primary care). The combined evaluation reveals a key pattern: no-show reminder interventions are easily directionally reproducible but effect sizes are sensitive to how reminder effectiveness is parameterized. The Rosen et al. equity finding — Black patients benefit more than White patients from ML-targeted reminders — is directionally reproduced (Black CF=0.417→F=0.391, RRR=6.3% vs. paper's 14.3%), though magnitudes fall short.
+Two papers are evaluated jointly because they address the same intervention (ML-targeted phone reminders for no-show reduction) in different settings (Singapore MRI and VA primary care). Both papers are now reproduced within tolerance by the `noshow_targeted_reminders` scenario, which uses calibration via binary search on `reminder_effectiveness` to match the published no-show rate reductions.
 
-The counterfactual no-show rate (0.354) closely matches Rosen's control arm (0.36). The factual rate (0.340) is close to Rosen's 0.33 target. The equity direction is reproduced (Black > White benefit from reminders), which is the paper's primary finding. **Full quantitative reproduction of the racial disparity reduction requires knowing the per-patient reminder effectiveness by race, which Rosen does not report.**
+**Chong et al. (AJR 2020, Singapore MRI):** All six proof-point metrics pass validation ranges. Simulated baseline no-show rate 19.7% vs paper 19.3%; intervention no-show rate 15.7% vs paper 15.9%; absolute reduction 3.9pp vs paper 3.4pp; model AUC 0.733 vs paper 0.74. Calibrated reminder_effectiveness = 0.4437 via binary search.
+
+**Rosen et al. (JGIM 2023, VA primary care):** All ten proof-point metrics pass. Simulated control no-show rate 35.9% vs paper 36%; intervention no-show rate 32.0% vs paper 33%; Black patient reduction 5.3pp vs paper 6pp; White patient reduction 3.2pp vs paper ~2pp. The critical equity finding — that ML-targeted reminders narrow the racial no-show gap — is reproduced: disparity gap narrows by 2.1pp from 6.8pp (CF) to 4.7pp (factual). The equity mechanism emerges automatically from the multiplicative effectiveness model applied to higher-baseline-risk patients.
 
 ## Parameter Extraction
 

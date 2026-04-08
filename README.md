@@ -105,6 +105,8 @@ The SDK gives you levers across four dimensions:
 
 The SDK has been validated against published studies. Each replication calibrates the simulation to match a paper's setting, then checks whether key findings are reproduced within tolerance.
 
+A systematic 30-paper audit (April 2026) found **3 fully REPRODUCED** papers (SHIELD-RT, TREWS, Chong/Rosen), **5 PARTIALLY_REPRODUCED**, and **0 NOT_REPRODUCED** (the SDK never contradicted a paper's direction of effect). Seven additional scenarios are available under `healthcare_sim_sdk/scenarios/paperNN_*/`. Full audit results: [`research/synthesis_report.md`](research/synthesis_report.md).
+
 ### 1. Chong et al. (2020) -- ML-Targeted MRI No-Show Reminders
 
 **Paper:** Chong LR et al., *American Journal of Roentgenology*, 2020. XGBoost model (AUC 0.74) predicted MRI appointment no-shows at a single center in Singapore. Top 25% of patients by predicted risk received phone reminders, reducing no-show rates from 19.3% to 15.9%.
