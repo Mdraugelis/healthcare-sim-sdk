@@ -1,0 +1,52 @@
+# Rosen et al. (JGIM, 2023) — VA primary care RCT replication
+# Random forest, risk-stratified calling, disparity reduction
+#
+# Calibrated parameters:
+#   reminder_effectiveness=0.60, call_capacity=16
+#   Race multipliers inflated to compensate for geometric-mean dampening
+#   in create_population (cube-root averaging with insurance/age).
+#   Target race rates: Black CF~42%, White CF~31%
+
+seed: 42
+n_days: 180
+n_patients: 5000
+
+population:
+  base_noshow_rate: 0.38
+  noshow_concentration: 0.3
+  # Multipliers compensate for geometric mean **(1/3) dampening
+  # Black: need effective ~1.17x => raw mult ~2.50
+  # White: need effective ~0.86x => raw mult ~0.55
+  race_distribution:
+    White: 0.55
+    Black: 0.30
+    Hispanic: 0.10
+    Asian: 0.02
+    Other: 0.03
+  race_noshow_multipliers:
+    White: 0.55
+    Black: 2.50
+    Hispanic: 1.15
+    Asian: 0.51
+    Other: 1.00
+
+model:
+  type: predictor
+  auc: 0.72                      # Estimated (not reported in paper)
+
+intervention:
+  targeting_mode: top_k
+  call_capacity_per_day: 16       # Calibrated: concentrates calls on highest risk
+  call_success_rate: 0.60         # VA population, harder to reach
+  reminder_effectiveness: 0.60    # Calibrated: produces 5.3pp Black reduction
+
+clinic:
+  n_providers: 8
+  slots_per_provider_per_day: 12
+
+hydra:
+  run:
+    dir: outputs/${now:%Y%m%d_%H%M%S}_rosen
+  sweep:
+    dir: outputs/sweep_rosen_${now:%Y%m%d_%H%M%S}
+    subdir: auc${model.auc}_eff${intervention.reminder_effectiveness}

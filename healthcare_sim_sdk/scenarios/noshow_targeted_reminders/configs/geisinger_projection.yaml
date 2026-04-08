@@ -1,0 +1,43 @@
+# Geisinger contextualization — Central PA demographics
+# What would Chong/Rosen findings look like at Geisinger?
+
+seed: 42
+n_days: 90
+n_patients: 3000
+
+population:
+  base_noshow_rate: 0.15         # Geisinger observed (estimate)
+  noshow_concentration: 0.3
+  race_distribution:
+    White: 0.85
+    Black: 0.05
+    Hispanic: 0.06
+    Asian: 0.02
+    Other: 0.02
+  race_noshow_multipliers:
+    White: 0.90
+    Black: 1.30
+    Hispanic: 1.15
+    Asian: 0.80
+    Other: 1.00
+
+model:
+  type: predictor
+  auc: 0.74
+
+intervention:
+  targeting_mode: top_k
+  call_capacity_per_day: 24
+  call_success_rate: 0.70
+  reminder_effectiveness: 0.35
+
+clinic:
+  n_providers: 8
+  slots_per_provider_per_day: 12
+
+hydra:
+  run:
+    dir: outputs/${now:%Y%m%d_%H%M%S}_geisinger
+  sweep:
+    dir: outputs/sweep_geisinger_${now:%Y%m%d_%H%M%S}
+    subdir: auc${model.auc}_cap${intervention.call_capacity_per_day}

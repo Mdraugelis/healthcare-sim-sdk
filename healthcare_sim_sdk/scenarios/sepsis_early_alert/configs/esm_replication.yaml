@@ -1,0 +1,71 @@
+# Epic Sepsis Model (ESM) Replication Config
+# Replicates the Epic Sepsis Model evaluation
+# Wong et al., JAMA Internal Medicine 2021
+#
+# Key findings: ESM had substantially lower discriminative performance
+# (AUC ~0.63) than vendor-reported metrics, generated high alert volumes,
+# and showed no significant mortality benefit in a large pragmatic evaluation.
+# The model's low specificity led to alert fatigue and poor clinician uptake.
+#
+# Citation: Wong A, et al. External Validation of a Widely Implemented
+#           Proprietary Sepsis Prediction Model in Hospitalized Patients.
+#           JAMA Intern Med. 2021;181(8):1065-1070.
+
+# --- Population ---
+n_patients: 5000
+sepsis_incidence: 0.04
+risk_concentration: 0.5
+mean_los_timesteps: 35
+los_std_timesteps: 12
+
+# --- ML Model ---
+# ESM achieved only AUC ~0.63 in external validation
+model_auc: 0.63
+# Lower threshold = more alerts (higher volume, lower quality)
+alert_threshold_percentile: 82
+
+# --- Clinician Response ---
+# Lower engagement due to high false-alert volume and alert fatigue
+initial_response_rate: 0.45
+fatigue_coefficient: 0.004  # Faster fatigue decay due to more false alerts
+floor_response_rate: 0.15
+
+# --- Intervention ---
+# Same treatment effectiveness when applied, but fewer patients reached
+treatment_effectiveness: 0.35
+rapid_response_capacity: 8
+
+# Kumar decay: same biology, but lower AUC means later detection = less effective
+kumar_half_life_hours: 6.0
+max_treatment_effectiveness: 0.50
+
+# --- Stage Transition Probabilities ---
+# Standard literature values
+prog_at_risk: 0.008
+prog_sepsis: 0.025
+prog_severe: 0.040
+mort_sepsis: 0.002
+mort_severe: 0.008
+mort_shock: 0.025
+
+# --- Temporal ---
+ar1_rho: 0.90
+ar1_sigma: 0.06
+
+# --- Baseline Clinical Detection (standard of care, both branches) ---
+# Same as TREWS — baseline detection is independent of ML system
+baseline_detection_enabled: true
+baseline_detect_alpha: 2.0
+baseline_detect_beta: 5.0
+baseline_detect_max_hours: 24.0
+
+# --- Simulation ---
+n_timesteps: 42  # 7 days
+prediction_schedule: "all"
+
+# --- Expected Results ---
+# Under these parameters, simulation should show:
+# - Negligible mortality difference between factual and counterfactual
+# - Rapid alert fatigue degrading response rates
+# - High alert volume exceeding capacity constraints frequently
+# - Demonstrates why AUC alone doesn't determine clinical impact
