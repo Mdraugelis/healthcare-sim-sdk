@@ -261,36 +261,28 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         true_risks = state[:, COL_CANCER_RISK]
         pathway = state[:, COL_PATHWAY]
 
-        # Determine sensitivity per patient based on pathway
+        # Determine sensitivity per patient based only on the encoded pathway.
         # pathway=1: double reading (standard or AI-directed double)
         # pathway=0: single AI-assisted reading
+        #
+        # NOTE:
+        # Do not infer factual vs counterfactual execution from aggregate
+        # properties such as pathway.mean() == 0.0. A factual run may
+        # legitimately route every case to the low-risk pathway, and treating
+        # that as counterfactual would bias both detection and workload metrics.
         sensitivity = np.where(
             pathway == 1.0,
             self.double_reader_sensitivity,
             self.ai_single_reader_sensitivity,
         )
 
-        # Counterfactual branch: pathway is always 0 (unmodified by intervene)
-        # We can't distinguish factual/counterfactual in measure() directly.
-        # The engine handles this: counterfactual branch never calls intervene(),
-        # so pathway stays 0 for all. Default pathway=0 in counterfactual
-        # gets ai_single_reader_sensitivity — but that's wrong for control.
-        # FIX: Use the FACT that counterfactual state has pathway=0 uniformly.
-        # In counterfactual: we want double_reader_sensitivity for all.
-        # We detect this as: if all pathways are 0, use double_reader_sensitivity.
-        if pathway.mean() == 0.0:
-            # Counterfactual branch: standard double reading for all
-            sensitivity = np.full(n, self.double_reader_sensitivity)
-
         # Sample detection events
         # P(detected) = P(true_cancer) * sensitivity
         true_cancer = (rng.random(n) < true_risks).astype(float)
         detected = (rng.random(n) < sensitivity).astype(float) * true_cancer
 
-        # Secondary: reads performed
+        # Secondary: reads performed, derived only from the encoded pathway.
         reads_per_patient = np.where(pathway == 1.0, 2.0, 1.0)
-        if pathway.mean() == 0.0:
-            reads_per_patient = np.full(n, 2.0)  # counterfactual: all double
 
         age = (
             self._demographics if self._demographics is not None
