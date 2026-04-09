@@ -70,7 +70,7 @@ None — no simulation was run.
 
 ## SDK Design Rationale (Primary Contribution of This Paper)
 
-This paper provides the **organizational and methodological framing for how SDK outputs should be used in Geisinger's deployment process**, rather than contributing directly to simulation design.
+This paper provides the **organizational and methodological framing for how SDK outputs should be used in the target health system's deployment process**, rather than contributing directly to simulation design.
 
 **Concrete SDK requirements derived from this paper:**
 

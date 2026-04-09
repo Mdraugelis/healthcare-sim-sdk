@@ -63,7 +63,7 @@ Not applicable. No simulation was designed or executed.
 
 **Hypothetical calibration design (for future scenario development):**
 
-If a Geisinger team wanted to simulate deployment of a mortality prediction model with AUC 0.93–0.94:
+If a health system team wanted to simulate deployment of a mortality prediction model with AUC 0.93–0.94:
 1. `create_population()`: Inpatient cohort, ~2% in-hospital mortality base rate
 2. `predict()`: `ControlledMLModel(mode="discrimination", target_auc=0.93)`
 3. Threshold selection: Must be specified by the user — the paper provides no threshold guidance
@@ -77,7 +77,7 @@ This would require ≥4 assumed major parameters → UNDERDETERMINED under Phase
 
 Not applicable — no simulation was run.
 
-**Anticipated discrepancy for any hypothetical deployment:** External validation AUC will likely be lower than 0.93–0.94 (Paper #24, Park & Han: internal vs. external validation performance gap). For Geisinger simulation planning, use 0.80–0.85 as a conservative external AUC estimate based on observed drops in comparable EHR models.
+**Anticipated discrepancy for any hypothetical deployment:** External validation AUC will likely be lower than 0.93–0.94 (Paper #24, Park & Han: internal vs. external validation performance gap). For local simulation planning, use 0.80–0.85 as a conservative external AUC estimate based on observed drops in comparable EHR models.
 
 ## Scientific Reporting Gaps
 
@@ -96,7 +96,7 @@ No simulation was run, so no parameters were assumed.
 - [HIGH] Operational threshold: Unknown; assumed top-decile for planning purposes
 - [HIGH] Intervention type and effectiveness: Absent from paper; must be sourced from deployment literature
 - [HIGH] External validation AUC: Conservative estimate 0.80–0.85 based on systematic degradation patterns
-- [HIGH] Training demographics: Unknown; Geisinger's own demographics assumed for local calibration
+- [HIGH] Training demographics: Unknown; the health system's own demographics assumed for local calibration
 
 ---
 
@@ -106,4 +106,4 @@ This paper is best used as a **model performance benchmark** for SDK scenario co
 
 **Use in the SDK:** When designing any inpatient mortality prediction scenario, the Rajkomar et al. values (AUC 0.93–0.94 internal) represent the optimistic upper bound on what deep learning on raw EHR can achieve. The SDK should flag when users set target AUC >0.90 without external validation evidence, noting that Rajkomar's internal validation performance is an upper bound, not an operational expectation.
 
-The paper's FHIR-based data representation is also noteworthy for Geisinger's Epic/FHIR infrastructure — the same technical approach is already operationally feasible in Geisinger's environment.
+The paper's FHIR-based data representation is also noteworthy for the target health system's Epic/FHIR infrastructure — the same technical approach is already operationally feasible in the target health system's environment.

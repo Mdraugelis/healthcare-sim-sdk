@@ -100,7 +100,7 @@ No simulation run. Anticipated discrepancy:
 
 **Proprietary algorithm wall:** The exact algorithm is the Optum/Change Healthcare product, which is not publicly described. Any SDK simulation would be a structural analog demonstrating that the *mechanism* (cost proxy + access differential = demographic bias) produces the direction of bias reported. The magnitude (17.7%→46.5%) can be calibrated in simulation by setting access_gap to the reported $1,800/year differential, but this calibration is assumption-dependent.
 
-**The bias mechanism is not disputed** — Obermeyer et al.'s finding has been widely replicated across similar cost-proxy algorithms. The SDK's value is not proving the finding but quantifying what it looks like in a specific system (e.g., Geisinger's population demographics and access patterns).
+**The bias mechanism is not disputed** — Obermeyer et al.'s finding has been widely replicated across similar cost-proxy algorithms. The SDK's value is not proving the finding but quantifying what it looks like in a specific system (e.g., the health system's population demographics and access patterns).
 
 ---
 
@@ -116,7 +116,7 @@ No simulation run. Anticipated discrepancy:
 
 5. **Temporal analysis absent.** The study is cross-sectional. Whether bias has increased or decreased over time (as cost-need correlations change with policy environment) is unknown.
 
-6. **Single-system generalizability.** The paper uses one large academic medical center + insurer data. Whether the $1,800/year access differential holds in integrated payer-provider systems like Geisinger (which controls both sides of the cost-need relationship) is not addressed.
+6. **Single-system generalizability.** The paper uses one large academic medical center + insurer data. Whether the $1,800/year access differential holds in integrated payer-provider systems (which control both sides of the cost-need relationship) is not addressed.
 
 ---
 
@@ -127,7 +127,7 @@ No simulation run. Anticipated discrepancy:
 | Top-risk tier = approximately top 5–10% of risk distribution | HIGH | Inferred from "high-need care management" context; not specified |
 | Access gap is structurally stable (not confounded by other factors) | HIGH | Paper's causal argument; alternative explanations partially addressed |
 | Black patients' health need is accurately measured by active conditions count | MEDIUM | Paper's operational definition; alternative need measures exist |
-| Mechanism generalizes to Geisinger's population | MEDIUM | Geisinger is integrated payer-provider; access gap dynamics may differ |
+| Mechanism generalizes to the target health system's population | MEDIUM | the target health system is an integrated payer-provider; access gap dynamics may differ |
 | AUC of debiased model is ≥0.70 (functional) | MEDIUM | Not reported; paper claims bias is reduced without performance loss |
 
 ---
@@ -147,6 +147,6 @@ No simulation run. Anticipated discrepancy:
    - Equalized odds (equal TPR/FPR across groups)
    - Equal opportunity (equal TPR for Black vs. White patients with equivalent need)
 
-4. **Geisinger-specific calibration opportunity:** With access to Geisinger's integrated claims + clinical data, the actual cost-need gap for Geisinger's Black patients (vs. Paper's ~$1,800/year) could be directly estimated, allowing more accurate simulation of what this algorithm would do in Geisinger's population.
+4. **Health-system-specific calibration opportunity:** With access to the target health system's integrated claims + clinical data, the actual cost-need gap for Black patients in the target population (vs. Paper's ~$1,800/year) could be directly estimated, allowing more accurate simulation of what this algorithm would do in the target health system's population.
 
 **Priority for SDK equity module:** CRITICAL — this paper motivated the equity audit requirement and provides the clearest numerical targets (17.7%→46.5%, 84% bias reduction) for SDK validation.

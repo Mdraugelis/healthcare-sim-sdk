@@ -100,7 +100,7 @@ No simulation to compare against. Contextual discrepancy worth flagging:
 
 4. **No outcome comparison.** Higher AUROC does not guarantee better outcomes. A hospital currently using NEWS needs evidence that switching to eCARTv5 would change patient trajectories, not just improve rank statistics. This paper provides necessary but not sufficient evidence for that decision.
 
-5. **Hospital-level heterogeneity not reported.** Seven hospitals are pooled. Whether eCARTv5's AUROC advantage holds consistently across all seven, or is driven by one or two sites, is unknown. This matters for generalizing to Geisinger's context.
+5. **Hospital-level heterogeneity not reported.** Seven hospitals are pooled. Whether eCARTv5's AUROC advantage holds consistently across all seven, or is driven by one or two sites, is unknown. This matters for generalizing to the target health system's context.
 
 6. **Time-to-event not reported.** The paper doesn't report how far in advance of deterioration events the scores differ across models. Lead time (as in Paper #13) is clinically important: a model with AUROC 0.895 that fires 1 hour before deterioration may be less valuable than one with AUROC 0.831 that fires 12 hours before.
 
@@ -111,7 +111,7 @@ No simulation to compare against. Contextual discrepancy worth flagging:
 | Assumption | Impact | Basis |
 |------------|--------|-------|
 | Base outcome rate ~4–6% | HIGH | Inferred from inpatient deterioration literature; not directly stated |
-| AUROCs are reproducible at Geisinger | MEDIUM | External validation at 7 hospitals provides evidence; Geisinger case mix may differ |
+| AUROCs are reproducible at the target health system | MEDIUM | External validation at 7 hospitals provides evidence; the health system case mix may differ |
 | Discrimination advantage translates proportionally to net benefit | MEDIUM | Requires calibration data to confirm; not validated in this paper |
 | eCARTv5 vs. NEWS advantage uniform across demographics | HIGH | Not analyzed; assumption is that no differential bias exists — unverified |
 
@@ -128,6 +128,6 @@ This paper establishes the **model selection benchmark** for EWS scenarios. The 
 # Shows: how much of the AUROC difference translates to clinical utility at each threshold
 ```
 
-**Priority for SDK benchmark library:** HIGH — provides the largest published EWS validation dataset and the widest model comparison. Directly relevant to Geisinger's Epic EHR context (Epic DI is already deployed; eCARTv5 is a procurement-relevant alternative).
+**Priority for SDK benchmark library:** HIGH — provides the largest published EWS validation dataset and the widest model comparison. Directly relevant to an Epic EHR context (Epic DI is already deployed; eCARTv5 is a procurement-relevant alternative).
 
-**Procurement relevance for Geisinger:** Epic DI (AUROC 0.808) vs. eCARTv5 (AUROC 0.895) is a live procurement decision at most Epic shops. The SDK can simulate what that 0.087 AUROC gap means in Geisinger's operational context — across Geisinger's case mix, at Geisinger's clinician response rates — before any contract is signed.
+**Procurement relevance for the target health system:** Epic DI (AUROC 0.808) vs. eCARTv5 (AUROC 0.895) is a live procurement decision at most Epic deployments. The SDK can simulate what that 0.087 AUROC gap means in the target health system's operational context — across the local case mix, at local clinician response rates — before any contract is signed.
