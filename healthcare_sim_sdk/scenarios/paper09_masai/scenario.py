@@ -272,7 +272,25 @@ class MASAIScenario(BaseScenario[np.ndarray]):
 
         # Sample detection events
         # P(detected) = P(true_cancer) * sensitivity
-        true_cancer = (rng.random(n) < true_risks).astype(float)
+        #
+        # `measure()` may be called for multiple timesteps for the same entity.
+        # Re-sampling `true_cancer` from `true_risks` on each call would allow
+        # entities to spuriously gain/lose cancer over time. To keep outcomes
+        # consistent without depending on unseen state-layout changes, derive a
+        # stable pseudo-random draw from immutable per-entity data.
+        entity_ids = np.arange(n, dtype=np.uint64)
+        risk_bits = np.asarray(true_risks, dtype=np.float64).view(np.uint64)
+        stable_draws = risk_bits ^ (entity_ids + np.uint64(0x9E3779B97F4A7C15))
+        stable_draws ^= stable_draws >> np.uint64(30)
+        stable_draws *= np.uint64(0xBF58476D1CE4E5B9)
+        stable_draws ^= stable_draws >> np.uint64(27)
+        stable_draws *= np.uint64(0x94D049BB133111EB)
+        stable_draws ^= stable_draws >> np.uint64(31)
+        stable_uniforms = (
+            (stable_draws >> np.uint64(11)).astype(np.float64)
+            * (1.0 / (1 << 53))
+        )
+        true_cancer = (stable_uniforms < true_risks).astype(float)
         detected = (rng.random(n) < sensitivity).astype(float) * true_cancer
 
         # Secondary: reads performed, derived only from the encoded pathway.
