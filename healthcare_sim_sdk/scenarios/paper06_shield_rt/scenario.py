@@ -88,14 +88,12 @@ class ShieldRTScenario(BaseScenario[np.ndarray]):
         model_auc: float = 0.81,
         risk_threshold: float = 0.10,
         intervention_effectiveness: float = 0.452,
-        high_risk_fraction: float = 0.50,  # ~50% flagged at >10% threshold
     ):
         super().__init__(time_config=time_config, seed=seed)
         self.base_acute_care_rate = base_acute_care_rate
         self.model_auc = model_auc
         self.risk_threshold = risk_threshold
         self.intervention_effectiveness = intervention_effectiveness
-        self.high_risk_fraction = high_risk_fraction
 
         self._model = ControlledMLModel(
             mode="discrimination",
