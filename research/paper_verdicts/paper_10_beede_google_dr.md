@@ -56,7 +56,7 @@ The paper's value to this project is not in reproducing a quantitative effect â€
 
 4. **The intervention-reversal problem:** When staff discourage patients from using the AI, the "intervention" becomes a *harm* â€” patients who would have been screened without the AI aren't screened because of it. The SDK can model treatment-arm outcomes but not this kind of system-induced harm via workflow displacement.
 
-**Bottom line for Geisinger:** Before deploying any imaging AI, simulate the operational failure modes that Beede documents. The 94.7% lab accuracy means nothing if 21% of images are rejected, nurses are discouraged, and the referral pathway doesn't scale. This paper should be mandatory reading for any AI procurement process involving imaging at Geisinger.
+**Bottom line for the target health system:** Before deploying any imaging AI, simulate the operational failure modes that Beede documents. The 94.7% lab accuracy means nothing if 21% of images are rejected, nurses are discouraged, and the referral pathway doesn't scale. This paper should be mandatory reading for any AI procurement process involving imaging at the target health system.
 
 ## Verification Summary
 

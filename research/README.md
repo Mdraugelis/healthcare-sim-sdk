@@ -1,8 +1,7 @@
-# SimReplicator Research: 30-Paper Reproducibility Audit
+# Research: 30-Paper Reproducibility Audit
 
-**Geisinger Health System — AI Department**
 **Completed:** April 6, 2026
-**Branch:** `research/simreplicator-30-paper-audit`
+**Branch:** `research/30-paper-audit`
 
 ## Overview
 

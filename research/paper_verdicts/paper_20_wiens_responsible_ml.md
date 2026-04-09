@@ -117,7 +117,7 @@ Wiens et al. recommend prospective clinical validation as the gold standard. Thi
    - External validation presence (Park, Paper #24 in pipeline)
    - Effect size estimate from simulation
 
-   This score could be a standardized SDK output, supporting Geisinger procurement decisions.
+   This score could be a standardized SDK output, supporting health system procurement decisions.
 
 **Cross-paper synthesis:** Wiens et al. (Paper #20) + Plana et al. (Paper #12) + Nagendran et al. (Paper #19) together form the evidence base for why pre-deployment simulation is not just useful but necessary:
 - Plana: 0% of RCTs met all reporting standards (supply problem)

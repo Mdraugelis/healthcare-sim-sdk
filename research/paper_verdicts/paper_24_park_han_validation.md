@@ -83,4 +83,4 @@ This paper provides the **empirical foundation for why pre-deployment simulation
 - Paper #1 (Wong et al.) is the canonical empirical instantiation of Park & Han's warnings — AUC 0.76–0.83 internal → 0.63 external.
 - Paper #23 (Ghassemi) explains why XAI doesn't compensate for the external validation gap.
 - Paper #18 (Van Calster calibration) adds the calibration dimension to Park & Han's three-criteria framework.
-- The 0% achievement rate for all three criteria is the most important number in this batch for Geisinger procurement: **zero published AI studies in this field met all three design standards as of 2018.**
+- The 0% achievement rate for all three criteria is the most important number in this batch for health system procurement: **zero published AI studies in this field met all three design standards as of 2018.**

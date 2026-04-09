@@ -1,6 +1,6 @@
 # Healthcare Intervention Simulation SDK: Cross-Paper Synthesis Report
 
-**SimReplicator — Geisinger Health System AI Department**
+**30-Paper Reproducibility Audit**
 **Date:** April 6, 2026 (updated April 8, 2026)
 **Scope:** 30 landmark healthcare ML/AI papers evaluated against the Healthcare Intervention Simulation SDK
 
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-We processed 30 published healthcare ML/AI papers through the full SimReplicator pipeline: parameter extraction, SDK fitness assessment, scenario design, calibration, verification, and reproducibility verdict. The results establish three things simultaneously.
+We processed 30 published healthcare ML/AI papers through the full audit pipeline: parameter extraction, SDK fitness assessment, scenario design, calibration, verification, and reproducibility verdict. The results establish three things simultaneously.
 
 **The SDK works.** Among papers with sufficient deployment data, the simulation engine correctly models alert burden, intervention direction, and — in the cleanest case — reproduces a published risk ratio to within 2% (SHIELD-RT: RR 0.546 vs. paper 0.556). The core counterfactual engine, RNG partitioning, and ML model simulation are validated.
 
@@ -137,7 +137,7 @@ Scoring 1 point each for: AUC reported, threshold reported, baseline rate report
 
 ### 3.1 What the SDK Models Well
 
-**Alert burden simulation** is the SDK's most reliably calibrated capability. Alert rates hit within 0.01–0.02pp of targets across Papers 1, 2, and 6. The percentile-threshold mechanism is accurate and directly deployable for assessing operational burden of any proposed clinical alert system. *Procurement implication: when a vendor claims their model fires at X% of encounters, the SDK can model exactly what that means for Geisinger's patient volume.*
+**Alert burden simulation** is the SDK's most reliably calibrated capability. Alert rates hit within 0.01–0.02pp of targets across Papers 1, 2, and 6. The percentile-threshold mechanism is accurate and directly deployable for assessing operational burden of any proposed clinical alert system. *Procurement implication: when a vendor claims their model fires at X% of encounters, the SDK can model exactly what that means for the target health system's patient volume.*
 
 **Binary outcome RCTs** with clean parameter reporting reproduce precisely. SHIELD-RT is proof: binary outcome + clean AUC + explicit threshold + randomized design = 2% RR error. This is the SDK's strongest claim.
 
@@ -210,7 +210,7 @@ Obermeyer (Paper 15) established that cost-as-proxy-for-health-need is not an is
 
 The prospective cohort papers (TREWS, MASAI, COMPOSER) are all PARTIALLY_REPRODUCED because they report more parameters than the RCTs, even if their counterfactual structure requires more assumptions to reconstruct.
 
-**Operational lesson:** For pre-deployment simulation at Geisinger, a well-reported observational study with large N is more useful than a small underpowered RCT with missing parameters. Study design is not a sufficient quality indicator.
+**Operational lesson:** For pre-deployment simulation at a health system, a well-reported observational study with large N is more useful than a small underpowered RCT with missing parameters. Study design is not a sufficient quality indicator.
 
 ### 5.2 Do High-AUC Papers Reproduce Better?
 
@@ -272,12 +272,12 @@ The pipeline has produced 9 new scenario implementations under `healthcare_sim_s
 
 *Note: The standalone `paper02_trews/` and `paper11_noshow/` scenarios have been superseded by the more complete `sepsis_early_alert/` and `noshow_targeted_reminders/` scenarios, which add baseline clinical detection, Kumar decay, multiple calibration configs, and full equity analysis. The `paperNN_*` directories are preserved for the other 7 scenarios where no superseding implementation exists.*
 
-These are Geisinger's pre-deployment evaluation library. When a vendor presents a sepsis alert system, run their claimed AUC and threshold through `sepsis_early_alert/` with the `trews_replication.yaml` config to simulate alert burden and expected mortality impact at Geisinger's patient volume. For ML-targeted outpatient interventions, use `noshow_targeted_reminders/`.
+These are a pre-deployment evaluation library for the target health system. When a vendor presents a sepsis alert system, run their claimed AUC and threshold through `sepsis_early_alert/` with the `trews_replication.yaml` config to simulate alert burden and expected mortality impact at the health system's patient volume. For ML-targeted outpatient interventions, use `noshow_targeted_reminders/`.
 
 ### 6.3 Procurement Use Cases
 
 **"Our sepsis model achieves AUC 0.82 and fires at threshold X."**
-→ Run through `sepsis_early_alert/` with `configs/trews_replication.yaml` as the starting config, adjusted for the claimed AUC. Determine expected alert rate at Geisinger (≈3M patients, ~15% inpatient). Estimate mortality benefit under optimistic (TREWS-like capacity + confirmation rate) and pessimistic (ESM-like response rate) alert handling. The baseline clinical detection mechanism provides the realistic counterfactual: compare ML+standard_of_care vs standard_of_care_alone, not vs no detection at all. Compare to Paper 30 alert fatigue benchmarks.
+→ Run through `sepsis_early_alert/` with `configs/trews_replication.yaml` as the starting config, adjusted for the claimed AUC. Determine expected alert rate at the target health system using its own patient volume and inpatient fraction. Estimate mortality benefit under optimistic (TREWS-like capacity + confirmation rate) and pessimistic (ESM-like response rate) alert handling. The baseline clinical detection mechanism provides the realistic counterfactual: compare ML+standard_of_care vs standard_of_care_alone, not vs no detection at all. Compare to Paper 30 alert fatigue benchmarks.
 
 **"Our model is fair across demographics."**
 → Run through equity audit module. Request race-stratified AUC, sensitivity, and PPV from vendor. Compare to Obermeyer's proxy-variable framework (Paper 15). Flag if the outcome variable is a utilization proxy.
@@ -369,6 +369,6 @@ Sensitivity analysis prescription: all SDK alert scenarios should run three vari
 
 ---
 
-*Report generated by SimReplicator — Geisinger Health System AI Department*
+*Report generated by the 30-paper reproducibility audit pipeline*
 *All simulation results reflect synthetic data under documented assumptions.*
 *No patient data was used. No deployment recommendations are made.*

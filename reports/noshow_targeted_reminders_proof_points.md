@@ -183,14 +183,14 @@ Patient 4980, White, base probability 1.2%. This patient is never selected for c
 
 ### What This Simulation Cannot Tell You
 
-- Whether the specific model features from these papers would work at Geisinger
-- Whether Geisinger's patient population would respond to phone reminders at the same rate
+- Whether the specific model features from these papers would work at your health system
+- Whether your patient population would respond to phone reminders at the same rate
 - Whether the intervention effect would persist beyond the study period
 - The cost-effectiveness of a reminder program (requires cost data)
 
 ---
 
-## 5. Implications for Geisinger
+## 5. Implications for a Target Health System
 
 ### What the Published Evidence Suggests
 
@@ -198,25 +198,25 @@ Both papers demonstrate that ML-targeted phone reminders produce meaningful no-s
 
 ### Contextualization Questions
 
-Before extrapolating these findings to Geisinger, the following differences must be considered:
+Before extrapolating these findings to your setting, the following differences must be considered:
 
-| Factor | Chong (Singapore) | Rosen (VA) | Geisinger (Central PA) |
+| Factor | Chong (Singapore) | Rosen (VA) | Target Health System |
 |--------|-------------------|------------|----------------------|
-| Base no-show rate | 19.3% | 36% | ~15% (estimate) |
-| Population diversity | Homogeneous | 30% Black | ~5% Black |
-| Setting | MRI outpatient | Primary care | Mixed specialties |
+| Base no-show rate | 19.3% | 36% | (your rate) |
+| Population diversity | Homogeneous | 30% Black | (your mix) |
+| Setting | MRI outpatient | Primary care | (your setting) |
 | Model AUC | 0.74 | ~0.72 | Unknown |
 
-Geisinger's lower base rate and predominantly White population mean:
-- **Smaller absolute reductions** are expected (the multiplicative mechanism produces less absolute benefit at lower base rates)
-- **Equity effects will be smaller** due to fewer minority patients, but still directionally beneficial
-- **Higher model AUC may be needed** to produce operationally meaningful impact at a 15% base rate
+A health system with a lower base rate and a predominantly White population will see:
+- **Smaller absolute reductions** (the multiplicative mechanism produces less absolute benefit at lower base rates)
+- **Smaller equity effects** due to fewer minority patients, but still directionally beneficial
+- **A possible need for higher model AUC** to produce operationally meaningful impact at a low base rate
 
 ### Recommended Next Steps
 
-1. **Pull Geisinger's actual no-show rate** from CDIS to replace the 15% estimate
-2. **Run the Geisinger projection sweep** (`configs/geisinger_projection.yaml`) with actual demographics
-3. **Estimate model AUC** achievable with Geisinger's EHR features
+1. **Pull your health system's actual no-show rate** from the EHR to replace any placeholder estimate
+2. **Run the local projection sweep** (`configs/local_projection.yaml`) with your actual demographics
+3. **Estimate model AUC** achievable with your available EHR features
 4. **Conduct a capacity analysis** to determine staffing requirements for a calling program
 5. **Design a pilot evaluation** — the simulation can help select the evaluation method (ITS, DiD, or RCT) by comparing their statistical power using the branched counterfactual outputs
 

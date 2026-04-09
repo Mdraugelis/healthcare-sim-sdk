@@ -5,7 +5,7 @@
 
 ## Key Findings
 
-SHIELD-RT is the cleanest interventional ML trial in our batch: a prospective RCT with a well-specified threshold (>10% risk), measurable binary outcome (acute care visit), and direct causal structure (randomization provides counterfactual). The simulation reproduced the primary RR of 0.556 within 2% (simulated RR = 0.546). Baseline acute care rate (0.234 vs. target 0.223) calibrated within 1 percentage point after tuning intervention effectiveness to 0.20. The equity analysis surfaced a finding the paper never tested: Black patients in the simulation showed higher baseline acute care risk (CF=0.262) and slightly attenuated intervention benefit (F=0.074 vs. White F=0.079), suggesting the study population's racial composition could affect cost-effectiveness projections at Geisinger.
+SHIELD-RT is the cleanest interventional ML trial in our batch: a prospective RCT with a well-specified threshold (>10% risk), measurable binary outcome (acute care visit), and direct causal structure (randomization provides counterfactual). The simulation reproduced the primary RR of 0.556 within 2% (simulated RR = 0.546). Baseline acute care rate (0.234 vs. target 0.223) calibrated within 1 percentage point after tuning intervention effectiveness to 0.20. The equity analysis surfaced a finding the paper never tested: Black patients in the simulation showed higher baseline acute care risk (CF=0.262) and slightly attenuated intervention benefit (F=0.074 vs. White F=0.079), suggesting the study population's racial composition could affect cost-effectiveness projections at the target health system.
 
 ## Parameter Extraction
 

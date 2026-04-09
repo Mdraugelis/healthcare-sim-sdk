@@ -1,12 +1,12 @@
-# Geisinger contextualization — Central PA demographics
-# What would Chong/Rosen findings look like at Geisinger?
+# Local contextualization — adapt to your health system's demographics
+# What would Chong/Rosen findings look like at a target health system?
 
 seed: 42
 n_days: 90
 n_patients: 3000
 
 population:
-  base_noshow_rate: 0.15         # Geisinger observed (estimate)
+  base_noshow_rate: 0.15         # Target health system observed (estimate)
   noshow_concentration: 0.3
   race_distribution:
     White: 0.85
@@ -37,7 +37,7 @@ clinic:
 
 hydra:
   run:
-    dir: outputs/${now:%Y%m%d_%H%M%S}_geisinger
+    dir: outputs/${now:%Y%m%d_%H%M%S}_local
   sweep:
-    dir: outputs/sweep_geisinger_${now:%Y%m%d_%H%M%S}
+    dir: outputs/sweep_local_${now:%Y%m%d_%H%M%S}
     subdir: auc${model.auc}_cap${intervention.call_capacity_per_day}

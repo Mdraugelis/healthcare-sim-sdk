@@ -81,7 +81,7 @@ This paper provides the **specification for required metadata in every SDK scena
    - `known_limitations`: What the model doesn't do, populations excluded from training
    - `update_schedule`: When performance was last checked, when it will be rechecked
 
-2. **SDK output includes auto-generated Model Facts:** After a simulation run, the SDK should output a `model_facts_simulated.md` that fills in the Model Facts template from the simulation parameters, making it easy for Geisinger teams to draft a label for a real deployment by running the SDK first.
+2. **SDK output includes auto-generated Model Facts:** After a simulation run, the SDK should output a `model_facts_simulated.md` that fills in the Model Facts template from the simulation parameters, making it easy for health system teams to draft a label for a real deployment by running the SDK first.
 
 3. **Missing training demographics → required warning:** If a paper does not report training population demographics (a required Model Facts field), Phase 1 parameter extraction must flag this as a HIGH-impact gap. This connects to Paper #22 (Chen) on upstream data equity and Paper #21 (Rajkomar) on fairness definitions.
 
