@@ -16,7 +16,7 @@ Design choices:
   - 14.4% baseline ward mortality [ASSUMED to be in-window mortality]
 
 Usage:
-    cd /data/.openclaw/workspace/healthcare-sim-sdk
+    cd <repo-root>
     python3 -m healthcare_sim_sdk.scenarios.paper03_kaiser_aam.run_evaluation
 """
 
