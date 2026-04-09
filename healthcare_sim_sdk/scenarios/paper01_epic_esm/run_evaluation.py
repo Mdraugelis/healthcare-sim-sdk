@@ -2,7 +2,7 @@
 Runner script for Paper 01: Epic Sepsis Model (ESM) — Wong et al. 2021.
 
 Usage:
-    cd /data/.openclaw/workspace/healthcare-sim-sdk
+    cd <repo-root>
     python3 -m healthcare_sim_sdk.scenarios.paper01_epic_esm.run_evaluation
 """
 
