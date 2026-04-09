@@ -226,6 +226,6 @@ pytest tests/                    # 266 tests
 flake8 healthcare_sim_sdk/       # Lint
 ```
 
-## Design Document
+## Design Principles
 
-See [`docs/healthcare-sim-sdk-design-v2_1.md`](docs/healthcare-sim-sdk-design-v2_1.md) for the full architecture specification.
+See [`docs/design_principles.md`](docs/design_principles.md) for the design principles document — why the SDK is built the way it is, what it enables, what it deliberately excludes, and the lessons learned validating it against 30 published healthcare AI deployment papers.
