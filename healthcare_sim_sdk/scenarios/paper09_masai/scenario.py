@@ -131,33 +131,27 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         """
         rng = self.rng.population
 
-        # Most women have very low cancer risk; bimodal distribution
-        # ~0.5% are true positives (base_cancer_rate = 0.005 = 5/1000)
-        # Generate from mixture: 99.5% low-risk, 0.5% high-risk
+        # Encode fixed cancer presence directly so prevalence stays calibrated
+        # to base_cancer_rate. This avoids adding extra prevalence by later
+        # sampling cancer from non-zero "low-risk" probabilities.
         high_risk_n = max(1, int(n_entities * self.base_cancer_rate))
         low_risk_n = n_entities - high_risk_n
 
-        # Low-risk: beta(0.3, 100) -> very low mean ~0.003, concentrated near 0
-        low_risk = rng.beta(0.3, 100, low_risk_n)
-
-        # High-risk (true cancers): uniform [0.5, 0.95] to represent confirmed cancer
-        # Using uniform rather than beta to ensure all high-risk are above threshold
-        high_risk = rng.uniform(0.5, 0.95, high_risk_n)
+        # Non-cancer cases are encoded as 0.0; cancer cases as 1.0.
+        # Downstream code that samples from this column will therefore recover
+        # the same fixed labels deterministically.
+        low_risk = np.zeros(low_risk_n)
+        high_risk = np.ones(high_risk_n)
 
         all_risks = np.concatenate([low_risk, high_risk])
         rng.shuffle(all_risks)  # randomize order
 
-        # Age assignment
+        # Age assignment is still tracked for demographics/reporting, but it
+        # must not mutate the fixed cancer labels stored in state.
         age_names = list(AGE_DIST.keys())
         age_probs = list(AGE_DIST.values())
         ages = rng.choice(age_names, n_entities, p=age_probs)
         self._demographics = ages
-
-        # Apply age multipliers
-        for i in range(n_entities):
-            mult = AGE_CANCER_MULT[ages[i]]
-            all_risks[i] = np.clip(all_risks[i] * mult, 0.0001, 0.99)
-
         state = np.zeros((n_entities, 4))
         state[:, COL_CANCER_RISK] = all_risks
         return state
