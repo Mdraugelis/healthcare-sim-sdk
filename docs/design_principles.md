@@ -436,7 +436,7 @@ The SDK has been stress-tested against 30 landmark healthcare AI deployment pape
 | Reproducibility | Count | Papers |
 |-----------------|-------|--------|
 | **REPRODUCED** | 3 | Hong (SHIELD-RT), Adams (TREWS), Chong/Rosen (No-Show) |
-| PARTIALLY_REPRODUCED | 4 | Wong (ESM), Escobar (AAM), Boussina (COMPOSER), Manz (Nudges), Lång (MASAI) |
+| PARTIALLY_REPRODUCED | 5 | Wong (ESM), Escobar (AAM), Boussina (COMPOSER), Manz (Nudges), Lång (MASAI) |
 | NOT_REPRODUCED | **0** | — |
 | UNDERDETERMINED | 6 | Shimabukuro, Wijnberge, Henry, Edelson, Rajkomar, Obermeyer |
 

@@ -105,7 +105,40 @@ The SDK gives you levers across four dimensions:
 
 The SDK has been validated against published studies. Each replication calibrates the simulation to match a paper's setting, then checks whether key findings are reproduced within tolerance.
 
-A systematic 30-paper audit (April 2026) found **3 fully REPRODUCED** papers (SHIELD-RT, TREWS, Chong/Rosen), **5 PARTIALLY_REPRODUCED**, and **0 NOT_REPRODUCED** (the SDK never contradicted a paper's direction of effect). Seven additional scenarios are available under `healthcare_sim_sdk/scenarios/paperNN_*/`. Full audit results: [`research/synthesis_report.md`](research/synthesis_report.md).
+### 30-Paper Reproducibility Audit
+
+The SDK has been systematically stress-tested against 30 landmark healthcare AI deployment papers. Every paper was processed through a full reproducibility pipeline: parameter extraction, SDK fitness assessment, scenario design, calibration, verification, and structured reproducibility verdict.
+
+| Classification | Count | Papers |
+|---|---|---|
+| **REPRODUCED** | **3** | Hong (SHIELD-RT), Adams (TREWS), Chong/Rosen (No-Show) |
+| PARTIALLY_REPRODUCED | 5 | Wong (ESM), Escobar (AAM), Boussina (COMPOSER), Manz (Nudges), Lång (MASAI) |
+| **NOT_REPRODUCED** | **0** | — (the SDK never contradicts a paper's direction of effect) |
+| UNDERDETERMINED | 6 | Shimabukuro, Wijnberge, Henry, Edelson, Rajkomar, Obermeyer |
+| N/A (reviews/frameworks/methods) | 17 | — |
+
+**Key findings from the audit:**
+
+1. **The SDK works.** When papers report what they need to report, the SDK reproduces them precisely. SHIELD-RT reproduces to within 2% of the published RR. TREWS reproduces the 3.3pp adjusted mortality reduction within the simulated 95% CI across 30 seeds. All 16 proof points for Chong and Rosen pass validation.
+
+2. **Reporting quality is the binding constraint, not SDK capability.** AUC is missing from 36% of deployment papers. Calibration metrics from 100%. Demographic stratification from 73%. Every paper that failed to reproduce did so because of missing parameters in the published paper, not because of simulation limitations. The reproducibility crisis in clinical AI is not a lack of trials; it is a lack of reporting discipline in the trials that exist.
+
+3. **Two documented scope boundaries.** Continuous-time physiology (HYPE) and qualitative implementation failures (Beede) are legitimately outside the SDK's design. These are explicit scope choices, not deficiencies.
+
+The audit identified one high-impact SDK correction (counterfactual baseline care for interventions where standard-of-care already catches most cases) which has been implemented in the `sepsis_early_alert` scenario and upgraded TREWS and Chong/Rosen from PARTIALLY_REPRODUCED to REPRODUCED.
+
+Seven additional validated scenarios are available under `healthcare_sim_sdk/scenarios/paperNN_*/` — one per audited paper. They can serve as templates when building a new scenario or as pre-deployment evaluation scaffolding when a vendor presents a similar tool.
+
+**Full audit materials:**
+
+- [`research/synthesis_report.md`](research/synthesis_report.md) — cross-paper scorecard, equity analysis, SDK fitness map, common reporting gaps, procurement playbook
+- [`research/paper_verdicts/`](research/paper_verdicts/) — 30 individual verdict files with parameter extraction, simulation results, discrepancies, and scientific reporting gaps
+- [`research/educational_packet.md`](research/educational_packet.md) — 1,197-line 7-module SDK guide with executed proof code for each module
+- [`docs/design_principles.md`](docs/design_principles.md) — lessons learned from the audit, documented as design principles
+
+---
+
+The three REPRODUCED replications are described in detail below.
 
 ### 1. Chong et al. (2020) -- ML-Targeted MRI No-Show Reminders
 

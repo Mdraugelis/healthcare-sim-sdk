@@ -37,10 +37,10 @@ We processed 30 published healthcare ML/AI papers through the full audit pipelin
 
 | Reproducibility | N | % | Papers |
 |---|---|---|---|
-| REPRODUCED | **3** | **23%** | Hong (SHIELD-RT), Adams (TREWS) *[upgraded 2026-04-08]*, Chong/Rosen (No-Show) *[upgraded 2026-04-08]* |
-| PARTIALLY_REPRODUCED | 4 | 31% | Wong (ESM), Escobar (AAM), Boussina (COMPOSER), Manz (Nudges), Lång (MASAI) |
+| REPRODUCED | **3** | **21%** | Hong (SHIELD-RT), Adams (TREWS) *[upgraded 2026-04-08]*, Chong/Rosen (No-Show) *[upgraded 2026-04-08]* |
+| PARTIALLY_REPRODUCED | 5 | 36% | Wong (ESM), Escobar (AAM), Boussina (COMPOSER), Manz (Nudges), Lång (MASAI) |
 | NOT_REPRODUCED | 0 | 0% | — |
-| UNDERDETERMINED | 6 | 46% | Shimabukuro (InSight), Wijnberge (HYPE), Henry (TREWScore), Edelson (EWS), Rajkomar (EHR DL), Obermeyer (Bias) |
+| UNDERDETERMINED | 6 | 43% | Shimabukuro (InSight), Wijnberge (HYPE), Henry (TREWScore), Edelson (EWS), Rajkomar (EHR DL), Obermeyer (Bias) |
 | N/A | 17 | — | NO_FIT papers |
 
 **Key result: Zero papers were NOT_REPRODUCED.** The SDK never produced a result that contradicted a paper's direction of effect. All remaining discrepancies are magnitude gaps, calibration limitations, or missing parameters — not conceptual failures of the underlying simulation engine.
