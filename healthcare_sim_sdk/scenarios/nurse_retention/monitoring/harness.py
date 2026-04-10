@@ -100,17 +100,18 @@ class MonitoringHarness:
         )
 
         # Initialize tiers. Tier 1 monitors operational leading
-        # indicators that should NOT have a structural time trend
-        # in the calibrated regime:
-        #   - check_in_adherence: did managers do their check-ins?
+        # indicators:
+        #   - check_ins_done: raw count of check-ins per week
+        #     (detects capacity collapse — drops from ~60 to ~20)
         #   - adoption_rate: did managers actually use the tool?
-        # We deliberately do NOT include new_hire_fraction because
-        # it has a natural downward drift (new hires age into
-        # established nurses at week 52). A proper "new-hire 30-day
-        # contact rate" would be a better leading indicator but
-        # requires per-manager state.
+        # We use raw count rather than adherence ratio because the
+        # adherence ratio divides by the current capacity target,
+        # which changes with the capacity itself — so adherence
+        # stays at 100% even when capacity collapses. The raw count
+        # has a stable baseline from the first 8 weeks and detects
+        # any drop via WE1/WE2.
         tier1 = Tier1Shewhart()
-        tier1.add_metric("check_in_adherence", baseline_weeks=8)
+        tier1.add_metric("check_ins_done", baseline_weeks=8)
         tier1.add_metric("adoption_rate", baseline_weeks=8)
 
         tier2 = Tier2CUSUM(
@@ -220,7 +221,9 @@ class MonitoringHarness:
 
             # Tier 1: update the Shewhart charts
             tier1_metrics = {
-                ("check_in_adherence", None): row.check_in_adherence,
+                ("check_ins_done", None): float(
+                    row.check_ins_done_this_week,
+                ),
                 ("adoption_rate", None): row.adoption_rate,
             }
             tier1_events = tier1.update(t, tier1_metrics)
