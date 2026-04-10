@@ -1,0 +1,10 @@
+# Regime A — Calibrated Success
+# All parameters at calibrated operating point for 104 weeks.
+# Expected: Tier 3 recovers ~11.5pp effect within 3 quarters.
+# Tiers 1, 2, 4 should stay quiet.
+
+defaults:
+  - base
+
+regime: calibrated_success
+# All other parameters inherit from base.yaml (constant, calibrated)

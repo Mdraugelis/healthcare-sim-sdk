@@ -1,0 +1,11 @@
+# Regime F — Partial Adoption
+# 50% of managers use AI-directed targeting; 50% fall back to SOC.
+# Expected: Tier 3 effect estimate is roughly half of Regime A.
+# Tier 1 manager-level view should identify non-adopters.
+
+defaults:
+  - base
+
+regime: partial_adoption
+policy:
+  manager_adherence_rate: 0.5

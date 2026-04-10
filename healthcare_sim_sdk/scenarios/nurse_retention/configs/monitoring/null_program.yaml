@@ -1,0 +1,11 @@
+# Regime B — Null Program
+# Intervention effectiveness = 0 (SOC still runs on both branches).
+# Expected: Tier 3 estimates center on zero. False positive rate
+# across 30 seeds should not exceed 5%.
+
+defaults:
+  - base
+
+regime: null_program
+policy:
+  effectiveness: 0.0

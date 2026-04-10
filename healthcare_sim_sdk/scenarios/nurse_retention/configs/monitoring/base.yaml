@@ -1,0 +1,53 @@
+# Monitoring Validation — Base config (shared defaults)
+# =====================================================
+# Each regime YAML uses Hydra defaults to overlay on this base.
+# Override regime-specific parameters in the regime configs.
+#
+# Usage:
+#   python monitoring_validation.py          # default (base only)
+#   python monitoring_validation.py regime=calibrated_success
+#   python monitoring_validation.py --multirun regime=calibrated_success,null_program seed='range(1000,1030)'
+
+defaults:
+  - _self_
+
+# ── Identification ──
+regime: calibrated_success
+seed: 1000
+tier3_mode: cits_with_cf
+
+# ── Population ──
+population:
+  n_nurses: 1000
+  nurses_per_manager: 100
+  annual_turnover_rate: 0.22
+  risk_concentration: 0.5
+  new_hire_fraction: 0.15
+  new_hire_risk_multiplier: 2.0
+  high_span_turnover_penalty: 0.10
+
+# ── Simulation ──
+n_weeks: 104        # 2 years
+ar1_rho: 0.95
+ar1_sigma: 0.04
+prediction_interval: 2
+
+# ── Model (may be overridden as time-varying) ──
+model:
+  auc: 0.80
+
+# ── Policy (may be overridden as time-varying) ──
+policy:
+  max_interventions_per_week: 6
+  effectiveness: 0.50
+  decay_halflife_weeks: 6.0
+  cooldown_weeks: 4
+  manager_adherence_rate: 1.0
+
+# ── Hydra output ──
+hydra:
+  run:
+    dir: outputs/monitoring_validation/${regime}_seed${seed}
+  sweep:
+    dir: outputs/monitoring_validation_sweep
+    subdir: ${regime}_seed${seed}
