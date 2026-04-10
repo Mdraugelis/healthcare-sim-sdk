@@ -13,6 +13,12 @@ We validated the proposed four-tier operational monitoring dashboard (Shewhart X
 
 **The headline finding:** Tier 1 (operational leading indicators) is the fastest and most reliable tier for capacity failures — detecting every single capacity collapse in all 30 seeds within 6 weeks. Tier 2 (outcome CUSUM) is the workhorse tier that catches most operational changes across all regimes. Tier 3 (CITS) has low power at n=1,000 but zero false positives — a finding that argues for scaling to the full 6,800-nurse population in production. Tier 4 (model drift) has a calibration sensitivity issue that needs tuning before deployment.
 
+![Detection Heatmap](figures/fig1_detection_heatmap.png)
+*Figure 1: Cross-regime detection matrix. Green cells = no detection (expected silence). Red cells = high detection rate. Tier 1 fires exclusively for capacity collapse (Regime D). Tier 3 has zero false positives in the null regime (Regime B).*
+
+![Departures Prevented](figures/fig8_departures_prevented.png)
+*Figure 8: Distribution of AI marginal value (departures prevented over SOC) across 30 seeds per regime. Null program is exactly zero. Partial adoption is ~half of calibrated. Gradual decay shows high variance as the effect decays mid-run.*
+
 **The tiers are complementary, not redundant.** No single tier catches all failure modes. Tier 1 catches capacity failures that Tier 2 takes weeks longer to surface. Tier 3's null-regime silence (0/30 false positives) validates its specificity even when Tier 2 fires frequently. Tier 4's universal early firing reveals a calibration-slope sensitivity threshold that needs adjustment, but the underlying rolling-AUC mechanism is sound.
 
 ---
@@ -138,6 +144,9 @@ At 80% power and α=0.05, the minimum detectable effect would be approximately 3
 
 ### 4.1 Regime A — Calibrated Success
 
+![Regime A](figures/fig2_calibrated_success.png)
+*Figure 2: Calibrated success — Panel A shows factual (blue) and counterfactual (orange) departure trajectories with IQR bands across 30 seeds. The gap between the median lines is the AI marginal effect. Panel B shows weekly turnover rate and the CUSUM statistic. Panel C shows Tier 3 quarterly estimates — gray dots are non-significant, blue dots are significant (p<0.05).*
+
 | Metric | Value (30 seeds) |
 |---|---|
 | Mean departures prevented | 28.4 ± 14.3 |
@@ -148,6 +157,9 @@ At 80% power and α=0.05, the minimum detectable effect would be approximately 3
 | Retention improvement | +2.8pp |
 
 ### 4.2 Regime B — Null Program
+
+![Regime B](figures/fig3_null_program.png)
+*Figure 3: Null program — factual and counterfactual trajectories overlap perfectly (median saved: 0). Tier 3 estimates are all gray (non-significant) and centered on zero. This validates the dashboard's specificity: when there is no true effect, the dashboard correctly stays silent.*
 
 | Metric | Value (30 seeds) |
 |---|---|
@@ -160,6 +172,9 @@ At 80% power and α=0.05, the minimum detectable effect would be approximately 3
 The null regime validates the counterfactual honesty mechanism: when effectiveness=0, the factual and counterfactual branches produce identical outcomes because intervene() applies zero treatment benefit even though it still selects nurses for check-ins. The SOC allocation in step() runs identically on both branches, and the AI "targeting" on the factual branch simply selects the same nurses that would have been caught by SOC anyway (at zero effectiveness, the selection doesn't matter).
 
 ### 4.3 Regime C — Gradual Decay
+
+![Regime C](figures/fig4_gradual_decay.png)
+*Figure 4: Gradual decay — the effectiveness ramps from 0.5 to 0.0 between weeks 26-52 (orange shaded region). The factual and CF trajectories converge after the decay, and the CUSUM statistic rises as turnover drifts upward.*
 
 | Metric | Value (30 seeds) |
 |---|---|
@@ -174,6 +189,12 @@ The high variance (std=17.6) reflects the regime's design: the AI effect is stro
 
 ### 4.4 Regime D — Capacity Collapse
 
+![Regime D](figures/fig5_capacity_collapse.png)
+*Figure 5: Capacity collapse at week 30 (red dashed line). Panel A shows departure trajectories diverging after the collapse as the factual branch loses capacity. Panel B shows the CUSUM rising after the capacity cut. The red vertical marker in Panel B indicates the first Tier 1 detection.*
+
+![Tier 1 Detail](figures/fig9_tier1_capacity_collapse.png)
+*Figure 9: Tier 1 Shewhart detail — raw check-in count across 30 seeds drops from ~100 to ~35 at week 30. The blue dashed LCL is the 3σ lower control limit from the baseline. Every seed crosses it, producing 30/30 detection.*
+
 | Metric | Value (30 seeds) |
 |---|---|
 | Mean departures prevented | 29.8 ± 19.3 |
@@ -187,6 +208,9 @@ Tier 1 detects every single capacity collapse at exactly the same week across al
 
 ### 4.5 Regime E — Model Drift
 
+![Regime E](figures/fig6_model_drift.png)
+*Figure 6: Model drift — AUC drifts from 0.80 to 0.60 between weeks 20-40 (purple shaded region). The departure trajectories are nearly indistinguishable from the calibrated regime, confirming that SOC absorbs the model degradation.*
+
 | Metric | Value (30 seeds) |
 |---|---|
 | Mean departures prevented | 28.3 ± 13.2 |
@@ -197,6 +221,9 @@ Tier 1 detects every single capacity collapse at exactly the same week across al
 Regime E produces nearly identical outcomes to Regime A (28.3 vs 28.4 departures prevented). This is the strongest evidence for the "SOC absorbs model drift" finding: when model AUC degrades from 0.80 to 0.60, the AI's targeting becomes less precise, but the SOC check-in heuristic (new-hires-first, then random) continues to catch the same population-level departures. The model's contribution to targeting quality is marginal when SOC is already running at the same capacity.
 
 ### 4.6 Regime F — Partial Adoption
+
+![Regime F](figures/fig7_partial_adoption.png)
+*Figure 7: Partial adoption — 50% of managers use AI, 50% fall back to SOC. The gap between factual and CF is approximately half that of the calibrated regime (Figure 2), confirming proportional dilution.*
 
 | Metric | Value (30 seeds) |
 |---|---|
@@ -222,10 +249,10 @@ The 50% adoption rate produces almost exactly 50% of the calibrated effect (14.8
 | 6 | Tier 2 CUSUM detects Regime C by week 52 | **PASS** | 25/30 detected, median week 17 |
 | 7 | Tier 4 detects Regime E within 6 weeks of AUC < 0.65 | **NEEDS TUNING** | Fires universally at week 6; not drift-specific |
 | 8 | Regime F ≈ half Regime A effect | **PASS** | Ratio = 0.52 (target: 0.50 ± 0.20) |
-| 9 | Ground truth vs dashboard plots | **DEFERRED** | Data available; plot generation is Phase 5 |
+| 9 | Ground truth vs dashboard plots | **PASS** | 9 figures generated (Figures 1-9); per-regime 3-panel plots + heatmap + boxplot + Tier 1 detail |
 | 10 | All 7 RQs answered quantitatively | **PASS** | See Section 3 above |
 
-**Summary: 5 PASS, 1 LOW POWER (expected finding), 1 NEAR MISS (6 vs 4 week latency), 1 NEEDS TUNING (Tier 4 threshold), 1 DEFERRED (plots), 1 PASS (meta-criterion).**
+**Summary: 6 PASS, 1 LOW POWER (expected finding), 1 NEAR MISS (6 vs 4 week latency), 1 NEEDS TUNING (Tier 4 threshold), 1 PASS (meta-criterion).**
 
 ---
 
