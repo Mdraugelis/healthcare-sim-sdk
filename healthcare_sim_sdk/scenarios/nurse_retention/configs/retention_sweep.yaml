@@ -1,27 +1,30 @@
 # Nurse Retention — Model Performance x Manager Capacity Sweep
 # =============================================================
 #
-# Evaluates the interaction between model quality (AUC),
-# risk threshold (who gets flagged), and manager capacity
-# (how many check-ins per week). Grounded in Geisinger nursing
-# workforce (~6,800 RNs) and Laudio/AONL retention research.
+# Evaluates the interaction between model quality (AUC) and
+# manager capacity (how many check-ins per week). Grounded in
+# Geisinger nursing workforce (~6,800 RNs) and Laudio/AONL
+# retention research.
+#
+# There is intentionally no threshold dimension. The manager's
+# capacity IS the threshold — each manager takes the top K nurses
+# by predicted risk score each week. Any absolute-score threshold
+# would be dominated by capacity in realistic configurations.
 #
 # Single run:
 #   python scenarios/nurse_retention/run_evaluation.py
 #
-# Full sweep (model AUC x threshold percentile x capacity):
+# Full sweep (AUC x capacity):
 #   python scenarios/nurse_retention/run_evaluation.py --sweep
 #
 # Or via multirun:
 #   python scenarios/nurse_retention/run_evaluation.py --multirun \
 #     model.auc=0.60,0.70,0.80,0.85 \
-#     model.threshold_percentile=50,60,70,80,90 \
 #     policy.max_interventions_per_week=2,4,6,8
 #
 # Span-of-control sweep (adds nurses_per_manager):
 #   python scenarios/nurse_retention/run_evaluation.py --multirun \
 #     model.auc=0.70,0.80 \
-#     model.threshold_percentile=60,70,80 \
 #     policy.max_interventions_per_week=4,6 \
 #     population.nurses_per_manager=50,75,100
 
@@ -48,13 +51,10 @@ prediction_interval: 2   # score nurses every 2 weeks
 # ── Model ──
 model:
   auc: 0.80
-  # Percentile threshold on scores. 70 = flag top 30% of active nurses.
-  # Capacity typically binds before threshold, so this is a UX knob.
-  threshold_percentile: 70
 
 # ── Policy (manager intervention) ──
 policy:
-  max_interventions_per_week: 4    # per manager
+  max_interventions_per_week: 4    # per manager (the effective threshold)
   effectiveness: 0.50              # risk reduction on check-in
   decay_halflife_weeks: 6.0        # how fast effect wears off
   cooldown_weeks: 4                # min weeks between re-intervention
@@ -65,4 +65,4 @@ hydra:
     dir: outputs/${now:%Y%m%d_%H%M%S}
   sweep:
     dir: outputs/sweep_${now:%Y%m%d_%H%M%S}
-    subdir: auc${model.auc}_p${model.threshold_percentile}_cap${policy.max_interventions_per_week}
+    subdir: auc${model.auc}_cap${policy.max_interventions_per_week}

@@ -30,7 +30,7 @@ STEP PURITY CHECKLIST:
 """
 
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -73,12 +73,11 @@ class RetentionConfig:
 
     # Model
     model_auc: float = 0.80
-    # Percentile threshold: flag nurses at or above this
-    # percentile of scores. 70 = flag top 30% (fewer, higher risk).
-    # 30 = flag top 70% (more, lower precision).
-    risk_threshold_percentile: float = 70.0
 
     # Intervention (manager check-in)
+    # Each manager takes the top K flagged nurses by risk score.
+    # K (capacity) is the effective threshold — there is no separate
+    # absolute-score threshold because capacity always binds first.
     max_interventions_per_manager_per_week: int = 4
     intervention_effectiveness: float = 0.50
     intervention_decay_halflife_weeks: float = 6.0
@@ -165,7 +164,9 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         self._classifier_fitted = False
 
         # Precompute decay factor per week from half-life
-        self._decay_per_week = 0.5 ** (1.0 / c.intervention_decay_halflife_weeks)
+        self._decay_per_week = 0.5 ** (
+            1.0 / c.intervention_decay_halflife_weeks
+        )
 
     # ── Method 1: create_population ──────────────────────────
 
@@ -390,17 +391,11 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
                 true_labels[active],
             )
 
-        # Percentile-based threshold on active nurse scores
-        active_scores = scores[active]
-        if len(active_scores) > 0:
-            threshold = np.percentile(
-                active_scores,
-                self.config.risk_threshold_percentile,
-            )
-        else:
-            threshold = 1.0
-        labels = (scores >= threshold).astype(int)
-        labels[~active] = 0
+        # No absolute threshold — the manager capacity in
+        # intervene() is the effective filter. All active
+        # nurses are "eligible"; the top-K by score get
+        # selected per manager.
+        labels = active.astype(int)
 
         return Predictions(
             scores=scores,
@@ -408,8 +403,6 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             metadata={
                 "true_labels": true_labels,
                 "n_active": int(active.sum()),
-                "n_flagged": int(labels.sum()),
-                "threshold_value": float(threshold),
             },
         )
 
@@ -418,23 +411,21 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
     def intervene(
         self, state: NurseRetentionState, predictions: Predictions, t: int,
     ) -> tuple[NurseRetentionState, Interventions]:
-        """Managers check in with flagged nurses, capacity-constrained.
+        """Managers check in with the top-K riskiest nurses per week.
 
+        There is no separate risk threshold — capacity IS the filter.
         For each manager:
-        1. Identify flagged nurses in their team
-        2. Exclude recently checked-in (cooldown)
-        3. Sort by risk score descending
-        4. Take top K (capacity limit)
-        5. Apply intervention effect
+        1. Take active nurses on their team not in cooldown
+        2. Sort by predicted risk score descending
+        3. Take top K where K = capacity
+        4. Apply the intervention effect
         """
         c = self.config
         new = copy.deepcopy(state)
 
-        flagged = predictions.labels == 1
         active = ~new.departed
         eligible = (
-            flagged
-            & active
+            active
             & (new.weeks_since_intervention >= c.cooldown_weeks)
         )
 
@@ -442,7 +433,6 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         intervention_count = 0
 
         for mgr_id in range(new.n_managers):
-            # Nurses on this manager's team who are eligible
             team_eligible = eligible & (new.manager_id == mgr_id)
             if not team_eligible.any():
                 continue
@@ -456,7 +446,9 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             ]
 
             # Apply intervention
-            new.intervention_effect[selected] = c.intervention_effectiveness
+            new.intervention_effect[selected] = (
+                c.intervention_effectiveness
+            )
             new.weeks_since_intervention[selected] = 0
             all_treated.extend(selected.tolist())
             intervention_count += len(selected)
@@ -478,7 +470,6 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             treated_indices=treated_indices,
             metadata={
                 "n_treated": intervention_count,
-                "n_flagged": int(flagged.sum()),
                 "n_eligible": int(eligible.sum()),
                 "effectiveness": c.intervention_effectiveness,
             },
@@ -547,7 +538,6 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         self, state: NurseRetentionState,
     ) -> Dict[str, Any]:
         """Domain-specific population validation."""
-        c = self.config
         n = state.n_nurses
         return {
             "population_created": True,

@@ -143,7 +143,6 @@ class RetentionConfig:
 
     # Model
     model_auc: float = 0.80          # Sweep target
-    risk_threshold: float = 0.50     # Sweep target
 
     # Intervention
     max_interventions_per_manager_per_week: int = 4   # Sweep target
@@ -154,24 +153,24 @@ class RetentionConfig:
 
 ## Experiment Sweep Design
 
-### Primary Sweep: Model Quality × Threshold × Manager Capacity
+### Primary Sweep: Model Quality × Manager Capacity
 
-This is the core experiment. It answers: **given a model of quality X, what threshold and capacity combination maximizes prevented departures?**
+This is the core experiment. It answers: **given a model of quality X, what capacity level maximizes prevented departures?**
 
 | Dimension | Values | Rationale |
 |---|---|---|
 | `model.auc` | 0.60, 0.70, 0.80, 0.85 | Range from barely-better-than-chance to strong. Laudio doesn't publish their AUC — this brackets the plausible range. |
-| `model.threshold` | 0.30, 0.40, 0.50, 0.60, 0.70 | Low threshold = flag many (high recall, low precision). High = flag few (low recall, high precision). |
 | `policy.max_interventions_per_week` | 2, 4, 6, 8 | Per manager per week. At 100 nurses each, 4/week means the manager can reach ~16% of their team per month. |
 
-**Grid size**: 4 × 5 × 4 = **80 cells** + 1 counterfactual control = 81 runs
+**Grid size**: 4 × 4 = **16 cells** + 1 no-AI control = 17 runs
+
+**No separate threshold dimension.** The manager's weekly capacity IS the threshold. Each manager is simply given their top-K riskiest nurses to check in with this week — where K is the capacity. Adding an absolute-score threshold on top would be dominated by capacity: if capacity allows 4 check-ins and any reasonable threshold yields at least 4 flagged candidates, the top-4 by score are the same nurses regardless of where the threshold is set. The threshold filter would only matter in the degenerate case of "fewer flagged candidates than capacity slots," which doesn't occur in realistic configurations.
 
 ### Control Conditions
 
 Every run produces a built-in comparison: factual (AI-directed) vs. counterfactual (standard of care, same capacity). Additionally:
 
 - **No-intervention baseline**: `capacity = 0` on both branches → pure natural turnover, no check-ins at all. Anchors how much *any* manager engagement helps.
-- **Standard-of-care only**: A run where the factual branch also uses the standard-of-care heuristic (equivalent to AUC = 0.50 random targeting after new hires). Shows the value of *just doing check-ins* without AI.
 - **AI-directed**: The sweep runs. The delta between factual and counterfactual in each cell isolates the value of AI targeting *over and above* standard management practice.
 
 ### Secondary Sweep: Span of Control (if primary results are interesting)
@@ -180,10 +179,9 @@ Every run produces a built-in comparison: factual (AI-directed) vs. counterfactu
 |---|---|
 | `nurses_per_manager` | 50, 75, 100 |
 | `model.auc` | 0.70, 0.80 |
-| `model.threshold` | 0.40, 0.50, 0.60 |
 | `capacity` | 4, 6 |
 
-**Grid size**: 3 × 2 × 3 × 2 = 36 cells — tests the Laudio finding that span of control matters more than prediction quality.
+**Grid size**: 3 × 2 × 2 = 12 cells — tests the Laudio finding that span of control matters more than prediction quality.
 
 ### Hydra CLI Examples
 
@@ -193,7 +191,7 @@ python scenarios/nurse_retention/run_evaluation.py
 
 # Override for a quick test
 python scenarios/nurse_retention/run_evaluation.py \
-    --model-auc 0.75 --threshold 0.40 --capacity 6
+    --model-auc 0.75 --capacity 6
 
 # Full primary sweep
 python scenarios/nurse_retention/run_evaluation.py --sweep
@@ -201,7 +199,6 @@ python scenarios/nurse_retention/run_evaluation.py --sweep
 # Hydra multirun (alternative)
 python scenarios/nurse_retention/run_evaluation.py --multirun \
     model.auc=0.60,0.70,0.80,0.85 \
-    model.threshold=0.30,0.40,0.50,0.60,0.70 \
     policy.max_interventions_per_week=2,4,6,8
 ```
 
