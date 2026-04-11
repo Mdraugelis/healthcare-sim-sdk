@@ -36,7 +36,7 @@ The agent protocol lives in [`.claude/agents/sim-guide.md`](.claude/agents/sim-g
 ## Install
 
 ```bash
-pip install git+https://github.com/Mdraugelis/healthcare-sim-sdk.git
+pip install git+https://github.com/Mdraugelis/healthcare-sim-sdk.git@v0.1.0
 ```
 
 ## Quick Start
