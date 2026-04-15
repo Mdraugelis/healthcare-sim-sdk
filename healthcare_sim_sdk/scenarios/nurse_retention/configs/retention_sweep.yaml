@@ -1,0 +1,68 @@
+# Nurse Retention — Model Performance x Manager Capacity Sweep
+# =============================================================
+#
+# Evaluates the interaction between model quality (AUC) and
+# manager capacity (how many check-ins per week). Grounded in
+# Geisinger nursing workforce (~6,800 RNs) and Laudio/AONL
+# retention research.
+#
+# There is intentionally no threshold dimension. The manager's
+# capacity IS the threshold — each manager takes the top K nurses
+# by predicted risk score each week. Any absolute-score threshold
+# would be dominated by capacity in realistic configurations.
+#
+# Single run:
+#   python scenarios/nurse_retention/run_evaluation.py
+#
+# Full sweep (AUC x capacity):
+#   python scenarios/nurse_retention/run_evaluation.py --sweep
+#
+# Or via multirun:
+#   python scenarios/nurse_retention/run_evaluation.py --multirun \
+#     model.auc=0.60,0.70,0.80,0.85 \
+#     policy.max_interventions_per_week=2,4,6,8
+#
+# Span-of-control sweep (adds nurses_per_manager):
+#   python scenarios/nurse_retention/run_evaluation.py --multirun \
+#     model.auc=0.70,0.80 \
+#     policy.max_interventions_per_week=4,6 \
+#     population.nurses_per_manager=50,75,100
+
+# ── Required fields ──
+seed: 42
+scenario: nurse_retention
+experiment_name: nurse_retention_sweep
+
+# ── Population ──
+population:
+  n_nurses: 1000
+  nurses_per_manager: 100
+  annual_turnover_rate: 0.22
+  new_hire_fraction: 0.15
+  new_hire_risk_multiplier: 2.0
+  high_span_turnover_penalty: 0.10
+
+# ── Simulation ──
+n_weeks: 52
+ar1_rho: 0.95
+ar1_sigma: 0.04
+prediction_interval: 2   # score nurses every 2 weeks
+
+# ── Model ──
+model:
+  auc: 0.80
+
+# ── Policy (manager intervention) ──
+policy:
+  max_interventions_per_week: 4    # per manager (the effective threshold)
+  effectiveness: 0.50              # risk reduction on check-in
+  decay_halflife_weeks: 6.0        # how fast effect wears off
+  cooldown_weeks: 4                # min weeks between re-intervention
+
+# ── Hydra output ──
+hydra:
+  run:
+    dir: outputs/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: auc${model.auc}_cap${policy.max_interventions_per_week}

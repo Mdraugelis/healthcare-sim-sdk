@@ -1,0 +1,10 @@
+# @package _global_
+# Regime D — Capacity Collapse
+# Capacity drops from 6 to 2 at week 30 (step change).
+regime: capacity_collapse
+policy:
+  max_interventions_per_week:
+    base: 6.0
+    change_points:
+      - [30, 2.0]
+    interpolation: step
