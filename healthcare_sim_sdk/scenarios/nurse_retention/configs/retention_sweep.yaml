@@ -3,8 +3,8 @@
 #
 # Evaluates the interaction between model quality (AUC) and
 # manager capacity (how many check-ins per week). Grounded in
-# Geisinger nursing workforce (~6,800 RNs) and Laudio/AONL
-# retention research.
+# a tertiary health system nursing workforce (~6,800 RNs) and
+# Laudio/AONL retention research.
 #
 # There is intentionally no threshold dimension. The manager's
 # capacity IS the threshold — each manager takes the top K nurses

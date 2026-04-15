@@ -153,7 +153,7 @@ Fraction of nurses still employed at week 52.
 | **0.80** | 71% | 73% | **77%** | 76% |
 | **0.85** | 71% | 73% | **77%** | 75% |
 
-Peak retention (76.8%) at AUC ≥ 0.80 with cap=6. At Geisinger's 6,800 RNs, the 11.5pp improvement over no-AI baseline would translate to **~780 nurses retained per year**.
+Peak retention (76.8%) at AUC ≥ 0.80 with cap=6. Scaled to a reference tertiary-system workforce of 6,800 RNs, the 11.5pp improvement over no-AI baseline would translate to **~780 nurses retained per year**.
 
 Note that peak retention (cap=6) and peak AI value-add (cap=4) are in different cells. This is the key tension: **capacity improves total retention but dilutes the AI's marginal value** because SOC catches more targets when it has more slots.
 
@@ -189,7 +189,7 @@ At every capacity level, AUC=0.60 either prevents fewer departures than higher-A
 
 ### Finding 6: Maximum departures prevented over SOC is ~40 in this configuration
 
-The AI's marginal value over SOC caps out around 40 prevented departures per 1,000 nurses per year in this configuration. Scaled to Geisinger's 6,800 RNs, that's **~270 additional nurses retained beyond what competent standard management would catch**. At ~$50K replacement cost per nurse, that's ~$13.5M in annualized cost avoidance from the AI *specifically* — beyond whatever SOC engagement already delivers.
+The AI's marginal value over SOC caps out around 40 prevented departures per 1,000 nurses per year in this configuration. Scaled to a reference tertiary-system workforce of 6,800 RNs, that's **~270 additional nurses retained beyond what competent standard management would catch**. At ~$50K replacement cost per nurse, that's ~$13.5M in annualized cost avoidance from the AI *specifically* — beyond whatever SOC engagement already delivers.
 
 ## 10. Verification
 
@@ -236,7 +236,7 @@ All verification checks pass.
 
 1. **Single-seed results.** All 17 runs use seed=42. A multi-seed replication (like the TREWS 30-seed study) would quantify variance. The non-monotonic capacity response should be confirmed across seeds before operational decisions are made.
 
-2. **n=1,000 nurses.** Scaled down from Geisinger's ~6,800 for speed. Absolute departure counts should scale linearly; effect sizes should be consistent.
+2. **n=1,000 nurses.** Scaled down from the reference ~6,800 workforce for speed. Absolute departure counts should scale linearly; effect sizes should be consistent.
 
 3. **Intervention effect is multiplicative and decays.** 50% risk reduction with 6-week half-life. Real-world manager check-ins may have non-linear or non-multiplicative effects.
 
@@ -256,7 +256,7 @@ All verification checks pass.
 
 - Deploying an AI nurse retention tool at AUC ~0.80 with **capacity=4** check-ins per manager per week would prevent approximately **40 additional departures per 1,000 nurses per year** beyond what existing management practices catch. This is the scenario where the AI's marginal value is clearest.
 - Deploying at **capacity=6** would retain more nurses overall (77% vs 73%) but only prevent 29 additional beyond SOC — because SOC itself is more effective at higher capacity.
-- At Geisinger's 6,800 RNs, the best-case scenario (cap=6, high AUC) retains **~780 nurses per year over no-AI baseline**, of which ~270 are attributable to AI targeting specifically and ~510 to the SOC engagement itself.
+- Scaled to a reference 6,800-RN workforce, the best-case scenario (cap=6, high AUC) retains **~780 nurses per year over no-AI baseline**, of which ~270 are attributable to AI targeting specifically and ~510 to the SOC engagement itself.
 - **Capacity matters more than AUC precision.** Procurement conversations should focus on whether nurse managers actually have time to do 4-6 targeted check-ins per week — not on whether the vendor's AUC is 0.80 vs 0.85.
 - **The vendor's "+13pp retention" claim is directionally consistent** with our simulated ~4-11pp improvement (depending on capacity), but relies on a weaker baseline comparison (no-intervention) than the SOC-grounded counterfactual used here.
 - **Shorten the cooldown.** The 4-week cooldown creates an unintended ceiling. Moving to a 2-week cooldown may unlock additional gains without requiring higher capacity.
