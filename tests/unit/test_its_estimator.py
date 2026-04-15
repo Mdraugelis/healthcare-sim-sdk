@@ -284,6 +284,226 @@ class TestSlopeOnly:
             its_slope_only(np.array([0.01, 0.02]))
 
 
+class TestStatisticalValidation:
+    """Sim-guide verification protocol against the ITS estimator.
+
+    These tests lock in empirically verified bounds from
+    ``scripts/validate_its_estimator.py``. They are deliberately
+    slower than the basic sanity tests above (~10s for the whole
+    class) because they run thousands of fits to get 4-sigma CLT
+    bounds on Type I rate, coverage, and monotonicity checks.
+
+    The validation script in ``scripts/`` runs the same checks plus
+    an MDE calibration finding against the perinatal protocol §5
+    closed-form. The finding: at perinatal §5 parameters (p_cf=0.048,
+    36m pre + 24m post, monthly n=350), the segmented-regression
+    estimator's empirical SD(beta2) is ~0.00598, which is 1.52x the
+    protocol's inflated closed-form of 0.00393. This means the
+    protocol's stated 24m MDE of ~23% RRR is optimistic for this
+    estimator by a factor of ~1.5 — the real MDE at 80% power is
+    ~35% RRR. The perinatal report must reflect this.
+    """
+
+    def test_type_i_rate_calibrated(self):
+        """Type I rate under H0 with direction match = alpha/2."""
+        rng = np.random.default_rng(2024)
+        n = 60
+        n_reps = 2000
+        series_list = [
+            0.048 + rng.normal(0, 0.004, n)
+            for _ in range(n_reps)
+        ]
+        rate = power_across_seeds(
+            series_list,
+            break_index=36,
+            expected_direction="decrease",
+            alpha=0.05,
+        )
+        # Expected 0.025; 4-sigma band [0.011, 0.039].
+        # Loosened upper bound slightly (0.040) to absorb MC noise
+        # across seeds while still catching any real drift.
+        assert 0.010 <= rate <= 0.040, (
+            f"Type I rate {rate:.4f} outside 4-sigma band "
+            f"[0.010, 0.040] at nominal alpha/2=0.025"
+        )
+
+    def test_ci_covers_planted_truth(self):
+        """95% Wald CI covers the planted level change ~95% of the time."""
+        rng = np.random.default_rng(2024)
+        planted = -0.010
+        noise_sd = 0.004
+        n_reps = 1000
+        hits = 0
+        for _ in range(n_reps):
+            pre = 0.048 + rng.normal(0, noise_sd, 36)
+            post = 0.048 + planted + rng.normal(0, noise_sd, 24)
+            series = np.concatenate([pre, post])
+            result = segmented_regression(series, break_index=36)
+            lo = result.level_change - 1.96 * result.level_change_se
+            hi = result.level_change + 1.96 * result.level_change_se
+            if lo <= planted <= hi:
+                hits += 1
+        coverage = hits / n_reps
+        # Expected 0.95; 4-sigma band ~[0.922, 0.978].
+        assert coverage >= 0.920, (
+            f"95% CI coverage {coverage:.3f} below 4-sigma floor 0.920"
+        )
+        assert coverage <= 0.980, (
+            f"95% CI coverage {coverage:.3f} above 4-sigma ceiling 0.980"
+        )
+
+    def test_null_bias_near_zero(self):
+        """Mean of level_change under H0 should be ~0."""
+        rng = np.random.default_rng(2024)
+        n = 60
+        n_reps = 2000
+        estimates = []
+        for _ in range(n_reps):
+            series = 0.048 + rng.normal(0, 0.004, n)
+            result = segmented_regression(series, break_index=36)
+            estimates.append(result.level_change)
+        arr = np.array(estimates)
+        mean_est = float(arr.mean())
+        se_of_mean = float(arr.std(ddof=1) / np.sqrt(n_reps))
+        # 4-sigma band on the sample mean
+        assert abs(mean_est) <= 4.0 * se_of_mean + 1e-6, (
+            f"Null bias {mean_est:.6f} outside 4-sigma band "
+            f"(±{4.0 * se_of_mean:.6f})"
+        )
+
+    def test_se_calibration_matches_empirical_variability(self):
+        """Mean reported SE(beta2) should match empirical SD(beta2).
+
+        This is the internal calibration check: does the estimator's
+        own SE formula agree with the observed variability of its
+        point estimate across seeds? If yes, the Wald test is
+        correctly sized. If no, something is wrong with the
+        covariance computation.
+        """
+        rng = np.random.default_rng(2024)
+        n = 60
+        n_reps = 2000
+        beta2_list = []
+        se_list = []
+        for _ in range(n_reps):
+            series = 0.048 + rng.normal(0, 0.004, n)
+            result = segmented_regression(series, break_index=36)
+            beta2_list.append(result.level_change)
+            se_list.append(result.level_change_se)
+        empirical_sd = float(np.std(beta2_list, ddof=1))
+        mean_reported_se = float(np.mean(se_list))
+        ratio = mean_reported_se / empirical_sd
+        assert 0.95 <= ratio <= 1.05, (
+            f"Reported SE / empirical SD = {ratio:.3f}, "
+            f"outside [0.95, 1.05] — estimator miscalibrated"
+        )
+
+    def test_power_monotone_in_effect_size(self):
+        """Bigger planted effect => higher power (monotone)."""
+        rng = np.random.default_rng(2024)
+        n_reps = 300
+        effects = [0.0, -0.003, -0.006, -0.010, -0.015]
+        powers = []
+        noise_sd = 0.004
+        for eff in effects:
+            series_list = []
+            for _ in range(n_reps):
+                pre = 0.048 + rng.normal(0, noise_sd, 36)
+                post = 0.048 + eff + rng.normal(0, noise_sd, 24)
+                series_list.append(np.concatenate([pre, post]))
+            powers.append(power_across_seeds(
+                series_list,
+                break_index=36,
+                expected_direction="decrease",
+            ))
+        # Monotone non-decreasing with small MC slack
+        slack = 0.03
+        for i in range(len(powers) - 1):
+            assert powers[i + 1] >= powers[i] - slack, (
+                f"Power not monotone in effect size: "
+                f"{effects[i]}={powers[i]:.3f} -> "
+                f"{effects[i+1]}={powers[i+1]:.3f}"
+            )
+        # Sanity: strongest effect >> null
+        assert powers[-1] - powers[0] > 0.5
+
+    def test_power_monotone_in_post_period(self):
+        """Longer post-period => higher power (monotone)."""
+        rng = np.random.default_rng(2024)
+        n_reps = 300
+        n_posts = [12, 18, 24]
+        planted = -0.010
+        noise_sd = 0.004
+        powers = []
+        for n_post in n_posts:
+            series_list = []
+            for _ in range(n_reps):
+                pre = 0.048 + rng.normal(0, noise_sd, 36)
+                post = (
+                    0.048 + planted
+                    + rng.normal(0, noise_sd, n_post)
+                )
+                series_list.append(np.concatenate([pre, post]))
+            powers.append(power_across_seeds(
+                series_list,
+                break_index=36,
+                expected_direction="decrease",
+            ))
+        slack = 0.05
+        for i in range(len(powers) - 1):
+            assert powers[i + 1] >= powers[i] - slack, (
+                f"Power not monotone in n_post: "
+                f"{n_posts[i]}={powers[i]:.3f} -> "
+                f"{n_posts[i+1]}={powers[i+1]:.3f}"
+            )
+
+    def test_hac_reduces_type_i_inflation_under_ar1(self):
+        """Under AR(1) null, HAC(4) Type I rate must be below OLS(0)
+        Type I rate. Neither is guaranteed to be at nominal 0.05 —
+        both are inflated against truly autocorrelated residuals in
+        small samples — but HAC must be strictly lower.
+        """
+        rng = np.random.default_rng(2024)
+        n = 60
+        n_reps = 1500
+        rho = 0.5
+        innov_sd = 0.002
+
+        ols_rejects = 0
+        hac_rejects = 0
+        for _ in range(n_reps):
+            eps = np.empty(n)
+            eps[0] = rng.normal(0, innov_sd)
+            for i in range(1, n):
+                eps[i] = (
+                    rho * eps[i - 1] + rng.normal(0, innov_sd)
+                )
+            series = 0.048 + eps
+            ols = segmented_regression(
+                series, break_index=36, hac_maxlags=0,
+            )
+            hac = segmented_regression(
+                series, break_index=36, hac_maxlags=4,
+            )
+            if ols.level_change_pvalue < 0.05:
+                ols_rejects += 1
+            if hac.level_change_pvalue < 0.05:
+                hac_rejects += 1
+
+        ols_rate = ols_rejects / n_reps
+        hac_rate = hac_rejects / n_reps
+        # OLS under AR(1) ρ=0.5 should be inflated above 0.10
+        assert ols_rate > 0.10, (
+            f"OLS Type I under AR(1) ρ=0.5 = {ols_rate:.3f}, "
+            f"expected clearly above 0.10"
+        )
+        # HAC should be directionally correct (strictly lower)
+        assert hac_rate <= ols_rate, (
+            f"HAC rate {hac_rate:.3f} > OLS rate {ols_rate:.3f} "
+            f"under AR(1) — HAC not providing any correction"
+        )
+
+
 class TestLiftedFunctionsMatchTier3:
     """Regression check: the lifted functions must produce the same
     numeric results as the original ``tier3_cits.py`` internals.

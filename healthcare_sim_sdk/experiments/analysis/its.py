@@ -153,7 +153,7 @@ def segmented_regression(
     series: np.ndarray,
     break_index: int,
     *,
-    hac_maxlags: int = 1,
+    hac_maxlags: int = 0,
     direction_tolerance_ses: float = 2.0,
 ) -> ITSResult:
     """Classic pre/post ITS segmented regression.
@@ -168,11 +168,19 @@ def segmented_regression(
     level change at the break; ``beta3`` is the change in slope after
     the break; ``beta1`` is the pre-period trend (a validity check).
 
-    Newey-West HAC standard errors handle first-order residual
-    autocorrelation and produce the SE-inflation penalty that a naive
-    OLS fit would miss. For perinatal-scale monthly series with
-    moderate persistence, ``hac_maxlags=1`` is a reasonable default;
-    for weekly or noisier series, 4 is also common.
+    Default is plain OLS (``hac_maxlags=0``), which is correctly
+    sized under iid residuals (empirical Type I rate 0.0505 at
+    nominal 0.05 on n=60 series; see ``scripts/validate_its_estimator
+    .py``). Enable HAC only when there is *evidence* of residual
+    autocorrelation. The Newey-West estimator is known to be
+    anti-conservative in small samples when the specified lag exceeds
+    the true autocorrelation structure: at n=60 on iid residuals,
+    ``hac_maxlags=1`` inflates Type I to ~0.095 and ``hac_maxlags=4``
+    to ~0.163. Classical Andrews-Monahan territory. If you need
+    HAC corrections for real autocorrelation, consider either
+    ``hac_maxlags=1`` with manual validation of the finite-sample
+    behaviour on your scenario, or a block bootstrap, or a wild
+    cluster bootstrap.
 
     Parameters
     ----------
@@ -181,9 +189,10 @@ def segmented_regression(
     break_index : int
         Index in ``series`` where the post-period begins (0-indexed).
         Must leave at least 2 observations on each side.
-    hac_maxlags : int, default 1
-        Newey-West lag. ``0`` disables HAC and uses plain OLS
-        standard errors.
+    hac_maxlags : int, default 0
+        Newey-West lag. ``0`` (default) uses plain OLS standard
+        errors. Non-zero values enable Newey-West HAC SEs; see the
+        caveat above about small-sample anti-conservatism.
     direction_tolerance_ses : float, default 2.0
         ``direction`` is ``"decrease"``/``"increase"`` only if
         ``|beta2| > direction_tolerance_ses * SE(beta2)``; otherwise
@@ -269,7 +278,7 @@ def power_across_seeds(
     *,
     alpha: float = 0.05,
     expected_direction: str = "decrease",
-    hac_maxlags: int = 1,
+    hac_maxlags: int = 0,
 ) -> float:
     """Fraction of series whose ITS level change is significant and
     in the expected direction.
@@ -290,8 +299,10 @@ def power_across_seeds(
     expected_direction : {"decrease", "increase"}, default "decrease"
         Series whose ``level_change`` has the opposite sign do not
         count toward power even if ``p < alpha``.
-    hac_maxlags : int, default 1
-        Passed through to ``segmented_regression``.
+    hac_maxlags : int, default 0
+        Passed through to ``segmented_regression``. Default is plain
+        OLS; see ``segmented_regression`` for why non-zero HAC lags
+        are anti-conservative in small samples.
 
     Returns
     -------
