@@ -12,6 +12,13 @@ from pathlib import Path
 
 ALLOWED_FILES = {
     Path("healthcare_sim_sdk/core/rng.py"),
+    # Pre-registration validation script for the ITS estimator. Runs
+    # pure statistical Monte Carlo trials (Type I rate calibration,
+    # CI coverage, power monotonicity) on experiments/analysis/its.py.
+    # No scenario, no engine, no entities — the RNGPartitioner
+    # contract does not apply. See test_its_estimator.py
+    # TestStatisticalValidation for the locked-in assertions.
+    Path("scripts/validate_its_estimator.py"),
 }
 
 ALLOWED_DIRS = {

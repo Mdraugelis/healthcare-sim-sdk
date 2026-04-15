@@ -46,8 +46,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 import numpy as np
-import statsmodels.api as sm
 
+from healthcare_sim_sdk.experiments.analysis.its import (
+    cits_with_control,
+    its_slope_only,
+)
 from healthcare_sim_sdk.scenarios.nurse_retention.monitoring.events import (
     DetectionEvent,
     Tier3Estimate,
@@ -197,84 +200,29 @@ class Tier3CITS:
     ) -> Optional[Tier3Estimate]:
         """Fit CITS with counterfactual as the comparison series.
 
-        Stack factual and CF series with a group dummy. Model:
-
-            Y = β0 + β1*t + β2*group + β3*group*t + ε
-
-        where group=1 for factual, 0 for CF. The program effect at
-        week T is ``β2 + β3*T`` — the cumulative level difference
-        adjusted for the group-specific slope.
+        Delegates to
+        ``experiments.analysis.its.cits_with_control``. The program
+        effect is reported at the current endpoint (``n - 1``), which
+        matches the original tier3 behaviour.
         """
         if len(self.counterfactual_history) != len(self.factual_history):
             return None
 
-        n = len(self.factual_history)
-        t_vals = np.arange(n, dtype=float)
-
-        # Stack factual (group=1) and CF (group=0)
-        y_factual = np.array(self.factual_history)
-        y_cf = np.array(self.counterfactual_history)
-
-        Y = np.concatenate([y_factual, y_cf])
-        time = np.concatenate([t_vals, t_vals])
-        group = np.concatenate([np.ones(n), np.zeros(n)])
-
-        # Design matrix: intercept, time, group, group*time
-        X = np.column_stack(
-            [
-                np.ones(2 * n),
-                time,
-                group,
-                group * time,
-            ]
-        )
-
         try:
-            model = sm.OLS(Y, X).fit()
-        except Exception:
+            result = cits_with_control(
+                treatment_series=np.asarray(self.factual_history),
+                control_series=np.asarray(self.counterfactual_history),
+            )
+        except ValueError:
             return None
-
-        # Effect at current_week is β2 + β3 * current_week
-        # But since the scenario is intervention-from-week-0, we
-        # report the average level difference over the observed
-        # window: β2 + β3 * (n-1)/2  (midpoint) is a reasonable
-        # summary. Following the task spec, we report the effect
-        # "at that quarter" which means the current endpoint.
-        T = n - 1  # last observed week in the window
-        beta2 = model.params[2]
-        beta3 = model.params[3]
-        effect = beta2 + beta3 * T
-
-        # Variance of (beta2 + beta3*T):
-        # Var(β2 + T*β3) = Var(β2) + T^2*Var(β3) + 2*T*Cov(β2,β3)
-        cov = model.cov_params()
-        var_effect = (
-            cov[2, 2]
-            + (T ** 2) * cov[3, 3]
-            + 2.0 * T * cov[2, 3]
-        )
-        se_effect = float(np.sqrt(max(var_effect, 0.0)))
-
-        ci_half = 1.96 * se_effect
-        ci_lower = effect - ci_half
-        ci_upper = effect + ci_half
-
-        # Approximate p-value from z-stat
-        if se_effect > 0:
-            z_stat = effect / se_effect
-            # Two-sided p via scipy.stats.norm.sf
-            from scipy.stats import norm
-            p_value = 2.0 * float(norm.sf(abs(z_stat)))
-        else:
-            p_value = 1.0
 
         return Tier3Estimate(
             week=current_week,
-            effect_estimate=float(effect),
-            ci_lower=float(ci_lower),
-            ci_upper=float(ci_upper),
-            p_value=p_value,
-            n_observations=2 * n,
+            effect_estimate=result.effect_estimate,
+            ci_lower=result.ci_lower,
+            ci_upper=result.ci_upper,
+            p_value=result.p_value,
+            n_observations=result.n_observations,
             mode="cits_with_cf",
         )
 
@@ -283,35 +231,22 @@ class Tier3CITS:
     ) -> Optional[Tier3Estimate]:
         """Pure ITS on the factual series alone.
 
-        Fits ``Y = β0 + β1*t + ε`` on the factual history and
-        returns the slope β1 as the "effect" (interpreted as the
-        per-week change in turnover rate). This is a floor
-        interpretation — a real operational ITS would segment against
-        a pre-period baseline, which this scenario does not have.
+        Delegates to ``experiments.analysis.its.its_slope_only``. The
+        slope is interpreted as the per-week change in turnover rate;
+        this is a floor estimator for the case where no valid control
+        or pre-period is available.
         """
-        n = len(self.factual_history)
-        t_vals = np.arange(n, dtype=float)
-        Y = np.array(self.factual_history)
-        X = np.column_stack([np.ones(n), t_vals])
-
         try:
-            model = sm.OLS(Y, X).fit()
-        except Exception:
+            result = its_slope_only(np.asarray(self.factual_history))
+        except ValueError:
             return None
-
-        slope = float(model.params[1])
-        se_slope = float(model.bse[1])
-        ci_half = 1.96 * se_slope
-        ci_lower = slope - ci_half
-        ci_upper = slope + ci_half
-        p_value = float(model.pvalues[1])
 
         return Tier3Estimate(
             week=current_week,
-            effect_estimate=slope,
-            ci_lower=ci_lower,
-            ci_upper=ci_upper,
-            p_value=p_value,
-            n_observations=n,
+            effect_estimate=result.slope,
+            ci_lower=result.ci_lower,
+            ci_upper=result.ci_upper,
+            p_value=result.p_value,
+            n_observations=result.n_observations,
             mode="its_only",
         )
