@@ -22,6 +22,8 @@ reports/*
 !reports/trews_baseline_detection_sweep.md
 !reports/noshow_targeted_reminders_proof_points.md
 !reports/nurse_retention_sweep.md
+!reports/monitoring_validation/
+!reports/monitoring_validation/monitoring_validation.md
 catalog.json
 *_dashboard.html
 

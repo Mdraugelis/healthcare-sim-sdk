@@ -31,7 +31,7 @@ STEP PURITY CHECKLIST:
 
 import copy
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
@@ -50,11 +50,28 @@ from healthcare_sim_sdk.population.temporal_dynamics import (
     annual_risk_to_hazard,
     hazard_to_timestep_probability,
 )
+from healthcare_sim_sdk.scenarios.nurse_retention.time_varying import (
+    TimeVaryingParameter,
+    resolve,
+)
+
+# Type alias: fields that may be either a constant float or a
+# time-varying schedule. Used by RetentionConfig and the monitoring
+# validation regimes in tasks/tiered_monitoring_validation.md.
+TimeVaryingFloat = Union[float, TimeVaryingParameter]
 
 
 @dataclass
 class RetentionConfig:
-    """Configuration for the nurse retention scenario."""
+    """Configuration for the nurse retention scenario.
+
+    Four fields accept either a plain float or a
+    :class:`TimeVaryingParameter` so that regimes can model mid-run
+    parameter changes (intervention decay, capacity collapse, model
+    drift). When a plain float is provided, behavior is identical to
+    the pre-time-varying baseline — the scenario resolves the value
+    once per week via :func:`resolve`, which is a no-op for floats.
+    """
 
     # Population
     n_nurses: int = 1000
@@ -72,16 +89,25 @@ class RetentionConfig:
     prediction_interval: int = 2  # predict every 2 weeks
 
     # Model
-    model_auc: float = 0.80
+    # Accepts float or TimeVaryingParameter.
+    model_auc: TimeVaryingFloat = 0.80
 
     # Intervention (manager check-in)
     # Each manager takes the top K flagged nurses by risk score.
     # K (capacity) is the effective threshold — there is no separate
     # absolute-score threshold because capacity always binds first.
-    max_interventions_per_manager_per_week: int = 4
-    intervention_effectiveness: float = 0.50
+    # Accepts float or TimeVaryingParameter for step schedules.
+    max_interventions_per_manager_per_week: TimeVaryingFloat = 4
+    # Accepts float or TimeVaryingParameter for decay schedules.
+    intervention_effectiveness: TimeVaryingFloat = 0.50
     intervention_decay_halflife_weeks: float = 6.0
     cooldown_weeks: int = 4
+
+    # Manager adherence: fraction of managers who actually use AI
+    # targeting (others fall back to SOC even on the factual branch).
+    # Drawn once at population creation. Used by Regime F (partial
+    # adoption) in the monitoring validation task.
+    manager_adherence_rate: float = 1.0
 
 
 @dataclass
@@ -111,6 +137,12 @@ class NurseRetentionState:
     # Standard-of-care intervention tracking (both branches)
     soc_intervention_effect: np.ndarray   # Current SOC effect [0, 1]
     soc_weeks_since_intervention: np.ndarray  # Weeks since SOC
+
+    # Per-manager AI adoption (length n_managers). True = manager uses
+    # AI-directed targeting on the factual branch; False = manager
+    # falls back to SOC only. Drawn once at population creation from
+    # config.manager_adherence_rate. Used by Regime F (partial adoption).
+    manager_adopts_ai: np.ndarray   # dtype=bool, shape (n_managers,)
 
     # Absorbing state
     departed: np.ndarray         # Boolean: nurse has left
@@ -157,11 +189,18 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         )
         super().__init__(time_config=time_config, seed=seed)
 
+        # Fit the classifier at the initial (t=0) model_auc. If the
+        # config uses a TimeVaryingParameter, predict() will detect
+        # drift and refit as needed (refit-on-change).
+        initial_auc = resolve(c.model_auc, t=0)
         self._classifier = ControlledMLModel(
             mode="discrimination",
-            target_auc=c.model_auc,
+            target_auc=initial_auc,
         )
         self._classifier_fitted = False
+        # Track the AUC the classifier is currently fitted against.
+        # Used in predict() to decide when to refit for model drift.
+        self._fitted_auc: float = initial_auc
 
         # Precompute decay factor per week from half-life
         self._decay_per_week = 0.5 ** (
@@ -214,6 +253,20 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             base_risk += c.high_span_turnover_penalty
             base_risk = np.clip(base_risk, 0, 0.95)
 
+        # Per-manager AI adoption (Regime F: partial adoption).
+        # At the default adherence rate of 1.0, we skip the RNG draw
+        # and fill with True — this preserves RNG stream state for the
+        # pre-time-varying baseline sweep (bit-identical backward
+        # compatibility). When adherence < 1.0, draw Bernoulli per
+        # manager at the END of create_population so no subsequent
+        # population-RNG call is affected.
+        if c.manager_adherence_rate >= 1.0:
+            manager_adopts_ai = np.ones(n_managers, dtype=bool)
+        else:
+            manager_adopts_ai = (
+                rng.random(n_managers) < c.manager_adherence_rate
+            )
+
         state = NurseRetentionState(
             n_nurses=n,
             n_managers=n_managers,
@@ -227,6 +280,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             weeks_since_intervention=np.full(n, 999.0),
             soc_intervention_effect=np.zeros(n),
             soc_weeks_since_intervention=np.full(n, 999.0),
+            manager_adopts_ai=manager_adopts_ai,
             departed=np.zeros(n, dtype=bool),
             departed_this_step=np.zeros(n, dtype=bool),
             total_departures=0,
@@ -284,7 +338,10 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         # 4. Standard-of-care allocation (runs on BOTH branches)
         #    New hires first, then random fill, K per manager.
         #    Uses rng (temporal) for random selection.
-        k = c.max_interventions_per_manager_per_week
+        # Resolve time-varying capacity and effectiveness at this
+        # timestep. For plain floats, resolve() is a cheap no-op.
+        k = int(resolve(c.max_interventions_per_manager_per_week, t))
+        effectiveness = resolve(c.intervention_effectiveness, t)
         soc_count = 0
         for mgr_id in range(new.n_managers):
             team = np.where(
@@ -314,9 +371,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             )[:k]
 
             if len(selected) > 0:
-                new.soc_intervention_effect[selected] = (
-                    c.intervention_effectiveness
-                )
+                new.soc_intervention_effect[selected] = effectiveness
                 new.soc_weeks_since_intervention[selected] = 0
                 soc_count += len(selected)
 
@@ -351,7 +406,15 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
     def predict(
         self, state: NurseRetentionState, t: int,
     ) -> Predictions:
-        """Score active nurses for turnover risk."""
+        """Score active nurses for turnover risk.
+
+        Supports mid-run model drift via refit-on-change: if the
+        configured ``model_auc`` is a :class:`TimeVaryingParameter`
+        whose resolved value differs from the currently fitted AUC,
+        the classifier is re-initialized and refitted against the
+        new target. For plain floats the refit branch never triggers
+        and behavior is identical to the pre-time-varying baseline.
+        """
         active = ~state.departed
         n = state.n_nurses
 
@@ -371,7 +434,24 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         # Departed nurses: no prediction needed
         true_labels[~active] = 0
 
-        # Fit model on first call
+        # Check for model drift: resolve the target AUC at this t
+        # and refit if it has changed. For plain-float model_auc the
+        # resolved value equals self._fitted_auc at every t, so the
+        # refit branch is never taken (bit-identical backward
+        # compatibility).
+        target_auc = resolve(self.config.model_auc, t)
+        if (
+            self._classifier_fitted
+            and abs(target_auc - self._fitted_auc) > 1e-9
+        ):
+            self._classifier = ControlledMLModel(
+                mode="discrimination",
+                target_auc=target_auc,
+            )
+            self._classifier_fitted = False
+            self._fitted_auc = target_auc
+
+        # Fit model on first call (or after a drift-triggered reset)
         if not self._classifier_fitted:
             active_mask = active & (risk_signal > 0)
             self._classifier.fit(
@@ -415,13 +495,20 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
 
         There is no separate risk threshold — capacity IS the filter.
         For each manager:
-        1. Take active nurses on their team not in cooldown
-        2. Sort by predicted risk score descending
-        3. Take top K where K = capacity
-        4. Apply the intervention effect
+        1. Skip if the manager is a non-adopter (Regime F). Non-
+           adopting managers still get SOC allocation from step(),
+           so they don't need any extra work here.
+        2. Take active nurses on their team not in cooldown
+        3. Sort by predicted risk score descending
+        4. Take top K where K = capacity (resolved at this t)
+        5. Apply the intervention effect (resolved at this t)
         """
         c = self.config
         new = copy.deepcopy(state)
+
+        # Resolve time-varying values once per step
+        k = int(resolve(c.max_interventions_per_manager_per_week, t))
+        effectiveness = resolve(c.intervention_effectiveness, t)
 
         active = ~new.departed
         eligible = (
@@ -433,6 +520,12 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         intervention_count = 0
 
         for mgr_id in range(new.n_managers):
+            # Skip non-adopters (Regime F: partial adoption).
+            # They still got SOC allocation in step(); the AI-
+            # directed upgrade is skipped for them.
+            if not new.manager_adopts_ai[mgr_id]:
+                continue
+
             team_eligible = eligible & (new.manager_id == mgr_id)
             if not team_eligible.any():
                 continue
@@ -441,14 +534,10 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             # Sort by risk score descending, take top K
             scores = predictions.scores[indices]
             sorted_order = np.argsort(-scores)
-            selected = indices[
-                sorted_order[:c.max_interventions_per_manager_per_week]
-            ]
+            selected = indices[sorted_order[:k]]
 
-            # Apply intervention
-            new.intervention_effect[selected] = (
-                c.intervention_effectiveness
-            )
+            # Apply intervention (resolved at this t)
+            new.intervention_effect[selected] = effectiveness
             new.weeks_since_intervention[selected] = 0
             all_treated.extend(selected.tolist())
             intervention_count += len(selected)
@@ -471,7 +560,8 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             metadata={
                 "n_treated": intervention_count,
                 "n_eligible": int(eligible.sum()),
-                "effectiveness": c.intervention_effectiveness,
+                "effectiveness": effectiveness,
+                "capacity_this_step": k,
             },
         )
 

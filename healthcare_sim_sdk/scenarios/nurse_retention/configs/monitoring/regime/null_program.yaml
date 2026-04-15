@@ -1,0 +1,6 @@
+# @package _global_
+# Regime B — Null Program
+# Intervention effectiveness = 0 (SOC still runs on both branches).
+regime: null_program
+policy:
+  effectiveness: 0.0
