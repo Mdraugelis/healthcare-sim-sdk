@@ -214,7 +214,16 @@ def _run_cell(task: CellTask) -> Dict[str, Any]:
 
 
 def _build_task_list(config: ExperimentConfig) -> List[CellTask]:
-    """Build the (control + sweep) task list in canonical order."""
+    """Build the (control + sweep) task list in canonical order.
+
+    Raises:
+        ValueError: if the configured grids produce duplicate labels.
+            Labels are used as unique identifiers downstream (summary,
+            CSV, result reordering), so two tasks collapsing to the
+            same ``auc{auc:.2f}_cap{cap}`` string — e.g. grids like
+            ``[0.801, 0.805]`` that both round to ``"0.80"`` — would
+            silently drop one result.
+    """
     tasks: List[CellTask] = [
         (config, "no_ai_control", config.model_auc, 0),
     ]
@@ -223,15 +232,30 @@ def _build_task_list(config: ExperimentConfig) -> List[CellTask]:
             tasks.append(
                 (config, f"auc{auc:.2f}_cap{cap}", auc, cap),
             )
+
+    seen: Dict[str, Tuple[float, int]] = {}
+    for _, label, auc, cap in tasks:
+        if label in seen:
+            prev_auc, prev_cap = seen[label]
+            raise ValueError(
+                f"Duplicate sweep label {label!r}: "
+                f"(auc={prev_auc}, cap={prev_cap}) collides with "
+                f"(auc={auc}, cap={cap}). Labels use the "
+                f"'auc{{:.2f}}_cap{{}}' format — adjust the grids "
+                f"so every cell has a unique label."
+            )
+        seen[label] = (auc, cap)
     return tasks
 
 
 def _resolve_workers(requested: int, n_tasks: int) -> int:
     """Pick an effective worker count.
 
-    ``requested == 0`` means auto: use all physical cores, capped by
-    the number of tasks. Tiny sweeps (≤ 2 tasks) fall back to
-    sequential because spawn overhead dominates any speedup.
+    ``requested == 0`` means auto: use all CPUs reported by
+    ``os.cpu_count()`` (logical cores on most platforms), capped by
+    the number of tasks. ``requested >= 1`` uses exactly that many,
+    also capped by ``n_tasks``. Tiny sweeps (≤ 2 tasks) always fall
+    back to sequential because spawn overhead dominates any speedup.
     """
     if n_tasks <= 2:
         return 1
@@ -493,8 +517,10 @@ def main():
         "--workers", type=int, default=0,
         help=(
             "Parallel workers for the sweep. "
-            "0 = auto (all cores, capped by #cells); "
-            "1 = sequential."
+            "0 = auto (os.cpu_count(), capped by #cells); "
+            "1 = sequential; "
+            "N > 1 = use exactly N workers (also capped by #cells). "
+            "Sweeps with <=2 cells always run sequentially."
         ),
     )
     parser.add_argument("--output-dir", type=str, default="outputs")
