@@ -6,11 +6,11 @@ A vendor (Laudio) sells nurse manager tools. One tool is an ML predictor on nurs
 
 We met with the vendor. Their claims are backed by a large observational study (Laudio + AONL, April 2025, 5,000+ managers, ~75,000 nurses, 100+ hospitals) — not an RCT. They report +6pp retention improvement early and +13pp later in the first year from targeted manager engagement.
 
-This scenario stress-tests those claims under Geisinger-realistic conditions using the healthcare-sim-sdk's branched counterfactual engine. The causal question: **"How many fewer nurses leave when managers use AI-directed check-ins vs. standard management practice?"**
+This scenario stress-tests those claims under realistic tertiary-health-system conditions using the healthcare-sim-sdk's branched counterfactual engine. The causal question: **"How many fewer nurses leave when managers use AI-directed check-ins vs. standard management practice?"**
 
 ## Domain Grounding
 
-### Geisinger Nursing Workforce
+### Reference Nursing Workforce
 - ~6,800 RN positions (~4,000 inpatient, ~700 outpatient, ~1,950 specialty)
 - ~9,415 total nursing positions
 - Nurse managers typically manage ~100 nurses each (vendor confirmed)
@@ -127,7 +127,7 @@ Option 1 is recommended — it keeps the counterfactual comparison within a sing
 @dataclass
 class RetentionConfig:
     # Population
-    n_nurses: int = 1000              # Scale to 6800 for full Geisinger
+    n_nurses: int = 1000              # Scale to 6800 for full reference workforce
     nurses_per_manager: int = 100     # Laudio: ~100 is typical
     annual_turnover_rate: float = 0.22
     risk_concentration: float = 0.5   # Beta dist shape (lower = more heterogeneous)
