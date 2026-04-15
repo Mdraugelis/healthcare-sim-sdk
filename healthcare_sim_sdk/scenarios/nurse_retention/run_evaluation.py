@@ -16,19 +16,24 @@ Usage:
     python scenarios/nurse_retention/run_evaluation.py \
         --model-auc 0.75 --capacity 6
 
-    # Full sweep (AUC x capacity)
+    # Full sweep (AUC x capacity), parallel across all cores
     python scenarios/nurse_retention/run_evaluation.py --sweep
+
+    # Force sequential execution (useful for debugging)
+    python scenarios/nurse_retention/run_evaluation.py --sweep --workers 1
 """
 
 import argparse
 import csv
 import json
 import logging
+import multiprocessing as mp
+import os
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -191,34 +196,102 @@ def run_single(
     }
 
 
-def run_experiment(config: ExperimentConfig) -> Dict[str, Any]:
-    """Run full experiment: no-AI baseline + AUC x capacity sweep."""
-    all_results = []
+CellTask = Tuple[ExperimentConfig, str, float, int]
 
-    # No-AI baseline: capacity=0 means no check-ins at all
-    logger.info("Running no-AI baseline (capacity=0)...")
-    control = run_single(config, config.model_auc, 0)
-    control["label"] = "no_ai_control"
-    all_results.append(control)
 
-    # Sweep: AUC x capacity
-    total = len(config.auc_grid) * len(config.capacity_grid)
-    run_idx = 0
+def _run_cell(task: CellTask) -> Dict[str, Any]:
+    """Pool worker: run one cell and attach its label.
+
+    Module-level so it is picklable under the ``spawn`` start method
+    used on macOS. Each call constructs a fresh scenario seeded from
+    ``config.seed`` — results are deterministic regardless of the
+    execution order the pool happens to produce.
+    """
+    config, label, model_auc, capacity = task
+    result = run_single(config, model_auc, capacity)
+    result["label"] = label
+    return result
+
+
+def _build_task_list(config: ExperimentConfig) -> List[CellTask]:
+    """Build the (control + sweep) task list in canonical order."""
+    tasks: List[CellTask] = [
+        (config, "no_ai_control", config.model_auc, 0),
+    ]
     for auc in config.auc_grid:
         for cap in config.capacity_grid:
-            run_idx += 1
-            logger.info(
-                "[%d/%d] AUC=%.2f, capacity=%d...",
-                run_idx, total, auc, cap,
+            tasks.append(
+                (config, f"auc{auc:.2f}_cap{cap}", auc, cap),
             )
-            result = run_single(config, auc, cap)
-            result["label"] = f"auc{auc:.2f}_cap{cap}"
-            all_results.append(result)
+    return tasks
+
+
+def _resolve_workers(requested: int, n_tasks: int) -> int:
+    """Pick an effective worker count.
+
+    ``requested == 0`` means auto: use all physical cores, capped by
+    the number of tasks. Tiny sweeps (≤ 2 tasks) fall back to
+    sequential because spawn overhead dominates any speedup.
+    """
+    if n_tasks <= 2:
+        return 1
+    cpu = os.cpu_count() or 1
+    if requested <= 0:
+        return min(cpu, n_tasks)
+    return min(requested, n_tasks)
+
+
+def run_experiment(
+    config: ExperimentConfig,
+    workers: int = 0,
+) -> Dict[str, Any]:
+    """Run full experiment: no-AI baseline + AUC x capacity sweep.
+
+    Args:
+        config: Experiment configuration (including sweep grids).
+        workers: Parallel workers. ``0`` (default) = auto-size to
+            cores; ``1`` = sequential; ``N`` = use exactly N workers.
+    """
+    tasks = _build_task_list(config)
+    total = len(tasks)
+    effective_workers = _resolve_workers(workers, total)
+
+    if effective_workers == 1:
+        logger.info("Running %d cells sequentially...", total)
+        results_unordered = []
+        for idx, task in enumerate(tasks, 1):
+            _, label, auc, cap = task
+            logger.info(
+                "[%d/%d] %s (AUC=%.2f, cap=%d)...",
+                idx, total, label, auc, cap,
+            )
+            results_unordered.append(_run_cell(task))
+    else:
+        logger.info(
+            "Running %d cells across %d workers...",
+            total, effective_workers,
+        )
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(effective_workers) as pool:
+            results_unordered = []
+            for idx, result in enumerate(
+                pool.imap_unordered(_run_cell, tasks), 1,
+            ):
+                logger.info(
+                    "[%d/%d] completed %s",
+                    idx, total, result["label"],
+                )
+                results_unordered.append(result)
+
+    # Restore canonical order (control first, then grid order) so
+    # CSV row order is stable across sequential/parallel runs.
+    by_label = {r["label"]: r for r in results_unordered}
+    ordered = [by_label[label] for _, label, _, _ in tasks]
 
     return {
         "config": asdict(config),
-        "results": all_results,
-        "summary": _build_summary(all_results),
+        "results": ordered,
+        "summary": _build_summary(ordered),
     }
 
 
@@ -416,6 +489,14 @@ def main():
         "--sweep", action="store_true",
         help="Run full AUC x capacity sweep",
     )
+    parser.add_argument(
+        "--workers", type=int, default=0,
+        help=(
+            "Parallel workers for the sweep. "
+            "0 = auto (all cores, capped by #cells); "
+            "1 = sequential."
+        ),
+    )
     parser.add_argument("--output-dir", type=str, default="outputs")
     args = parser.parse_args()
 
@@ -454,7 +535,7 @@ def main():
     logger.info("Config: %s", json.dumps(asdict(config), indent=2))
 
     t0 = time.time()
-    experiment = run_experiment(config)
+    experiment = run_experiment(config, workers=args.workers)
     total_time = time.time() - t0
 
     logger.info("Complete in %.1f seconds", total_time)
