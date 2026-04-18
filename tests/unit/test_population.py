@@ -1,6 +1,7 @@
 """Unit tests for population utilities."""
 
 import numpy as np
+import pytest
 
 from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
 from healthcare_sim_sdk.population.temporal_dynamics import (
@@ -36,6 +37,16 @@ class TestBetaDistributedRisks:
         r1 = beta_distributed_risks(100, 0.05, 0.5, np.random.default_rng(42))
         r2 = beta_distributed_risks(100, 0.05, 0.5, np.random.default_rng(42))
         np.testing.assert_array_equal(r1, r2)
+
+    def test_rng_is_required(self):
+        """Calling without rng must raise — no silent unseeded generator.
+
+        Guards Invariant #3 (RNG partitioning): a missing rng used to
+        fall back to ``np.random.default_rng()``, silently breaking
+        reproducibility inside a supposedly seeded scenario.
+        """
+        with pytest.raises(TypeError):
+            beta_distributed_risks(100, 0.05, 0.5)  # type: ignore[call-arg]
 
 
 class TestHazardConversion:
