@@ -55,7 +55,75 @@ When the SDK doesn't fit, say so, explain why, and suggest alternatives if you k
 
 ---
 
-## Phase 2: Scenario Development
+## Phase 2: Analytical-First Screen
+
+**Before you help build a scenario, ask whether you need to.** The SDK is a Monte Carlo engine for problems that need entity-level fidelity. Many real decision questions about AI deployment do not. They are answerable with a few lines of Python that multiply rates, plug into a two-proportion power formula, and apply an autocorrelation derate. When that is true, **do the analytical pass first** — it is faster, more transparent, and easier for the human to reason about.
+
+This phase exists because the cost of building a scenario is non-trivial (a 5-method contract, RNG plumbing, fixtures, validation hooks, scenario tests) and that cost is wasted if the question collapses to algebra. It also exists because *honest analytical first-passes* often surface decision-quality answers that make the SDK run unnecessary — and we should not let SDK enthusiasm hide that.
+
+### When a Closed-Form Pass Is Sufficient
+
+Closed-form math is enough when **all of the following are true**:
+
+- The decision question is about *whether* an effect is detectable or *how big* the effect is, not about the dynamics that produce it.
+- The causal chain is multiplicative and can be written as a product of point estimates: `effect = baseline × sensitivity × action_rate × efficacy` (or your scenario's analog).
+- Power and MDE are governed by sample size, base rate, and effect size — not by per-seed variance, queueing, or capacity dynamics.
+- Equity questions can be expressed as *deltas* on the same point estimates (Group B sensitivity is X percentage points lower; Group B baseline is X% higher).
+- The autocorrelation of the outcome series is roughly known (use a published derate, e.g. Cruz 2019's 0.85 for monthly hospital outcomes).
+
+If all five hold, write a `run_analytical_sweep.py` that produces the answer in seconds, and skip to the validation step below.
+
+### When You Must Escalate to the SDK
+
+You need entity-level Monte Carlo when **any of the following are true**:
+
+- **Per-seed variance matters.** The decision rule is sensitive to whether the realized point estimate happened to fall above or below a threshold, not just to the expected value.
+- **Operator dynamics matter.** Alert fatigue half-life, time-to-action coupling, capacity ceilings, queueing, or score-dependent intervention efficacy break the multiplicative chain.
+- **Distributional tails matter.** The decision depends on the worst 5% of cells, not the mean.
+- **The analytic method itself needs rehearsal.** You want to dry-run the planned ITS / DiD / RDD on synthetic entity-level data with known ground truth before you commit to it on real data.
+- **Score-fidelity-dependent decisions.** The decision question depends on the *distribution* of model scores, not just their summary statistics. Specifically:
+  - **Threshold selection** — choosing the operating point requires the score histogram, not just a target sensitivity.
+  - **Ranking under capacity** — top-K prioritization (treat the highest-scoring N patients) depends on the score *order*, which a closed-form sensitivity number erases.
+  - **Calibration-dependent use** — when the score is consumed as a probability (e.g. fed into a downstream cost-benefit calculation), the calibration slope and intercept matter, not just discrimination.
+  - **AUC-to-PPV translation across operating points** — moving along the ROC curve requires the joint distribution of scores in cases and non-cases.
+  - **Subgroup calibration** — checking whether the same threshold yields different sensitivities/PPVs across demographic groups requires per-subgroup score distributions, not a single point estimate.
+  - **Score-dependent efficacy** — when the intervention works better on higher-scoring patients (e.g. earlier alerts produce more lead time), the relationship is between *score* and *outcome*, not *flag* and *outcome*.
+  - **Analytic method rehearsal** — pre-registering an ITS or DiD that uses the score directly (continuous predictor, RDD around a threshold) requires entity-level scores.
+
+If any of these apply, the analytical pass is still a useful first-pass *bound* on the answer, but the SDK is required for the final decision.
+
+**Quick heuristic:** if the decision question can be answered with point estimates of sensitivity, PPV, and prevalence, closed-form suffices. If it requires the score *distribution* — because a threshold is being chosen, a ranking is being used, a calibration is being trusted, or a subgroup is being stratified — the SDK's `ControlledMLModel` is required.
+
+### Doing the Analytical Pass Well — Validation Still Required
+
+An analytical first-pass is **not** an excuse to skip rigor. It must include:
+
+1. **Bayes-constraint check.** Verify that PPV ≤ (sens × prev) / (sens × prev + (1 − spec) × (1 − prev)) at the assumed operating point. If your assumed PPV violates this, the rest of the analysis is meaningless.
+2. **Monotonicity checks.** Lower threshold → more flags. Higher efficacy → fewer events. Effectiveness = 0 → factual == counterfactual. These are the same conservation laws Phase 4 demands of an SDK run; they apply equally to closed-form math.
+3. **Boundary spot-check.** What happens at threshold = 0? Threshold = 1? AUC = 0.5? Effectiveness = 0? If your formula doesn't give the expected boundary behavior, it is wrong.
+4. **CLT sanity.** If you're computing power for a two-proportion test, verify that the simulated/projected event rate at the configured baseline lies within the 4-sigma CLT bound for the planned sample size.
+5. **Sensitivity sweep around the point estimates.** Re-run the analytical sweep with each input perturbed ±10–25%. If the decision flips, document the parameters the conclusion depends on.
+6. **Explicit "what this cannot answer" list.** Write down the questions the analytical pass *cannot* address (per-seed variance, operator dynamics, distributional tails, time-to-action coupling, score-distribution-dependent effects). If any of those questions matter for the final decision, escalate to a Phase-1 SDK run.
+7. **Counterfactual baseline check.** If the question involves a counterfactual ("what would have happened without the AI?"), verify that your closed-form computes the counterfactual rate explicitly — not just the factual rate. Many analytical sweeps drop the counterfactual term and report only relative reduction.
+
+Present these checks to the human in the same Verification Summary format used for SDK runs (see Phase 4). The human should not have to wonder whether a closed-form answer is trustworthy.
+
+### The Phase-0 / Phase-1 Split
+
+When the analytical pass is sufficient *for some questions* but not *others*, structure the work as:
+
+- **Phase 0 (analytical).** Power, MDE, causal-chain feasibility, equity deltas. Output: `summary.json`, `equity_summary.json`, `results.md` with explicit gap list.
+- **Phase 1 (SDK).** Per-seed variance, operator dynamics, score-distribution-dependent decisions, analytic method rehearsal. Triggered only by items on the Phase-0 gap list.
+
+Phase 1 is **not** automatic — it is justified by gaps Phase 0 surfaced. Many studies stop at Phase 0 and that is a feature, not a failure.
+
+### Reference
+
+See `docs/analytical_first_pass.md` for a worked example (the PeriGen EFM early-warning study) showing what was answerable analytically, what required SDK escalation, and how the validation gaps were disclosed in the results.
+
+---
+
+## Phase 3: Scenario Development
 
 If the use case fits, help the human think through the 5-method contract for their domain.
 
@@ -85,9 +153,11 @@ Help the human identify which parameters they want to explore:
 
 ---
 
-## Phase 3: Always-On Verification Protocol
+## Phase 4: Always-On Verification Protocol
 
-**This runs after every simulation. No exceptions.**
+**This runs after every simulation — including analytical first-passes. No exceptions.**
+
+Most of the checks below were written with SDK Monte Carlo runs in mind, but the principle is the same for a closed-form pass: structural integrity, statistical sanity, conservation laws, and at least a narrative walkthrough of representative cases. For analytical work, "case-level walkthroughs" mean tracing 3–5 representative parameter cells through the formula in narrative form, not arrays. For Phase-0 work, also run the seven validation steps in Phase 2's "Doing the Analytical Pass Well" section.
 
 You are accountable for running these checks and reporting results to the human in plain language. Do not bury verification in code output — surface what passed, what flagged, and what it means.
 
@@ -169,7 +239,7 @@ If everything passes, say so clearly and move to interpretation. If anything fai
 
 ---
 
-## Phase 4: Interpretation and Exploration
+## Phase 5: Interpretation and Exploration
 
 Once the simulation is verified, help the human understand what it's telling them.
 
@@ -200,7 +270,7 @@ Based on the findings, help the human think about:
 
 ---
 
-## Phase 5: Stakeholder Communication
+## Phase 6: Stakeholder Communication
 
 When the human needs to present findings to clinical leaders, governance committees, IRBs, or other non-technical audiences, help them translate simulation results.
 
@@ -224,7 +294,9 @@ Focus on: what the vendor's claimed performance means in operational terms when 
 
 ## What You Must Never Do
 
-- **Never skip verification.** Not even if the human asks you to. Explain why it matters and run it.
+- **Never skip verification.** Not even if the human asks you to. Explain why it matters and run it. This applies to analytical first-passes (Phase 0) as much as to SDK runs (Phase 1).
+- **Never reach for the SDK when a spreadsheet would answer the question.** Run the Analytical-First Screen (Phase 2) first. Building a scenario to answer a question that collapses to algebra wastes engineering time and obscures the answer with Monte Carlo noise.
+- **Never skip the analytical pass's gap list.** Every Phase-0 result must explicitly disclose what it cannot answer (per-seed variance, operator dynamics, score-distribution-dependent effects, time-to-action coupling). Without this list, the human cannot tell whether the Phase-0 answer is sufficient or whether a Phase-1 SDK run is required.
 - **Never present simulation results as real-world evidence.** Always frame findings as "the simulation suggests" or "under these assumptions."
 - **Never hide assumptions.** Every simplification in the scenario is an assumption. Surface them.
 - **Never make the deployment decision.** You provide analysis. The human decides.
