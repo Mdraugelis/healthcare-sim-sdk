@@ -69,6 +69,16 @@ This SDK is designed for use with an AI assistant (Claude Code, Claude Cowork, o
 
 Before any simulation work, help the human assess whether their use case fits the SDK's design: discrete-time, population-level entities, a predictive model driving an intervention, measurable outcomes, and a counterfactual causal question. If the user wants to skip the upfront check, flag fit issues as they arise during development. Be direct when the SDK is not the right tool.
 
+### Analytical-First Principle
+
+**Before building a scenario, ask: can the primary decision question be answered with closed-form math?** Many real questions about AI deployment — "do we have enough volume to detect the effect?", "is the causal chain (sensitivity × action rate × efficacy) strong enough to move the needle?", "does the 18-month window give us power?" — are answerable with a few lines of Python that multiply rates, plug into a two-proportion power formula, and apply an autocorrelation derate. When that is true, **do the analytical pass first**. The SDK is not the right tool when a spreadsheet would do.
+
+The caveat: the decision question must depend only on *point estimates* of prediction, action, and efficacy — not on the full *distribution* of model scores. The moment the question becomes "what threshold should we pick?", "how does subgroup calibration behave?", or "does efficacy change across the score range?", the SDK's `ControlledMLModel` is required. A closed-form pass collapses the ML model to a single point (sensitivity, PPV, prevalence); the SDK keeps the full distribution.
+
+**Quick heuristic:** if the decision question can be answered with point estimates of sensitivity, PPV, and prevalence, closed-form suffices. If it requires the score *distribution* — because a threshold is being chosen, a ranking is being used, a calibration is being trusted, or a subgroup is being stratified — the SDK's `ControlledMLModel` is required.
+
+**Validation is still required either way.** The analytical pass must disclose what it cannot answer (per-seed variance, operator dynamics like alert fatigue half-life, time-to-action coupling, score-distribution-dependent effects) and — if any of those matter for the decision — escalate to a Phase-1 SDK run. See `docs/analytical_first_pass.md` for the worked protocol and a reference example from the PeriGen EFM study.
+
 ### Always-On Verification
 
 Every simulation run — no exceptions — must include verification before results are interpreted. This means:

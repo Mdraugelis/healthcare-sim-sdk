@@ -18,6 +18,27 @@ This SDK provides a controlled environment where the ground truth is known, so t
 
 **Is the program actually working?** Rehearse your monitoring and evaluation plan on synthetic data. If your analysis can't recover the known effect in simulation, it won't find a real one either.
 
+## Do You Actually Need the Full Simulator?
+
+**Not every question needs Monte Carlo.** Before building a scenario, ask whether your decision question can be answered in closed form — a two-proportion power formula with an autocorrelation derate often is enough. Power, minimum detectable effect, Bayes-bounded PPV, and causal-chain feasibility (sensitivity × action_rate × efficacy) all collapse to algebra. If that's your question, **write 200 lines of Python and skip the SDK.** A spreadsheet-grade answer is better than a Monte Carlo answer you can't explain.
+
+You need the full simulator when the decision depends on the **score distribution**, not just point estimates:
+
+| If the question is… | Closed form works | SDK required |
+|---|---|---|
+| "Do we have the volume to detect a 15% reduction?" | ✅ | |
+| "Is the causal chain strong enough to matter?" | ✅ | |
+| "How does Group B compare to Group A given a baseline delta?" | ✅ | |
+| "What threshold should we pick?" | | ✅ |
+| "How does subgroup calibration shift the operating point?" | | ✅ |
+| "What if alert fatigue has a 6-hour half-life?" | | ✅ |
+| "Does earlier detection produce more lead time, and does that compound?" | | ✅ |
+| "Will our planned ITS actually recover the effect on entity-level data?" | | ✅ |
+
+**Quick heuristic:** if the decision rests on point estimates of sensitivity, PPV, and prevalence, closed-form suffices. If it rests on the score *distribution* — because a threshold is being chosen, a ranking is being used, a calibration is being trusted, or a subgroup is being stratified — the SDK's `ControlledMLModel` is required.
+
+Either way, the verification protocol is the same (Bayes constraint, monotonicity, boundaries, CLT sanity, sensitivity sweep, explicit gap list). A closed-form answer is not an excuse to skip rigor. See [`docs/analytical_first_pass.md`](docs/analytical_first_pass.md) for the worked protocol and a reference example from the PeriGen EFM evaluation.
+
 ## Who This Is For
 
 - **Clinical leaders** deciding whether to greenlight an AI pilot and how to staff it

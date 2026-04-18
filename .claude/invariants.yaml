@@ -86,3 +86,39 @@ fitness_criteria:
     - Measurable outcome at each timestep
     - Counterfactual causal question (what if no AI?)
     - Discrete-time dynamics (not fundamentally continuous)
+
+analytical_first_pass:
+  description: >
+    Recommendation (not invariant): before building a scenario,
+    evaluate whether the primary decision question can be
+    answered in closed form. The SDK exists for problems that
+    require Monte Carlo. Do not use it for problems a spreadsheet
+    can answer. Both Phase-0 (analytical) and Phase-1 (SDK) work
+    require the same verification protocol.
+  closed_form_sufficient_for:
+    - Power and minimum detectable effect (MDE) for a planned ITS / DiD
+    - Causal-chain feasibility checks (sensitivity x action_rate x efficacy)
+    - Bayes-bounded PPV / NNA at fixed prevalence
+    - Coarse parameter sweeps where decisions hinge on point estimates
+    - Equity arms expressed as deltas on the same point estimates
+  sdk_required_for:
+    - Per-seed variance, distributional tails, individual entity trajectories
+    - Operator dynamics (alert fatigue half-life, capacity ceilings, queueing)
+    - Time-to-action coupling and score-dependent intervention efficacy
+    - Threshold selection that depends on the score distribution shape
+    - Score ranking under capacity (top-K decisions, prioritization)
+    - Calibration-dependent decisions (probability used as a probability)
+    - AUC-to-PPV translation across operating points
+    - Subgroup calibration / equity audits at the score-distribution level
+    - Score-dependent efficacy (response is a function of score, not flag)
+    - Rehearsing the planned analytic method on entity-level synthetic data
+  validation_required_either_way:
+    - Bayes constraint check on PPV given sensitivity, specificity, prevalence
+    - Monotonicity check (lower threshold -> more flags;
+      higher efficacy -> fewer events; effectiveness=0 -> factual==counterfactual)
+    - Boundary conditions (threshold=0, threshold=1, AUC~0.5)
+    - 4-sigma CLT bound check on simulated event rates against configured base rate
+    - Sensitivity sweep around any point estimate the decision rests on
+    - Explicit list of questions the analytical pass cannot answer
+  reference_protocol: docs/analytical_first_pass.md
+  worked_example: docs/analytical_first_pass.md
