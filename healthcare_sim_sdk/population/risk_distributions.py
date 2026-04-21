@@ -11,8 +11,8 @@ import numpy as np
 def beta_distributed_risks(
     n_patients: int,
     annual_incident_rate: float,
-    concentration: float = 0.5,
-    rng: np.random.Generator = None,
+    concentration: float,
+    rng: np.random.Generator,
 ) -> np.ndarray:
     """Generate patient-level annual risk scores from a beta distribution.
 
@@ -25,14 +25,13 @@ def beta_distributed_risks(
         annual_incident_rate: Target population-level annual event rate.
         concentration: Beta distribution alpha parameter. Lower = more
             heterogeneous. Typical range: 0.3-1.0.
-        rng: NumPy random Generator (use scenario's population stream).
+        rng: NumPy random Generator. Must be a partitioned stream from
+            the scenario's RNGPartitioner (typically ``self.rng.population``)
+            to preserve reproducibility under the RNG-partitioning invariant.
 
     Returns:
         Array of per-patient annual risk probabilities, shape (n_patients,).
     """
-    if rng is None:
-        rng = np.random.default_rng()
-
     alpha = concentration
     beta_param = alpha * (1.0 / annual_incident_rate - 1.0)
 
