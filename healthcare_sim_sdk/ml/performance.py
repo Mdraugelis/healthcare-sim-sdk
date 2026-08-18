@@ -251,10 +251,25 @@ def check_target_feasibility(
     target_ppv: float,
     target_sensitivity: float = 0.80,
 ) -> Dict[str, float]:
-    """Check if target PPV is achievable given prevalence.
+    """Check whether a target PPV is ARITHMETICALLY self-consistent.
+
+    WARNING -- `feasible` here does NOT mean "your model can do this". It
+    is pure Bayes arithmetic: it asks only whether some specificity in
+    (0, 1) yields the target PPV at the target sensitivity and
+    prevalence. It never consults the model's discriminative ability, so
+    it returns True for operating points no real classifier could reach.
+
+    A worked case: prevalence 0.008, PPV 0.15, sensitivity 0.80 gives
+    required_specificity 0.9625 < 1.0, so `feasible` is True -- yet
+    holding sensitivity 0.80 AT that specificity needs AUC ~0.97, while
+    the fitted model reached 0.82 and delivered sensitivity 0.049.
+
+    For a check that accounts for achievable AUC, use
+    `required_auc_for_operating_point()` and drive the model in
+    `operating_point` mode, which gates on empirically achieved metrics.
 
     Returns dict with:
-    - feasible: bool (achievable at specificity < 1.0)
+    - feasible: bool -- arithmetic consistency ONLY (see warning above)
     - max_ppv_at_spec_95: maximum PPV at 95% specificity
     - max_ppv_at_spec_99: maximum PPV at 99% specificity
     - required_specificity: specificity needed to achieve target PPV
@@ -288,3 +303,169 @@ def check_target_feasibility(
         "target_ppv": target_ppv,
         "target_sensitivity": target_sensitivity,
     }
+
+
+# -- Operating-point geometry ---------------------------------------------
+#
+# Fixing PPV at a given prevalence pins a straight ray through the origin
+# in ROC space:
+#
+#     FPR = k * TPR,   k = prev * (1 - ppv) / (ppv * (1 - prev))
+#
+# Any ROC curve crosses that ray exactly once, so (prevalence, PPV) plus a
+# curve determines sensitivity uniquely -- sensitivity is NOT a free knob.
+# Fixing sensitivity instead pins a horizontal line, which likewise crosses
+# any curve once. Either metric can therefore serve as the binding
+# constraint; the other is then a consequence of the model's AUC.
+#
+# The helpers below use a binormal ROC (equal-variance) to answer "what AUC
+# would this operating point require?". Validated against the SDK's beta
+# risk distributions: absolute sensitivity error 0.004-0.011 at AUC >= 0.83,
+# rising to ~0.09 at AUC ~0.68. That is accurate enough to REPORT a required
+# AUC and to explain an infeasible ask, but NOT accurate enough to gate
+# pass/fail -- always gate on empirically achieved metrics.
+
+def iso_ppv_slope(prevalence: float, ppv: float) -> float:
+    """Slope (TPR per unit FPR) of the constant-PPV ray in ROC space.
+
+    A slope <= 1 puts the ray on or below the chance diagonal, which asks
+    for a worse-than-random classifier. That happens exactly when the PPV
+    target does not exceed prevalence.
+    """
+    if not 0.0 < ppv < 1.0 or not 0.0 < prevalence < 1.0:
+        raise ValueError(
+            f"prevalence and ppv must lie in (0, 1); got "
+            f"prevalence={prevalence}, ppv={ppv}"
+        )
+    k = prevalence * (1 - ppv) / (ppv * (1 - prevalence))
+    return 1.0 / k
+
+
+def validate_operating_point(
+    prevalence: float,
+    ppv: float,
+) -> Dict:
+    """Reject operating points that are degenerate before any fitting.
+
+    Returns a dict with 'valid', 'reason' (None when valid) and the
+    iso-PPV ray slope.
+    """
+    slope = iso_ppv_slope(prevalence, ppv)
+    if ppv <= prevalence:
+        return {
+            "valid": False,
+            "slope": slope,
+            "reason": (
+                f"target PPV {ppv:.4f} does not exceed prevalence "
+                f"{prevalence:.4f}. A flagged set no more enriched than "
+                f"the base rate describes a worse-than-random model; the "
+                f"constant-PPV ray (slope {slope:.3f}) lies on or below "
+                f"the chance diagonal. Raise the PPV target above "
+                f"prevalence."
+            ),
+        }
+    return {"valid": True, "slope": slope, "reason": None}
+
+
+def sensitivity_at_ppv(
+    auc: float,
+    prevalence: float,
+    ppv: float,
+) -> float:
+    """Sensitivity attainable at a given PPV, for a binormal ROC of `auc`.
+
+    Solves for the crossing of the ROC curve with the constant-PPV ray.
+    Returns 0.0 when the ray lies entirely above the curve (the PPV is
+    unreachable at any non-trivial operating point for this AUC).
+    """
+    from scipy.optimize import brentq
+    from scipy.stats import norm
+
+    if not 0.5 <= auc < 1.0:
+        raise ValueError(f"auc must lie in [0.5, 1.0); got {auc}")
+    k = prevalence * (1 - ppv) / (ppv * (1 - prevalence))
+    d_prime = norm.ppf(auc) * np.sqrt(2.0)
+
+    def gap(tpr: float) -> float:
+        fpr = float(np.clip(k * tpr, 1e-12, 1 - 1e-12))
+        return float(norm.cdf(norm.ppf(fpr) + d_prime) - tpr)
+
+    hi = min(1.0 / k, 1.0) - 1e-9
+    if hi <= 1e-9:
+        return 0.0
+    if gap(1e-9) <= 0.0:
+        return 0.0          # ray above the curve everywhere
+    if gap(hi) >= 0.0:
+        return float(hi)    # curve still above the ray at the ceiling
+    return float(brentq(gap, 1e-9, hi, xtol=1e-12))
+
+
+def ppv_at_sensitivity(
+    auc: float,
+    prevalence: float,
+    sensitivity: float,
+) -> float:
+    """PPV attainable at a given sensitivity, for a binormal ROC of `auc`."""
+    from scipy.stats import norm
+
+    if not 0.5 <= auc < 1.0:
+        raise ValueError(f"auc must lie in [0.5, 1.0); got {auc}")
+    if not 0.0 < sensitivity < 1.0:
+        raise ValueError(
+            f"sensitivity must lie in (0, 1); got {sensitivity}"
+        )
+    d_prime = norm.ppf(auc) * np.sqrt(2.0)
+    # Invert TPR = Phi(Phi^-1(FPR) + d') for FPR.
+    fpr = float(norm.cdf(norm.ppf(sensitivity) - d_prime))
+    specificity = 1.0 - fpr
+    return theoretical_ppv(prevalence, sensitivity, specificity)
+
+
+def required_auc_for_operating_point(
+    prevalence: float,
+    binding: str,
+    binding_value: float,
+    goal_value: float,
+    auc_bounds: Tuple[float, float] = (0.5, 0.9999),
+) -> Dict:
+    """Smallest AUC whose ROC reaches `goal_value` at the binding point.
+
+    `binding` is 'ppv' (goal is sensitivity) or 'sensitivity' (goal is
+    PPV). Returns a dict with 'required_auc' (None when the goal is not
+    reachable below auc_bounds[1]), plus the value attainable at each
+    bound so callers can explain the shortfall.
+    """
+    from scipy.optimize import brentq
+
+    if binding not in ("ppv", "sensitivity"):
+        raise ValueError(
+            f"binding must be 'ppv' or 'sensitivity'; got '{binding}'"
+        )
+
+    if binding == "ppv":
+        def attain(auc: float) -> float:
+            return sensitivity_at_ppv(auc, prevalence, binding_value)
+    else:
+        def attain(auc: float) -> float:
+            return ppv_at_sensitivity(auc, prevalence, binding_value)
+
+    lo, hi = auc_bounds
+    at_lo, at_hi = attain(lo), attain(hi)
+    out = {
+        "binding": binding,
+        "binding_value": binding_value,
+        "goal_value": goal_value,
+        "attainable_at_auc_lo": at_lo,
+        "attainable_at_auc_hi": at_hi,
+        "auc_bounds": auc_bounds,
+        "required_auc": None,
+    }
+    if at_hi < goal_value:
+        return out          # unreachable even at the AUC ceiling
+    if at_lo >= goal_value:
+        out["required_auc"] = lo
+        return out
+    out["required_auc"] = float(
+        brentq(lambda a: attain(a) - goal_value, lo, hi, xtol=1e-6)
+    )
+    return out
