@@ -71,7 +71,15 @@ class CoinFlipScenario(BaseScenario[np.ndarray]):
     def intervene(
         self, state: np.ndarray, predictions: Predictions, t: int,
     ) -> tuple[np.ndarray, Interventions]:
-        """Reduce probability for high-risk entities."""
+        """Reduce probability for high-risk entities.
+
+        A raw-score cutoff is fine HERE because this toy's scores are
+        uniform(0, 1) probabilities. If your scenario uses
+        ControlledMLModel, select with `predictions.labels == 1` instead:
+        those scores are calibrated risks on the outcome's own scale, and
+        re-thresholding them discards the operating point that fit()
+        chose to hit target_sensitivity/target_ppv.
+        """
         treated = predictions.scores > self.treatment_threshold
         state = state.copy()
         state[treated] *= (1 - self.intervention_reduction)
