@@ -3,13 +3,23 @@
 # Copy this file to `.institution-denylist` (which is gitignored) and
 # replace the placeholders below with your real confidential terms. The
 # pre-commit guard (scripts/check_no_institution_terms.py) reads the local
-# copy and blocks any commit whose staged content or commit message
-# contains one of these terms.
+# copy and blocks any commit whose staged file contents, PATH NAMES, or
+# commit message contain one of these terms.
 #
 # Format, one rule per line:
 #   - Blank lines and lines starting with '#' are ignored.
 #   - 're:<pattern>'  is a case-insensitive regular expression.
 #   - anything else   is a case-insensitive literal substring.
+#
+# IMPORTANT — do not use \b for terms that can appear inside a path name.
+# '_' is a regex word character, so '\bSITE_A\b' will NOT match
+# 'configs/site_a_projection.yaml'. Use separator-aware lookarounds:
+#
+#     (?<![A-Za-z0-9])TERM(?![A-Za-z0-9])
+#
+# These fire at '_', '-', '/', '.' and string edges, while still refusing
+# to match inside a longer word (so 'parasite_abdomen' stays clean).
+# \b remains fine for prose-only terms such as work-item numbers.
 #
 # Keep the REAL list local only. Do not commit `.institution-denylist`.
 
@@ -17,9 +27,10 @@
 # YourHealthSystemName
 # YHS
 
-# --- Campus / site codes (use word boundaries to avoid false positives) ---
-# re:\bSITE_A\b
-# re:\bSITE_B\b
+# --- Campus / site codes ---
+# Separator-aware so they also fire inside snake_case file names.
+# re:(?<![A-Za-z0-9])SITE[_ -]?A(?![A-Za-z0-9])
+# re:(?<![A-Za-z0-9])SITE[_ -]?B(?![A-Za-z0-9])
 
 # --- Benchmark vendors under confidentiality ---
 # BenchmarkVendorName
