@@ -50,7 +50,12 @@ class StrokeConfig:
     target_sensitivity: float = 0.80
     target_ppv: float = 0.15
     intervention_effectiveness: float = 0.50
-    treatment_threshold: float = 0.5
+    # Who gets treated. None (default) = the model's own operating point,
+    # i.e. the threshold fit() chose to hit target_sensitivity/target_ppv.
+    # A float overrides that with a raw-score cutoff — note the scores are
+    # calibrated ANNUAL RISKS (typically <0.05), not classifier
+    # probabilities, so a value like 0.5 treats almost nobody.
+    treatment_threshold: Optional[float] = None
 
 
 class StrokePreventionScenario(BaseScenario[np.ndarray]):
@@ -170,9 +175,18 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
         predictions: Predictions,
         t: int,
     ) -> tuple[np.ndarray, Interventions]:
-        """Treat high-risk patients with anticoagulants."""
+        """Treat high-risk patients with anticoagulants.
+
+        By default the deployment decision IS the model's flag: labels
+        are `scores >= classifier.threshold`, where that threshold was
+        fit to achieve target_sensitivity/target_ppv. Re-thresholding the
+        raw scores here would silently discard that operating point.
+        """
         c = self.config
-        treated = predictions.scores >= c.treatment_threshold
+        if c.treatment_threshold is None:
+            treated = predictions.labels == 1
+        else:
+            treated = predictions.scores >= c.treatment_threshold
         state = state.copy()
         # Set persistent treatment effect (survives through future steps)
         state[TX_EFFECT, treated] = (1 - c.intervention_effectiveness)
