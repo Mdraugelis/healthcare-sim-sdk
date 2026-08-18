@@ -19,9 +19,39 @@ from .performance import (
     calibration_slope,
     check_target_feasibility,
     confusion_matrix_metrics,
+    required_auc_for_operating_point,
+    validate_operating_point,
 )
 
 logger = logging.getLogger(__name__)
+
+# Gate tolerance: a target is "achieved" when the relative miss is within
+# 20%, floored in absolute terms so small targets are not held to a
+# fraction of a percentage point (20% of a 0.02 PPV target is 0.004,
+# which is inside sampling noise).
+DEFAULT_TOLERANCE_REL = 0.20
+DEFAULT_TOLERANCE_ABS = 0.02
+
+
+def gate_tolerance(
+    target: float,
+    rel: float = DEFAULT_TOLERANCE_REL,
+    abs_floor: float = DEFAULT_TOLERANCE_ABS,
+) -> float:
+    """Allowed absolute deviation from `target`."""
+    return max(rel * abs(target), abs_floor)
+
+
+class OperatingPointError(ValueError):
+    """Raised when a fit cannot reach its configured operating point.
+
+    Carries the fit report so callers can inspect what was achieved and
+    what would be required.
+    """
+
+    def __init__(self, message: str, report: Optional[Dict] = None):
+        super().__init__(message)
+        self.report = report or {}
 
 
 class ControlledMLModel:
@@ -53,20 +83,44 @@ class ControlledMLModel:
     def __init__(
         self,
         mode: str = "discrimination",
-        target_auc: float = 0.83,
+        target_auc: Optional[float] = None,
         target_sensitivity: float = 0.80,
         target_ppv: float = 0.30,
         operating_threshold: Optional[float] = None,
         target_calibration_slope: float = 1.0,
         prevalence: Optional[float] = None,
+        binding: Optional[str] = None,
+        binding_value: Optional[float] = None,
+        goal_value: Optional[float] = None,
+        allow_infeasible: bool = False,
+        tolerance_rel: float = DEFAULT_TOLERANCE_REL,
+        tolerance_abs: float = DEFAULT_TOLERANCE_ABS,
     ):
-        if mode not in ("discrimination", "classification", "threshold_ppv"):
+        valid_modes = (
+            "discrimination", "classification", "threshold_ppv",
+            "operating_point",
+        )
+        if mode not in valid_modes:
             raise ValueError(
-                f"mode must be 'discrimination', 'classification', "
-                f"or 'threshold_ppv', got '{mode}'"
+                f"mode must be one of {valid_modes}, got '{mode}'"
             )
         self.mode = mode
-        self.target_auc = target_auc
+        self.binding = binding
+        self.binding_value = binding_value
+        self.goal_value = goal_value
+        self.allow_infeasible = allow_infeasible
+        self.tolerance_rel = tolerance_rel
+        self.tolerance_abs = tolerance_abs
+        self._required_auc: Optional[float] = None
+
+        # target_auc defaults to None so operating_point mode can tell
+        # "user specified an AUC" from "user left it alone". Every other
+        # mode keeps the historical 0.83 default.
+        if mode == "operating_point":
+            self._validate_operating_point_config(target_auc)
+            self.target_auc = target_auc
+        else:
+            self.target_auc = 0.83 if target_auc is None else target_auc
         self.target_sensitivity = target_sensitivity
         self.target_ppv = target_ppv
         self.operating_threshold = operating_threshold
@@ -80,10 +134,110 @@ class ControlledMLModel:
         self.threshold: float = operating_threshold or 0.5
         self._fitted = False
         self._fit_report: Optional[Dict] = None
+        self._last_correlation_grid: Optional[np.ndarray] = None
+        self._last_scale_grid: Optional[np.ndarray] = None
 
         # Platt scaling parameters (set by fit())
         self._platt_a: float = 1.0  # identity by default
         self._platt_b: float = 0.0
+
+    def _validate_operating_point_config(
+        self, target_auc: Optional[float],
+    ) -> None:
+        """Enforce the degrees-of-freedom rule for operating_point mode.
+
+        The old 'classification' mode let callers pin BOTH sensitivity and
+        PPV. At a known prevalence those two pin specificity through Bayes,
+        so the pair names a single point in ROC space rather than a target
+        region -- reachable only if some attainable ROC passes through it.
+        That is why it silently failed.
+
+        This mode is well posed by construction:
+          * exactly ONE binding constraint (ppv | sensitivity) -> fixes the
+            threshold once a curve exists;
+          * exactly ONE quality spec (target_auc, or a goal for the other
+            metric, which implies an AUC) -> fixes the curve.
+        """
+        if self.binding not in ("ppv", "sensitivity"):
+            raise ValueError(
+                "operating_point mode requires binding='ppv' or "
+                f"binding='sensitivity'; got {self.binding!r}"
+            )
+        if self.binding_value is None:
+            raise ValueError(
+                "operating_point mode requires binding_value (the value "
+                f"of {self.binding} to hold exactly)"
+            )
+        if not 0.0 < self.binding_value < 1.0:
+            raise ValueError(
+                f"binding_value must lie in (0, 1); got "
+                f"{self.binding_value}"
+            )
+
+        has_goal = self.goal_value is not None
+        has_auc = target_auc is not None
+        if has_goal and has_auc:
+            other = "sensitivity" if self.binding == "ppv" else "ppv"
+            raise ValueError(
+                "operating_point mode is over-determined: specify EITHER "
+                f"target_auc OR goal_value (the {other} goal), not both. "
+                "Holding a binding constraint at a known prevalence means "
+                "the other metric is a consequence of the AUC, so fixing "
+                "both leaves no degrees of freedom."
+            )
+        if not has_goal and not has_auc:
+            other = "sensitivity" if self.binding == "ppv" else "ppv"
+            raise ValueError(
+                "operating_point mode is under-determined: specify EITHER "
+                f"target_auc OR goal_value (the {other} goal)."
+            )
+        if has_goal and not 0.0 < self.goal_value < 1.0:
+            raise ValueError(
+                f"goal_value must lie in (0, 1); got {self.goal_value}"
+            )
+
+    def _place_threshold_for_binding(
+        self, true_labels: np.ndarray, scores: np.ndarray,
+    ) -> Tuple[float, Dict[str, float]]:
+        """Put the threshold exactly on the binding constraint.
+
+        Sweeps every achievable cut rather than a fixed grid: for a rare
+        outcome the useful region is a narrow band near the top of the
+        score distribution, which a coarse linspace steps straight over.
+
+        Returns (threshold, metrics_at_that_threshold).
+        """
+        order = np.argsort(-scores)
+        y = true_labels[order]
+        s = scores[order]
+        n_pos = max(int(y.sum()), 1)
+
+        tp = np.cumsum(y)
+        n_flagged = np.arange(1, len(y) + 1)
+        ppv_curve = tp / n_flagged
+        sens_curve = tp / n_pos
+
+        if self.binding == "ppv":
+            # Largest flagged set whose PPV still meets the target: the
+            # most sensitivity obtainable without breaking the constraint.
+            ok = np.where(ppv_curve >= self.binding_value)[0]
+            idx = int(ok[-1]) if len(ok) else 0
+        else:
+            ok = np.where(sens_curve >= self.binding_value)[0]
+            idx = int(ok[0]) if len(ok) else len(y) - 1
+
+        # Threshold sits just below the last included score so that
+        # `scores >= threshold` reproduces this exact flagged set.
+        cut = float(s[idx])
+        below = s[s < cut]
+        threshold = (
+            float((cut + below[0]) / 2.0) if len(below) else cut
+        )
+        return threshold, {
+            "ppv": float(ppv_curve[idx]),
+            "sensitivity": float(sens_curve[idx]),
+            "flag_rate": float((idx + 1) / len(y)),
+        }
 
     def predict(
         self,
@@ -175,10 +329,23 @@ class ControlledMLModel:
             correlation_grid = np.linspace(0.3, 0.99, 15)
         if scale_grid is None:
             scale_grid = np.linspace(0.01, 0.7, 15)
+        # Retained so the report can tell a converged optimum from one
+        # that merely stopped at the edge of the search box.
+        self._last_correlation_grid = np.asarray(correlation_grid)
+        self._last_scale_grid = np.asarray(scale_grid)
 
         # Detect prevalence
         prev = self.prevalence or float(true_labels.mean())
         self.prevalence = prev
+
+        # operating_point: reject degenerate asks, then translate the
+        # (binding, goal) pair into the AUC the curve must reach. The
+        # search itself then runs on the discrimination objective, which
+        # is the path that actually converges.
+        op_plan = None
+        if self.mode == "operating_point":
+            op_plan = self._plan_operating_point(prev)
+            self._required_auc = op_plan["required_auc"]
 
         # Check feasibility for classification/threshold_ppv modes
         feasibility = None
@@ -239,9 +406,19 @@ class ControlledMLModel:
 
         # Generate final metrics report (with calibrated scores)
         final_scores = self._apply_platt(raw_scores)
+
+        # operating_point places the threshold exactly on the binding
+        # constraint, after the curve is settled.
+        if self.mode == "operating_point":
+            self.threshold, _ = self._place_threshold_for_binding(
+                true_labels, final_scores,
+            )
+
         report = self._build_report(
             true_labels, final_scores, feasibility,
         )
+        if op_plan is not None:
+            report.update(self._operating_point_report(op_plan, report))
         self._fit_report = report
 
         logger.info(
@@ -254,7 +431,179 @@ class ControlledMLModel:
             self.threshold,
         )
 
+        if self.mode == "operating_point":
+            self._enforce_operating_point(report)
+
         return report
+
+    def _plan_operating_point(self, prev: float) -> Dict:
+        """Translate (binding, goal) into the AUC the curve must reach."""
+        ppv_value = (
+            self.binding_value if self.binding == "ppv"
+            else self.goal_value
+        )
+        if ppv_value is not None:
+            check = validate_operating_point(prev, ppv_value)
+            if not check["valid"]:
+                raise OperatingPointError(
+                    f"Degenerate operating point: {check['reason']}"
+                )
+
+        if self.target_auc is not None:
+            return {
+                "required_auc": float(self.target_auc),
+                "required_auc_source": "target_auc",
+                "goal_reachable": True,
+                "solve": None,
+            }
+
+        solve = required_auc_for_operating_point(
+            prevalence=prev,
+            binding=self.binding,
+            binding_value=self.binding_value,
+            goal_value=self.goal_value,
+        )
+        if solve["required_auc"] is None:
+            other = "sensitivity" if self.binding == "ppv" else "PPV"
+            raise OperatingPointError(
+                f"Operating point is unreachable at any AUC below "
+                f"{solve['auc_bounds'][1]}: holding {self.binding}="
+                f"{self.binding_value:.4f} at prevalence {prev:.4f} "
+                f"yields at most {other}="
+                f"{solve['attainable_at_auc_hi']:.4f}, short of the goal "
+                f"{self.goal_value:.4f}.\n"
+                f"Options: lower the goal to <= "
+                f"{solve['attainable_at_auc_hi']:.4f}, or relax the "
+                f"binding {self.binding} target.",
+                report={"solve": solve},
+            )
+        return {
+            "required_auc": solve["required_auc"],
+            "required_auc_source": "derived_from_goal",
+            "goal_reachable": True,
+            "solve": solve,
+        }
+
+    def _operating_point_report(
+        self, op_plan: Dict, report: Dict,
+    ) -> Dict:
+        """Operating-point specific fields appended to the fit report."""
+        other = "sensitivity" if self.binding == "ppv" else "ppv"
+        achieved_binding = report[f"achieved_{self.binding}"]
+        achieved_other = report[f"achieved_{other}"]
+        extra = {
+            "binding": self.binding,
+            "binding_value": self.binding_value,
+            "achieved_binding": achieved_binding,
+            "goal_metric": other,
+            "goal_value": self.goal_value,
+            "achieved_goal_metric": achieved_other,
+            "required_auc": op_plan["required_auc"],
+            "required_auc_source": op_plan["required_auc_source"],
+            "binding_within_tolerance": abs(
+                achieved_binding - self.binding_value
+            ) <= gate_tolerance(
+                self.binding_value, self.tolerance_rel, self.tolerance_abs
+            ),
+        }
+        if self.goal_value is not None:
+            extra["goal_within_tolerance"] = abs(
+                achieved_other - self.goal_value
+            ) <= gate_tolerance(
+                self.goal_value, self.tolerance_rel, self.tolerance_abs
+            )
+        # A search that stops on its own grid edge has not converged --
+        # the optimum is probably outside the box. Check BOTH ends of
+        # BOTH grids: chasing a high AUC pins correlation at its maximum
+        # and can pin scale at its minimum, so a one-sided test misses
+        # half the cases.
+        pinned = []
+        for name, value, grid in (
+            ("noise_correlation", self.noise_correlation,
+             self._last_correlation_grid),
+            ("noise_scale", self.noise_scale, self._last_scale_grid),
+        ):
+            if grid is None or len(grid) < 2:
+                continue
+            lo, hi = float(np.min(grid)), float(np.max(grid))
+            step = (hi - lo) / (len(grid) - 1)
+            if value <= lo + step * 0.5:
+                pinned.append(f"{name}={value:.4f} (grid minimum {lo:.4f})")
+            elif value >= hi - step * 0.5:
+                pinned.append(f"{name}={value:.4f} (grid maximum {hi:.4f})")
+        extra["auc_search_boundary_pinned"] = bool(pinned)
+        extra["auc_search_pinned_params"] = pinned
+        return extra
+
+    def _enforce_operating_point(self, report: Dict) -> None:
+        """Fail loudly when the achieved point misses the configuration.
+
+        Two-sided: overshoot is also a miss. ControlledMLModel exists to
+        simulate a model with SPECIFIED characteristics, so landing above
+        a target means the simulation is not running what was configured.
+        """
+        misses = []
+        checks = [(self.binding, self.binding_value, "binding")]
+        if self.goal_value is not None:
+            other = "sensitivity" if self.binding == "ppv" else "ppv"
+            checks.append((other, self.goal_value, "goal"))
+
+        for metric, target, role in checks:
+            achieved = report[f"achieved_{metric}"]
+            tol = gate_tolerance(
+                target, self.tolerance_rel, self.tolerance_abs
+            )
+            if abs(achieved - target) > tol:
+                misses.append(
+                    f"  {role} {metric}: configured {target:.4f}, "
+                    f"achieved {achieved:.4f} "
+                    f"({'over' if achieved > target else 'under'} by "
+                    f"{abs(achieved - target):.4f}; tolerance {tol:.4f})"
+                )
+
+        if not misses:
+            return
+
+        report["accepted_infeasible"] = bool(self.allow_infeasible)
+        report["gate_misses"] = misses
+
+        # Same symptom, opposite remedies: an unreachable ask needs
+        # different targets, a stalled search needs a wider grid. Report
+        # the AUC shortfall either way, since it is the quantity that
+        # explains the miss, and add the boundary note when it applies.
+        cause = (
+            f"Achieved AUC {report['achieved_auc']:.4f} against a "
+            f"required {report['required_auc']:.4f}."
+        )
+        if report.get("auc_search_boundary_pinned"):
+            cause += (
+                "\nThe search stopped on its own grid boundary ("
+                + "; ".join(report["auc_search_pinned_params"])
+                + "), so the optimum is likely outside the search box. "
+                "Fix this first: widen correlation_grid / scale_grid or "
+                "raise n_iterations, then re-assess."
+            )
+        else:
+            cause += (
+                " The search converged inside its grid, so the risk "
+                "distribution itself does not support this operating "
+                "point.\nOptions: lower the goal, relax the binding "
+                "target, or raise target_auc if a stronger model is "
+                "plausible."
+            )
+
+        message = (
+            "Operating point not achieved.\n"
+            + "\n".join(misses)
+            + f"\n{cause}\n"
+            "Set allow_infeasible=True to proceed anyway; the accepted "
+            "gap is recorded in the fit report."
+        )
+
+        if self.allow_infeasible:
+            warnings.warn(message, UserWarning, stacklevel=2)
+            return
+        raise OperatingPointError(message, report=report)
 
     def _evaluate_params(
         self, true_labels: np.ndarray, scores: np.ndarray,
@@ -268,6 +617,17 @@ class ControlledMLModel:
                 + 0.3 * abs(cal - self.target_calibration_slope)
             )
             return score, self.operating_threshold or 0.5
+
+        elif self.mode == "operating_point":
+            # Shape the CURVE only. The threshold is placed exactly on the
+            # binding constraint after fitting, so it plays no part here.
+            auc = auc_score(true_labels, scores)
+            cal, _, _ = calibration_slope(true_labels, scores)
+            score = (
+                abs(auc - self._required_auc)
+                + 0.3 * abs(cal - self.target_calibration_slope)
+            )
+            return score, self.threshold
 
         elif self.mode == "classification":
             # Search over thresholds for best PPV + sensitivity
