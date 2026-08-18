@@ -136,6 +136,8 @@ class ControlledMLModel:
         self._fit_report: Optional[Dict] = None
         self._last_correlation_grid: Optional[np.ndarray] = None
         self._last_scale_grid: Optional[np.ndarray] = None
+        self._population_auc_ceiling: Optional[float] = None
+        self._n_positives: Optional[int] = None
 
         # Platt scaling parameters (set by fit())
         self._platt_a: float = 1.0  # identity by default
@@ -338,6 +340,17 @@ class ControlledMLModel:
         prev = self.prevalence or float(true_labels.mean())
         self.prevalence = prev
 
+        # The population's Bayes ceiling: the AUC of an oracle that knows
+        # every entity's TRUE risk. Labels are stochastic draws from those
+        # risks, so even perfect knowledge cannot order outcomes perfectly
+        # -- a 2%-risk entity sometimes has the event, a 30%-risk one often
+        # does not. The ceiling is therefore a pure function of how spread
+        # out risk is, and no fit of any kind can exceed it.
+        self._population_auc_ceiling = float(
+            auc_score(true_labels, risk_scores)
+        )
+        self._n_positives = int(np.sum(true_labels))
+
         # operating_point: reject degenerate asks, then translate the
         # (binding, goal) pair into the AUC the curve must reach. The
         # search itself then runs on the discrimination objective, which
@@ -450,6 +463,7 @@ class ControlledMLModel:
                 )
 
         if self.target_auc is not None:
+            self._check_population_ceiling(float(self.target_auc))
             return {
                 "required_auc": float(self.target_auc),
                 "required_auc_source": "target_auc",
@@ -477,12 +491,60 @@ class ControlledMLModel:
                 f"binding {self.binding} target.",
                 report={"solve": solve},
             )
-        return {
+        plan = {
             "required_auc": solve["required_auc"],
             "required_auc_source": "derived_from_goal",
             "goal_reachable": True,
             "solve": solve,
         }
+        self._check_population_ceiling(plan["required_auc"])
+        return plan
+
+    def _check_population_ceiling(self, required_auc: float) -> None:
+        """Bail out before searching for an AUC the population cannot host.
+
+        The ceiling is known as soon as labels and risks arrive, so there
+        is no reason to spend a full grid search discovering it. Skipped
+        when allow_infeasible is set -- that caller has asked to proceed
+        and have the gap recorded.
+        """
+        ceiling = self._population_auc_ceiling
+        if ceiling is None:
+            return
+        # The ceiling is ESTIMATED from finite data, so it carries
+        # sampling noise -- with few positives its standard error can
+        # reach several points of AUC. Bail out early only when the
+        # requirement clears it by more than the tolerance, and leave
+        # borderline cases to the post-fit gate, which judges empirically
+        # achieved metrics rather than an estimate.
+        if required_auc <= ceiling + self.tolerance_abs:
+            return
+        if self.allow_infeasible:
+            return          # the gate will record it after fitting
+        n_pos = int(self._n_positives or 0)
+        noise_note = (
+            f"\n(Ceiling estimated from {n_pos} positive cases; with few "
+            f"positives this estimate is itself noisy.)"
+            if n_pos and n_pos < 100 else ""
+        )
+        raise OperatingPointError(
+            f"Operating point requires AUC {required_auc:.4f}, which "
+            f"exceeds this population's Bayes ceiling of {ceiling:.4f}."
+            f"{noise_note}\n"
+            f"That ceiling is the AUC of an oracle knowing every entity's "
+            f"true risk; outcomes are stochastic draws from those risks, "
+            f"so no model of any kind can do better on this population.\n"
+            f"Options: lower the goal, relax the binding "
+            f"{self.binding} target, or increase risk heterogeneity (for "
+            f"beta_distributed_risks, a LOWER `concentration` widens the "
+            f"risk spread and raises this ceiling).\n"
+            f"Set allow_infeasible=True to fit anyway and have the gap "
+            f"recorded in the report.",
+            report={
+                "required_auc": required_auc,
+                "population_auc_ceiling": ceiling,
+            },
+        )
 
     def _operating_point_report(
         self, op_plan: Dict, report: Dict,
@@ -533,6 +595,12 @@ class ControlledMLModel:
                 pinned.append(f"{name}={value:.4f} (grid maximum {hi:.4f})")
         extra["auc_search_boundary_pinned"] = bool(pinned)
         extra["auc_search_pinned_params"] = pinned
+        ceiling = self._population_auc_ceiling
+        extra["population_ceiling_exceeded"] = bool(
+            ceiling is not None
+            and op_plan["required_auc"] > ceiling + self.tolerance_abs
+        )
+        extra["n_positives"] = self._n_positives
         return extra
 
     def _enforce_operating_point(self, report: Dict) -> None:
@@ -547,12 +615,25 @@ class ControlledMLModel:
         if self.goal_value is not None:
             other = "sensitivity" if self.binding == "ppv" else "ppv"
             checks.append((other, self.goal_value, "goal"))
+        # The curve spec is a target too. Without this, binding on PPV
+        # (always satisfiable, since the threshold is placed exactly on
+        # it) means a target_auc-only config can miss its AUC by any
+        # margin and still report success -- the very failure this mode
+        # exists to prevent.
+        if report.get("required_auc") is not None:
+            checks.append(("auc", report["required_auc"], "curve"))
 
         for metric, target, role in checks:
             achieved = report[f"achieved_{metric}"]
-            tol = gate_tolerance(
-                target, self.tolerance_rel, self.tolerance_abs
-            )
+            if metric == "auc":
+                # AUC lives on (0.5, 1.0]; a relative tolerance would be
+                # meaningless here (20% of 0.999 is 0.2, wider than the
+                # entire useful range). Use the absolute floor.
+                tol = self.tolerance_abs
+            else:
+                tol = gate_tolerance(
+                    target, self.tolerance_rel, self.tolerance_abs
+                )
             if abs(achieved - target) > tol:
                 misses.append(
                     f"  {role} {metric}: configured {target:.4f}, "
@@ -567,15 +648,36 @@ class ControlledMLModel:
         report["accepted_infeasible"] = bool(self.allow_infeasible)
         report["gate_misses"] = misses
 
-        # Same symptom, opposite remedies: an unreachable ask needs
-        # different targets, a stalled search needs a wider grid. Report
-        # the AUC shortfall either way, since it is the quantity that
-        # explains the miss, and add the boundary note when it applies.
+        # Same symptom, three causes, different remedies. Report the AUC
+        # shortfall either way, since it is the quantity that explains the
+        # miss, then name the cause.
         cause = (
             f"Achieved AUC {report['achieved_auc']:.4f} against a "
             f"required {report['required_auc']:.4f}."
         )
-        if report.get("auc_search_boundary_pinned"):
+        ceiling = report.get("population_auc_ceiling")
+
+        # Cause 1 (dominant): the POPULATION cannot host this model. An
+        # oracle knowing every true risk tops out at `ceiling`, so no
+        # amount of fitting reaches the requirement. This outranks a
+        # pinned grid -- the search pins BECAUSE it is chasing something
+        # unreachable, so widening the grid would waste the user's time.
+        if (ceiling is not None
+                and report["required_auc"]
+                > ceiling + self.tolerance_abs):
+            cause += (
+                f"\nThat requirement exceeds this population's Bayes "
+                f"ceiling of {ceiling:.4f} -- the AUC of an oracle that "
+                f"knows every entity's true risk. No model of any kind "
+                f"can reach it on this population, because outcomes are "
+                f"stochastic draws from risk and this risk distribution "
+                f"is not spread out enough to separate them further.\n"
+                f"Options: lower the goal, relax the binding target, or "
+                f"increase risk heterogeneity in the population (for "
+                f"beta_distributed_risks, a LOWER `concentration` widens "
+                f"the risk spread and raises this ceiling)."
+            )
+        elif report.get("auc_search_boundary_pinned"):
             cause += (
                 "\nThe search stopped on its own grid boundary ("
                 + "; ".join(report["auc_search_pinned_params"])
@@ -771,6 +873,7 @@ class ControlledMLModel:
             "achieved_calibration_slope": cal,
             "flag_rate": m["flag_rate"],
             "prevalence": self.prevalence,
+            "population_auc_ceiling": self._population_auc_ceiling,
         }
 
         if feasibility:
