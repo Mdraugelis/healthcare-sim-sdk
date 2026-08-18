@@ -1,0 +1,33 @@
+# Institution denylist — TEMPLATE (safe to commit; contains no real terms).
+#
+# Copy this file to `.institution-denylist` (which is gitignored) and
+# replace the placeholders below with your real confidential terms. The
+# pre-commit guard (scripts/check_no_institution_terms.py) reads the local
+# copy and blocks any commit whose staged content or commit message
+# contains one of these terms.
+#
+# Format, one rule per line:
+#   - Blank lines and lines starting with '#' are ignored.
+#   - 're:<pattern>'  is a case-insensitive regular expression.
+#   - anything else   is a case-insensitive literal substring.
+#
+# Keep the REAL list local only. Do not commit `.institution-denylist`.
+
+# --- Organization names / abbreviations ---
+# YourHealthSystemName
+# YHS
+
+# --- Campus / site codes (use word boundaries to avoid false positives) ---
+# re:\bSITE_A\b
+# re:\bSITE_B\b
+
+# --- Benchmark vendors under confidentiality ---
+# BenchmarkVendorName
+
+# --- Internal identifiers (example patterns — tune to your trackers) ---
+# Work-item numbers like "Work Item 123456" or "WI-123456":
+# re:\bwork[- ]?item[- #]*\d{4,}\b
+# re:\bWI-\d{4,}\b
+
+# --- Named individuals (add as needed) ---
+# Firstname Lastname

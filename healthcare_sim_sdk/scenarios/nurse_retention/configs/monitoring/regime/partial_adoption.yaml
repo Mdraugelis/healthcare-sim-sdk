@@ -1,0 +1,6 @@
+# @package _global_
+# Regime F — Partial Adoption
+# 50% of managers use AI-directed targeting; 50% fall back to SOC.
+regime: partial_adoption
+policy:
+  manager_adherence_rate: 0.5

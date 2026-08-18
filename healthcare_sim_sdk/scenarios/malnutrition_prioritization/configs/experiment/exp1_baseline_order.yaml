@@ -1,0 +1,8 @@
+# @package _global_
+# Exp 1: how much of the ML benefit depends on what the CURRENT order
+# is? (design doc section 6.1)
+runner:
+  experiment_name: exp1_baseline_order
+sweep:
+  param: baseline_worklist_order
+  values: [mst_then_fifo, fifo, consult_first]

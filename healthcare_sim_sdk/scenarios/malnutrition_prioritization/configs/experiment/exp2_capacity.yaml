@@ -1,0 +1,8 @@
+# @package _global_
+# Exp 2 (HEADLINE, H3): benefit vs RDN capacity at the FIXED model.
+# The entire response curve is attributable to the staffing constraint.
+runner:
+  experiment_name: exp2_capacity
+sweep:
+  param: rdn_assessments_per_day
+  values: [10, 20, 30, 50, 80]

@@ -1,0 +1,9 @@
+# @package _global_
+# Exp 6 (H6): coded-rate trajectory vs the site's external benchmark
+# percentile band, with the secular documentation trend running in
+# BOTH branches. Audit flag = final coded rate above cohort Pct90.
+runner:
+  experiment_name: exp6_coding
+sweep:
+  param: flag_driven_coding_uplift
+  values: [0.0, 0.02, 0.05, 0.10]

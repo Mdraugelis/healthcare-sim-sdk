@@ -1,0 +1,32 @@
+# @package _global_
+# Exp 7 (LOS & readmission, Part A) -- QUEUE STAGE.
+# Simulates the three-path queue ONCE per (capacity, prevalence) cell
+# at efficacy ZERO and dumps per-patient arrays (npz per seed) for the
+# outcome overlay, which re-applies the two-channel effect functions
+# across the full efficacy grid without re-simulating.
+# Runner: run_los_readmit_sweep.py (NOT run_experiment.py).
+runner:
+  experiment_name: exp7_los_readmit_queue
+  horizon_days: 180          # outcome-accrual horizon (dossier 06)
+  n_seeds: 200
+
+scenario:
+  # Queue stage runs with both effect channels OFF -- the runner
+  # asserts this. Efficacy is applied downstream by outcome_overlay.py.
+  eff_detect_rel: 0.0
+  eff_timing_rel: 0.0
+  eff_detect_los: 0.0
+  eff_timing_los: 0.0
+
+sweep:
+  param: cell
+  values:
+    - {rdn_assessments_per_day: 20, true_prevalence: 0.25}
+    - {rdn_assessments_per_day: 20, true_prevalence: 0.30}
+    - {rdn_assessments_per_day: 20, true_prevalence: 0.40}
+    - {rdn_assessments_per_day: 30, true_prevalence: 0.25}
+    - {rdn_assessments_per_day: 30, true_prevalence: 0.30}
+    - {rdn_assessments_per_day: 30, true_prevalence: 0.40}
+    - {rdn_assessments_per_day: 50, true_prevalence: 0.25}
+    - {rdn_assessments_per_day: 50, true_prevalence: 0.30}
+    - {rdn_assessments_per_day: 50, true_prevalence: 0.40}

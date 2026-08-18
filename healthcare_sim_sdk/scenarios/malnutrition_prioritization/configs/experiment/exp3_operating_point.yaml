@@ -1,0 +1,16 @@
+# @package _global_
+# Exp 3 (reframed): WORKLIST POLICY comparison -- the deployed
+# full-census ranking (rank_all) vs legacy cutoff policies. Under
+# rank_all the score cut no longer gates work order; it only labels
+# risk for the coding channel.
+runner:
+  experiment_name: exp3_policy
+sweep:
+  param: operating_point
+  values:
+    - {operating_mode: rank_all}
+    - {operating_mode: top_k, top_k_fraction: 0.05}
+    - {operating_mode: top_k, top_k_fraction: 0.15}
+    - {operating_mode: top_k, top_k_fraction: 0.30}
+    - {operating_mode: threshold, threshold: 0.50}
+    - {operating_mode: threshold, threshold: 0.60}

@@ -1,0 +1,13 @@
+# @package _global_
+# Exp 5 (H7, new semantics): safety-net erosion = RDNs progressively
+# ignoring the retained MST reference floor (path 3). Erosion level
+# grows as decay*(week); level 1.0 = the floor is never honored.
+# Run at capacity where the ranked list is not exhausted daily.
+runner:
+  experiment_name: exp5_erosion
+scenario:
+  safety_net_preserved: false
+  rdn_assessments_per_day: 20
+sweep:
+  param: unflagged_assessment_decay_per_week
+  values: [0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0]

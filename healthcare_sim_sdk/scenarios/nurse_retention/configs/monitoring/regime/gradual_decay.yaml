@@ -1,0 +1,11 @@
+# @package _global_
+# Regime C — Gradual Decay
+# Effectiveness ramps linearly from 0.5 to 0.0 between weeks 26-52.
+regime: gradual_decay
+policy:
+  effectiveness:
+    base: 0.50
+    change_points:
+      - [26, 0.50]
+      - [52, 0.0]
+    interpolation: linear

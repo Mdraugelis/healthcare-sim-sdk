@@ -1,0 +1,17 @@
+# @package _global_
+# Template for a site config (site files are gitignored).
+#
+# Copy to <your_site>.yaml and fill with local values: coded
+# prevalence from your coding data, severity mix, coding-capture
+# calibration, secular documentation-program trend, and your external
+# benchmark percentile curve. Values below are ILLUSTRATIVE ONLY.
+campus_name: example
+scenario:
+  site: 0
+  coded_prevalence: 0.10            # coded target-dx rate, local data
+  severity_moderate_fraction: 0.60  # moderate:severe split, local data
+  coding_capture_rate: 0.585         # calibrate so counterfactual coded
+  #                                   rate reproduces coded_prevalence
+  secular_coding_trend_per_quarter: 0.0   # CDI-program drift, local
+  cohort_benchmark_pct50: 0.10      # external benchmark percentiles
+  cohort_benchmark_pct90: 0.15      #   (e.g. cohort comparison data)

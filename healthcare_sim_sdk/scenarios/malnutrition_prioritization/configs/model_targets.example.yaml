@@ -1,0 +1,29 @@
+# Template for configs/model_targets.yaml (which is gitignored).
+#
+# Copy this file to model_targets.yaml and fill in YOUR model's
+# published/validated performance characteristics. The values below
+# are ILLUSTRATIVE ONLY -- they are not calibrated and are not a real
+# model. Institution-specific model documentation should never be
+# committed to a public repository.
+target_auroc: 0.85            # global discrimination target
+target_lifts:                 # subgroup AUPRC / global AUPRC targets
+  female: 0.90
+  black: 0.85
+  hl: 0.75
+target_capture:               # capture@K (recall in top K fraction)
+  0.01: 0.05
+  0.05: 0.22
+  0.10: 0.40
+  0.15: 0.52
+  0.20: 0.62
+target_precision:             # precision@K
+  0.01: 0.60
+  0.05: 0.55
+  0.10: 0.50
+  0.20: 0.39
+target_sens: 0.52             # sensitivity at the deployed threshold
+target_ppv: 0.44              # PPV at the deployed threshold
+flag_rate_anchor: 0.15        # fraction flagged at the threshold
+threshold_anchor: 0.60        # the deployed score threshold
+calibration_prevalence: 0.125 # label prevalence the targets refer to
+warm_start: [1.85, 0.5, 0.2, 0.5, 0.5, 0.5, 0.5, 0.15, 0.5]

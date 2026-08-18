@@ -1,0 +1,5 @@
+# @package _global_
+# Exp 4 (H4): subgroup missed-case equity at as-measured model gaps.
+runner:
+  experiment_name: exp4_equity
+sweep: null

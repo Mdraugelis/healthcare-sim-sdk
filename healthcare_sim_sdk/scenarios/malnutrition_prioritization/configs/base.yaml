@@ -1,0 +1,69 @@
+# Base config: mirrors MalnutritionConfig defaults (see scenario.py for
+# [S]/[O]/[L] provenance). Site-specific facts live in gitignored
+# campus/<site>.yaml files (template: campus/example.yaml); experiment
+# sweeps in experiment/*.yaml. [O] placeholders are tagged.
+defaults:
+  - _self_
+  - campus: example
+  - experiment: null
+
+scenario:
+  # population / flow
+  initial_census: 300            # [O] placeholder
+  admissions_per_day: 40         # [O] placeholder
+  true_prevalence: 0.30          # [L] sweep-tested
+  poa_fraction: 0.70             # [O]/[L] NOT the coded 97%
+  los_mean_days: 5.5             # [O] placeholder
+  los_mean_malnourished: 6.9
+  los_sd_days: 2.5
+  hl_prevalence_multiplier: 0.55
+  severity_progression_per_day: 0.08
+  # ML operating point (model itself frozen in model_frozen.yaml)
+  ml_enabled: true
+  operating_mode: rank_all      # deployed: full-census score ranking
+  top_k_fraction: 0.15          # legacy cutoff modes kept for
+  threshold: 0.60               #   policy-comparison runs
+  mst_reference_floor: null     # path-3 safety net; null -> threshold
+  provider_consult_ppv: 0.60    # [L] SWEEP 0.4-0.8; [O] validate
+  insuff_data_rate: 0.05         # [O]
+  # baseline workflow ([O] levers)
+  mst_sensitivity: 0.78
+  mst_specificity: 0.82
+  mandatory_consult_fraction: 0.25   # [O] placeholder
+  phys_consult_rate_per_day: 0.10    # [O] placeholder
+  baseline_worklist_order: mst_then_fifo   # [O]
+  baseline_time_to_consult_days: 3.0       # [O] placeholder, unmeasured
+  # capacity (THE binding constraint)
+  rdn_assessments_per_day: 30    # [O] Phillips-2019 anchored
+  # efficacy (weakest evidence; swept from 0)
+  assess_to_diagnosis_rate: 0.90
+  physician_confirm_rate: 0.95
+  # two-channel clinical efficacy (detection / timing; sweep from 0)
+  eff_detect_rel: 0.20
+  eff_timing_rel: 0.01
+  eff_detect_los: 0.5
+  eff_timing_los: 0.05
+  timing_d_ref_days: 5.0
+  min_stay_days: 1.0
+  readmit_base_nonmal: 0.13
+  readmit_base_moderate: 0.20
+  readmit_base_severe: 0.30
+  cdi_coder_substantiation_rate: 0.95
+  flag_driven_coding_uplift: 0.0
+  # safety net
+  safety_net_preserved: true
+  unflagged_assessment_decay_per_week: 0.0
+  # harm weights (Exp 3 objective)
+  harm_per_day_moderate: 0.5
+  harm_per_day_severe: 1.0
+  harm_per_miss: 5.0
+  harm_per_fp_assessment: 0.25
+
+runner:
+  experiment_name: single_run
+  horizon_days: 84
+  n_seeds: 30
+  seed_start: 1
+  output_root: outputs/malnutrition
+
+sweep: null

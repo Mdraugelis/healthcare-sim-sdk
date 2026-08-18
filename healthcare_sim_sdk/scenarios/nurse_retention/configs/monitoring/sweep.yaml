@@ -1,0 +1,27 @@
+# Monitoring Validation Sweep Config
+# ====================================
+# Full 6-regime × 30-seed sweep for overnight execution.
+#
+# Usage (from repo root):
+#   python healthcare_sim_sdk/scenarios/nurse_retention/monitoring_validation.py \
+#       --multirun \
+#       regime=calibrated_success,null_program,gradual_decay,capacity_collapse,model_drift,partial_adoption \
+#       seed='range(1000,1030)'
+#
+# With joblib parallelism (recommended for multi-core workstations):
+#   python healthcare_sim_sdk/scenarios/nurse_retention/monitoring_validation.py \
+#       --multirun \
+#       hydra/launcher=joblib \
+#       hydra.launcher.n_jobs=-2 \
+#       regime=calibrated_success,null_program,gradual_decay,capacity_collapse,model_drift,partial_adoption \
+#       seed='range(1000,1030)'
+#
+# Expected compute:
+#   ~2 min per (regime, seed) cell on a modern workstation
+#   6 regimes × 30 seeds = 180 cells
+#   Serial: ~6 hours
+#   8-core with n_jobs=-2 (7 workers): ~50 minutes
+#
+# Output: outputs/monitoring_validation_sweep/<regime>_seed<seed>/
+#   Each cell: config.json, metrics.json, monitoring_run.json, ground_truth.npz
+#   Sweep root: sweep_summary.json (after register_sweep.py)

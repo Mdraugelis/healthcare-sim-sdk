@@ -1,0 +1,63 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.DS_Store
+# Claude Code settings (private), but keep shared files
+.claude/*
+!.claude/agents/
+!.claude/invariants.yaml
+
+# Generated experiment/simulation outputs (not the package code)
+/experiments/
+outputs/
+**/outputs/
+reports/*
+!reports/trews_baseline_detection_sweep.md
+!reports/noshow_targeted_reminders_proof_points.md
+!reports/nurse_retention_sweep.md
+!reports/monitoring_validation/
+!reports/monitoring_validation/monitoring_validation.md
+catalog.json
+*_dashboard.html
+
+# --- Data boundary (see docs/data_boundary.md) --------------------------
+# Default-private working space: anything under a `local/` directory, at
+# any depth, is never tracked. Put institution-specific working material
+# here; promote a sanitized copy to a tracked *.example.* file to share.
+**/local/
+
+# Institution-specific values by suffix. The sanitized counterpart uses
+# *.example.* and IS tracked.
+*.private.yaml
+*.private.yml
+*.private.json
+*.private.md
+
+# Local denylist of confidential terms read by the pre-commit guard.
+# The tracked template is .institution-denylist.example (safe, generic).
+.institution-denylist
+
+# Ad-hoc analytical-first passes: these hold institution-confidential
+# actuals (volumes, baseline rates, dashboard pulls) and stay local only
+analyses/
+
+# Task definition files (local working docs, not repo artifacts)
+*-task.md
+*-task.docx
+~$*
+tasks/
+
+# Malnutrition scenario: site-specific facts stay local (institution-
+# confidential values live only in these gitignored files; tracked
+# example templates document the structure)
+healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs/campus/*
+!healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs/campus/example.yaml
+healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs/model_frozen.yaml
+healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs/model_targets.yaml
