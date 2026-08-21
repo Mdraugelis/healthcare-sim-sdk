@@ -190,10 +190,12 @@ class TestGate:
         base.update(kw)
         return ControlledMLModel(**base)
 
-    def _report(self, ppv, sens, **extra):
+    def _report(self, ppv, sens, achieved_auc=0.85, required_auc=0.85,
+                **extra):
+        """AUC defaults to on-target; pass required_auc to force a miss."""
         report = {
             "achieved_ppv": ppv, "achieved_sensitivity": sens,
-            "achieved_auc": 0.85, "required_auc": 0.95,
+            "achieved_auc": achieved_auc, "required_auc": required_auc,
         }
         report.update(extra)
         return report
@@ -202,6 +204,26 @@ class TestGate:
         self._model()._enforce_operating_point(
             self._report(ppv=0.15, sens=0.80)
         )
+
+    def test_auc_miss_alone_raises(self):
+        """Binding on PPV is always satisfiable, so without this a
+        target_auc-only config could miss its AUC silently."""
+        with pytest.raises(OperatingPointError, match="curve auc"):
+            self._model()._enforce_operating_point(
+                self._report(ppv=0.15, sens=0.80, required_auc=0.95)
+            )
+
+    def test_auc_uses_an_absolute_tolerance(self):
+        """A relative tolerance is meaningless on AUC: 20% of 0.999 is
+        0.2, wider than the whole useful range above chance."""
+        model = self._model()
+        model._enforce_operating_point(          # 0.015 miss -> within
+            self._report(ppv=0.15, sens=0.80, required_auc=0.865)
+        )
+        with pytest.raises(OperatingPointError, match="curve auc"):
+            model._enforce_operating_point(      # 0.03 miss -> outside
+                self._report(ppv=0.15, sens=0.80, required_auc=0.88)
+            )
 
     def test_undershoot_raises(self):
         with pytest.raises(OperatingPointError, match="under by"):
@@ -229,7 +251,7 @@ class TestGate:
     def test_error_names_the_auc_shortfall(self):
         with pytest.raises(OperatingPointError, match="required 0.9500"):
             self._model()._enforce_operating_point(
-                self._report(ppv=0.15, sens=0.30)
+                self._report(ppv=0.15, sens=0.30, required_auc=0.95)
             )
 
     def test_converged_search_blames_the_distribution(self):
@@ -259,6 +281,59 @@ class TestGate:
         assert len(caught) == 1
         assert report["accepted_infeasible"] is True
         assert any("sensitivity" in m for m in report["gate_misses"])
+
+    def test_population_ceiling_blames_the_population(self):
+        """Third cause: no model can host this, whatever the optimizer."""
+        with pytest.raises(OperatingPointError, match="Bayes ceiling"):
+            self._model()._enforce_operating_point(
+                self._report(ppv=0.15, sens=0.30, required_auc=0.95,
+                             population_auc_ceiling=0.82)
+            )
+
+    def test_ceiling_breach_needs_more_than_the_tolerance(self):
+        """The ceiling is an ESTIMATE with sampling noise, so a
+        requirement sitting just above it must not be blamed on the
+        population -- that diagnosis has to clear the tolerance."""
+        with pytest.raises(OperatingPointError) as exc:
+            self._model()._enforce_operating_point(
+                self._report(ppv=0.15, sens=0.30, required_auc=0.95,
+                             population_auc_ceiling=0.94)  # 0.01 < 0.02
+            )
+        assert "Bayes ceiling" not in str(exc.value)
+
+    def test_ceiling_outranks_a_pinned_grid(self):
+        """A search pins BECAUSE it chases the unreachable.
+
+        Telling the user to widen the grid would waste their time when
+        the population itself cannot support the requirement, so the
+        ceiling diagnosis must win.
+        """
+        with pytest.raises(OperatingPointError) as exc:
+            self._model()._enforce_operating_point(
+                self._report(
+                    ppv=0.15, sens=0.30, required_auc=0.95,
+                    population_auc_ceiling=0.82,
+                    auc_search_boundary_pinned=True,
+                    auc_search_pinned_params=["noise_scale=0.7000"],
+                )
+            )
+        assert "Bayes ceiling" in str(exc.value)
+        assert "widen correlation_grid" not in str(exc.value)
+
+    def test_grid_blamed_when_ceiling_is_not_the_problem(self):
+        """required_auc 0.95 sits UNDER a 0.99 ceiling, so the grid is
+        the remaining explanation."""
+        with pytest.raises(OperatingPointError) as exc:
+            self._model()._enforce_operating_point(
+                self._report(
+                    ppv=0.15, sens=0.30,
+                    population_auc_ceiling=0.99,
+                    auc_search_boundary_pinned=True,
+                    auc_search_pinned_params=["noise_scale=0.7000"],
+                )
+            )
+        assert "grid boundary" in str(exc.value)
+        assert "Bayes ceiling" not in str(exc.value)
 
 
 # -- End to end -----------------------------------------------------------
@@ -329,6 +404,69 @@ class TestEndToEnd:
         )
         with pytest.raises(OperatingPointError, match="unreachable"):
             model.fit(labels, risks, rng, n_iterations=1, **FAST_GRID)
+
+
+class TestPopulationCeiling:
+    """An oracle knowing every true risk still cannot order stochastic
+    outcomes perfectly. Its AUC caps every model on that population."""
+
+    def test_ceiling_is_reported_for_every_mode(self):
+        labels, risks, rng = make_population(0.10)
+        model = ControlledMLModel(mode="discrimination", target_auc=0.75)
+        report = model.fit(labels, risks, rng, n_iterations=1, **FAST_GRID)
+        assert 0.5 < report["population_auc_ceiling"] < 1.0
+
+    def test_homogeneous_population_has_a_lower_ceiling(self):
+        """Concentration is the knob; this is the whole mechanism."""
+        ceilings = {}
+        for conc in (0.15, 2.0):
+            rng = np.random.default_rng(5)
+            risks = beta_distributed_risks(
+                n_patients=20000, annual_incident_rate=0.10,
+                concentration=conc, rng=rng,
+            )
+            labels = (rng.random(20000) < risks).astype(int)
+            model = ControlledMLModel(mode="discrimination", target_auc=0.7)
+            ceilings[conc] = model.fit(
+                labels, risks, rng, n_iterations=1, **FAST_GRID
+            )["population_auc_ceiling"]
+        assert ceilings[0.15] > ceilings[2.0] + 0.05
+
+    def test_impossible_target_auc_fails_before_the_search(self):
+        """Do not spend a grid search discovering the impossible."""
+        labels, risks, rng = make_population(0.10)
+        model = ControlledMLModel(
+            mode="operating_point", binding="ppv", binding_value=0.15,
+            target_auc=0.999,
+        )
+        with pytest.raises(OperatingPointError, match="Bayes ceiling"):
+            model.fit(labels, risks, rng, n_iterations=1, **FAST_GRID)
+
+    def test_error_names_heterogeneity_as_a_remedy(self):
+        labels, risks, rng = make_population(0.10)
+        model = ControlledMLModel(
+            mode="operating_point", binding="ppv", binding_value=0.15,
+            target_auc=0.999,
+        )
+        with pytest.raises(OperatingPointError) as exc:
+            model.fit(labels, risks, rng, n_iterations=1, **FAST_GRID)
+        assert "concentration" in str(exc.value)
+
+    def test_override_still_fits_past_the_ceiling(self):
+        """allow_infeasible must reach the fit and record the gap, not
+        be blocked by the early bail-out."""
+        labels, risks, rng = make_population(0.10)
+        model = ControlledMLModel(
+            mode="operating_point", binding="ppv", binding_value=0.15,
+            target_auc=0.999, allow_infeasible=True,
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            report = model.fit(labels, risks, rng, n_iterations=1,
+                               **FAST_GRID)
+        assert any(issubclass(c.category, UserWarning) for c in caught)
+        assert report["population_ceiling_exceeded"] is True
+        assert report["accepted_infeasible"] is True
 
 
 # -- Backward compatibility ----------------------------------------------
