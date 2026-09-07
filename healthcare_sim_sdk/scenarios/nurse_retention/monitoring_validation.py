@@ -29,11 +29,11 @@ All configs in configs/monitoring/ relative to this file.
 import json
 import logging
 import time
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 import hydra
+from hydra.core.hydra_config import HydraConfig
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
@@ -42,6 +42,15 @@ from healthcare_sim_sdk.core.engine import (
     CounterfactualMode,
 )
 from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.scenarios.nurse_retention.model_verification import (
+    verify_frozen_scoring_path,
+)
+from healthcare_sim_sdk.scenarios.nurse_retention.monitoring.evaluation import (
+    MonitoringClaim, evaluate_claims,
+)
+from healthcare_sim_sdk.scenarios.nurse_retention.monitoring.review import (
+    write_monitoring_review_packet,
+)
 from healthcare_sim_sdk.scenarios.nurse_retention.monitoring.harness import (
     MonitoringHarness,
 )
@@ -116,6 +125,9 @@ def _build_retention_config(cfg: DictConfig) -> RetentionConfig:
             cfg.get("prediction_interval", 2),
         ),
         model_auc=_resolve_tvp(model.get("auc", 0.80)),
+        model_auc_tolerance=float(model.get("auc_tolerance", 0.05)),
+        model_validation_min_positives=int(model.get("validation_min_positives", 20)),
+        model_validation_min_negatives=int(model.get("validation_min_negatives", 20)),
         max_interventions_per_manager_per_week=_resolve_tvp(
             policy.get("max_interventions_per_week", 6),
         ),
@@ -163,6 +175,26 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
     )
     mon_run = harness.run_from_results(results, rc)
     harness_time = time.time() - t1
+
+    # Evaluate declared events, preserving pre-change alarms and censoring.
+    claim_specs = cast(list[dict[str, Any]], OmegaConf.to_container(
+        cfg.get("monitoring_claims", OmegaConf.create([])), resolve=True,
+    ))
+    claims = [MonitoringClaim(**{
+        "horizon": rc.n_weeks - 1, **spec,
+    }) for spec in claim_specs]
+    claim_results = evaluate_claims(mon_run, claims)
+    mon_run.metadata["monitoring_claim_evaluations"] = claim_results
+    mon_run.metadata["monitoring_claims_status"] = "PASS" if claims else "NOT_RUN"
+    # Independent cohort, frozen final scorer, same actual predict method.
+    # Seed offset reserves a distinct cohort without consuming run streams.
+    validation_seed = int(cfg.get("model_validation_seed", seed + 10_000_000))
+    frozen_validation = verify_frozen_scoring_path(
+        scenario, validation_seed=validation_seed,
+        n_entities=int(cfg.get("model_validation_n_nurses", 5000)),
+        t=max(results.predictions, default=0),
+    )
+    mon_run.metadata["independent_frozen_scoring_validation"] = frozen_validation
 
     # Extract key metrics for the lifecycle pipeline
     final_t = rc.n_weeks - 1
@@ -220,10 +252,21 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
             first_t4.week if first_t4 else None
         ),
         "tier3_latest_estimate": tier3_latest,
+        "monitoring_claim_evaluations": claim_results,
+        "independent_frozen_scoring_validation": frozen_validation,
+        "monitoring_mode": tier3_mode,
+        "legacy_first_detection_semantics": (
+            "Earliest alert of any metric/direction in the full run; "
+            "not evidence of detecting a later specified change."
+        ),
+        "tier3_interval_semantics": (
+            "Estimator 95% interval at each repeated look; "
+            "not an interval for simulation seed variability or familywise coverage."
+        ),
     }
 
     # Save the full MonitoringRun as a separate JSON
-    output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
+    output_dir = Path(HydraConfig.get().runtime.output_dir)
     run_path = output_dir / "monitoring_run.json"
     with open(run_path, "w") as f:
         json.dump(mon_run.to_dict(), f, indent=2, default=str)
@@ -231,26 +274,30 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
     # Save ground truth numpy arrays for analysis
     np.savez_compressed(
         output_dir / "ground_truth.npz",
-        factual_departures=mon_run.ground_truth_factual_departures,
-        cf_departures=mon_run.ground_truth_counterfactual_departures,
-        factual_retention=mon_run.ground_truth_factual_retention,
-        cf_retention=mon_run.ground_truth_counterfactual_retention,
+        factual_departures=cast(np.ndarray, mon_run.ground_truth_factual_departures),
+        cf_departures=np.asarray([
+            results.counterfactual_outcomes[t].metadata["total_departures"]
+            for t in sorted(results.counterfactual_outcomes)
+        ]),
+        factual_retention=cast(np.ndarray, mon_run.ground_truth_factual_retention),
+        cf_retention=np.asarray([
+            results.counterfactual_outcomes[t].metadata["retention_rate"]
+            for t in sorted(results.counterfactual_outcomes)
+        ]),
     )
 
     # Lifecycle
-    config_dict = {
+    config_dict = cast(dict[str, Any], OmegaConf.to_container(cfg, resolve=True))
+    config_dict.update({
         "scenario": "nurse_retention_monitoring",
         "experiment_name": f"monitoring_{regime}",
-        "regime": regime,
-        "seed": seed,
-        "n_nurses": rc.n_nurses,
-        "n_weeks": rc.n_weeks,
-        "tier3_mode": tier3_mode,
-    }
-    try:
-        finalize_experiment(output_dir, config_dict, metrics)
-    except Exception as exc:
-        logger.warning("finalize_experiment failed: %s", exc)
+        "model_validation_seed": validation_seed,
+    })
+    packet_path = write_monitoring_review_packet(
+        results, rc, mon_run, config_dict, metrics, output_dir / "review",
+    )
+    logger.info("Review packet: %s", packet_path)
+    finalize_experiment(output_dir, config_dict, metrics)
 
     total_time = time.time() - t0
     logger.info(
@@ -295,7 +342,8 @@ def main(cfg: DictConfig) -> None:
         f"T2={metrics['tier2_n_events']}  "
         f"T3={metrics['tier3_n_events']}  "
         f"T4={metrics['tier4_n_events']}\n"
-        f"First detect:  T1@wk{metrics['tier1_first_detection_week']}  "
+        f"Legacy first alert (any event): "
+        f"T1@wk{metrics['tier1_first_detection_week']}  "
         f"T2@wk{metrics['tier2_first_detection_week']}  "
         f"T3@wk{metrics['tier3_first_detection_week']}  "
         f"T4@wk{metrics['tier4_first_detection_week']}\n"

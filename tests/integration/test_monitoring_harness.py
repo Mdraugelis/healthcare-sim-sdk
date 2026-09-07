@@ -5,6 +5,9 @@ verifies the output has the expected structure. These tests are
 end-to-end: scenario + engine + aggregator + four tiers.
 """
 
+import numpy as np
+import pytest
+
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
@@ -67,8 +70,14 @@ class TestHarnessBasicRun:
         harness = MonitoringHarness()
         run = harness.run_from_results(results, config)
 
-        # Prediction interval 2 over 13 weeks → weeks 0, 2, 4, 6, 8, 10, 12
-        assert len(run.tier4_prediction_log) == 7
+        # Scores at weeks 0..10 have fully observed two-week future outcomes.
+        # The week-12 prediction remains NOT_RUN until its horizon matures.
+        assert len(run.tier4_prediction_log) == 6
+        assert run.tier4_prediction_log[-1]["score_week"] == 10
+        assert run.tier4_prediction_log[-1]["week"] == 12
+        assert run.metadata["prediction_performance"][-1][
+            "actual_future_outcomes_status"
+        ] == "NOT_RUN"
         for entry in run.tier4_prediction_log:
             assert "week" in entry
             assert "scores" in entry
@@ -111,20 +120,33 @@ class TestHarnessTier3:
         assert first.mode == "cits_with_cf"
         assert first.n_observations > 0
 
-    def test_tier3_effect_is_negative_in_calibrated_regime(self):
-        """Calibrated regime: factual < counterfactual turnover, so
-        the Tier 3 effect estimate should be negative (AI reduces
-        turnover)."""
+    def test_tier3_endpoint_reconciles_to_raw_branch_rates(self):
+        """An endpoint estimate need not share the cumulative-effect sign.
+
+        Reconcile directly to a hand-computed fitted endpoint on raw
+        departure-rate differences, including the week-zero denominator.
+        """
         config = RetentionConfig(n_nurses=1000, n_weeks=52)
         results = _run_sim(config)
         harness = MonitoringHarness(tier3_mode="cits_with_cf")
         run = harness.run_from_results(results, config)
 
         assert len(run.tier3_estimates) >= 3
-        # The final quarterly estimate should show a negative effect
-        # (factual turnover < counterfactual turnover, on average)
         final = run.tier3_estimates[-1]
-        assert final.effect_estimate < 0
+        rates = []
+        for branch in (results.outcomes, results.counterfactual_outcomes):
+            active = config.n_nurses
+            weekly_rates = []
+            for t in sorted(branch):
+                weekly_rates.append(float(branch[t].events.sum()) / active)
+                active = branch[t].metadata["n_active"]
+            rates.append(np.asarray(weekly_rates))
+        difference = rates[0] - rates[1]
+        time = np.arange(len(difference))
+        centered = time - time.mean()
+        slope = np.dot(centered, difference) / np.dot(centered, centered)
+        expected_endpoint = difference.mean() + slope * (time[-1] - time.mean())
+        assert final.effect_estimate == pytest.approx(expected_endpoint)
 
 
 class TestHarnessDetections:

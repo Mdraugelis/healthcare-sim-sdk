@@ -4,3 +4,12 @@
 regime: partial_adoption
 policy:
   manager_adherence_rate: 0.5
+
+# Windows are inclusive; the runner sets horizon to n_weeks - 1.
+monitoring_claims:
+  - claim_id: partial_adoption
+    tier: 1
+    metric: adoption_rate
+    direction: down
+    change_week: 0
+    eligibility_start: 8

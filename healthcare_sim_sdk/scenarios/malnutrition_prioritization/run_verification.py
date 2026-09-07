@@ -150,6 +150,14 @@ def stage_a(recalibrate: bool = True) -> bool:
     (REPORT_DIR / "stage_a_report.json").write_text(json.dumps(
         {"gates": rows, "informational": info,
          "all_pass": all_pass}, indent=2))
+    from ...experiments.review import write_certificate
+    from .review import certificate_identity
+    from .subgroup_performance import TARGETS_PATH
+    write_certificate(
+        REPORT_DIR / "stage_a_certificate.json",
+        certificate_identity("A", MalnutritionConfig(), TARGETS_PATH),
+        rows, ["stage_a_report.json"],
+    )
     print(f"\nStage A: {'PASS' if all_pass else 'FAIL'} "
           f"(report: {REPORT_DIR / 'stage_a_report.json'})")
     return all_pass

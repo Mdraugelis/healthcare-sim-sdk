@@ -5,6 +5,7 @@ repos:
         name: SDK invariant checks
         entry: python scripts/check_invariants.py
         language: python
+        additional_dependencies: [PyYAML>=6.0]
         always_run: true
         pass_filenames: false
 

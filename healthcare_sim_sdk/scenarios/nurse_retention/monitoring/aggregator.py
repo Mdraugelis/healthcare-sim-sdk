@@ -74,9 +74,9 @@ class WeeklyDashboardRow:
     new_hire_fraction: float
 
     # Tool adoption (Tier 1 detects partial adoption in Regime F)
-    n_managers_adopting: int
+    n_managers_adopting: Optional[int]
     n_managers_total: int
-    adoption_rate: float
+    adoption_rate: Optional[float]
 
     # Per-manager detail (for manager-level Tier 1 and Regime F)
     per_manager: List[ManagerWeeklyRow] = field(default_factory=list)
@@ -102,7 +102,9 @@ class WeeklyDashboardRow:
             "new_hire_fraction": float(self.new_hire_fraction),
             "n_managers_adopting": self.n_managers_adopting,
             "n_managers_total": self.n_managers_total,
-            "adoption_rate": float(self.adoption_rate),
+            "adoption_rate": (
+                float(self.adoption_rate) if self.adoption_rate is not None else None
+            ),
             "per_manager": [
                 {
                     "manager_id": m.manager_id,
@@ -195,7 +197,9 @@ def aggregate(
     total_check_ins = ai_check_ins + soc_interventions_this_week
 
     n_managers = int(state.n_managers)
-    check_in_target = capacity_this_week * n_managers
+    check_in_target = capacity_this_week * n_managers * (
+        2 if interventions is not None else 1
+    )
     adherence = (
         total_check_ins / check_in_target
         if check_in_target > 0
@@ -216,21 +220,15 @@ def aggregate(
         team_active = team_mask & active_mask
         team_size = int(team_active.sum())
 
-        # Per-manager check-ins: we don't track this exactly, so
-        # we approximate by assuming each adopting manager does
-        # capacity_this_week AI check-ins (if prediction fired)
-        # plus SOC check-ins in proportion to team eligibility.
-        mgr_ai_checkins = (
-            capacity_this_week
-            if (
-                interventions is not None
-                and bool(state.manager_adopts_ai[mgr_id])
-            )
-            else 0
+        treated = (
+            np.asarray(interventions.treated_indices, dtype=int)
+            if interventions is not None else np.array([], dtype=int)
         )
-
-        # Approximate per-manager check-in target
-        mgr_target = capacity_this_week
+        mgr_ai_checkins = int((state.manager_id[treated] == mgr_id).sum())
+        mgr_soc_checkins = int((
+            team_mask & state.soc_intervened_this_step
+        ).sum())
+        mgr_target = capacity_this_week * (2 if interventions is not None else 1)
 
         team_new_hires = int((team_active & is_new_hire_mask).sum())
 
@@ -238,8 +236,10 @@ def aggregate(
             ManagerWeeklyRow(
                 manager_id=mgr_id,
                 team_size=team_size,
-                n_departures_this_week=0,  # not tracked per-mgr
-                n_check_ins_done=mgr_ai_checkins,
+                n_departures_this_week=int(
+                    (team_mask & state.departed_this_step).sum()
+                ),
+                n_check_ins_done=mgr_ai_checkins + mgr_soc_checkins,
                 check_in_target=mgr_target,
                 adopts_ai=bool(state.manager_adopts_ai[mgr_id]),
                 team_new_hires_active=team_new_hires,

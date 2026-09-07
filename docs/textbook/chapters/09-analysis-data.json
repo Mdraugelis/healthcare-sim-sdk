@@ -1,0 +1,73 @@
+{
+  "id": "09-analysis-data",
+  "number": 9,
+  "part": "Inference and evaluation",
+  "title": "Build the dataset that answers the question",
+  "subtitle": "Identity, exposure, observation, and denominators come before regression.",
+  "objectives": [
+    "Translate simulation histories into a dataset with explicit observational units.",
+    "Track staggered treatment, outcome lags, and missing follow-up without inventing zeros.",
+    "Distinguish an oracle contrast from a feasible observational study target."
+  ],
+  "prerequisites": [
+    "03-dynamics",
+    "04-counterfactuals",
+    "08-decision-policies"
+  ],
+  "body": "## A row is a scientific decision\n\nA simulator stores arrays because arrays are convenient for computation. An analysis needs rows whose meaning survives changes in ordering, population size, and time. Before exporting anything, finish this sentence: “One row represents one ___ during ___, eligible under ___, with outcome observed over ___.” The blanks might describe a person-week, an appointment, a discharge episode, or an entire hospital-day. Each answers a different question.\n\nThe SDK's `AnalysisDataset` offers panels, time series, snapshots, and subgroup panels. Those shapes make analysis possible; none establishes a study design merely by existing. A panel containing a treatment column is not automatically a difference-in-differences analysis. A snapshot containing scores is not automatically a valid prospective prediction dataset.\n\n## Identity must outlive array position\n\nSuppose the score array has positions 0 and 1, representing entity IDs 101 and 205. A policy selecting position 1 has selected entity 205, not “patient 1.” Tomorrow the order may reverse. Appointment scenarios add another distinction: a person can own several appointments, each with its own slot ID. Joining by person alone can attach an outcome to the wrong appointment.\n\nThe exporter maps selected indices through IDs recorded with predictions. It prefers `entity_ids`, then `slot_ids`, and only uses same-timestep outcome IDs as an alignment fallback with matching lengths. Duplicate IDs within a timestep or incompatible lengths fail explicitly. These checks protect known contracts; they cannot prove that a scenario supplied the scientifically correct identifier.\n\nA useful reviewer exercise is to reorder the arrays while preserving IDs. The identity-linked answers should remain unchanged. A second exercise gives one person two appointments and checks that each forecast matches its own eventual attendance outcome.\n\n## Treatment is a timeline, not a permanent label\n\nLet G_i be the first recorded assignment time for entity i. The exported “ever treated by this time” indicator is:\n\n```math\nD_{it}=\\mathbf{1}(G_i\\leq t)\n```\n\nHere D_it is a binary exposure-history marker at time t, and the bold 1 is an indicator: one when its condition holds. An entity never assigned has no qualifying first time. This definition does not assert that treatment continues biologically forever; it encodes a particular analytical history.\n\nFor entity 101 first assigned at time 0 and entity 205 first assigned at time 2:\n\n| Time | Ever treated: 101 | Ever treated: 205 | Assigned this step |\n|---|---:|---:|---|\n| 0 | 1 | 0 | 101 |\n| 1 | 1 | 0 | Neither |\n| 2 | 1 | 1 | 205 |\n\n`to_panel` defaults to `ever_treated`; `current_step` records only assignments at that step. The time-series treatment indicator has another meaning: `scheduled` records that intervention processing occurred, even when no entity was selected. `any_treated` asks whether a nonempty selection occurred. None of these automatically measures acceptance, completed care, continuing efficacy, or ordinary care outside the AI policy. Choose the indicator that matches the estimand.\n\n## Missing is not zero\n\nA measured period with zero events carries information. An unobserved period does not carry that same information. `to_time_series` initializes outcome values as missing and tracks observation. A missing timestep remains missing. A genuinely observed empty outcome can sum to zero; explicit `outcome_observed=False` preserves missingness for a period in which the outcome has not yet become observable.\n\nThe no-show scenario makes the distinction tangible. Slots scored today resolve later. On the first day there may be no prior slots to resolve. Recording zero no-shows would falsely imply an observed cohort with perfect attendance. Similarly, a forecast made near the simulation end may never receive complete follow-up. “No departure recorded yet” is not equivalent to “no departure within the forecast horizon.”\n\nA missing panel row also remains absent; the exporter does not fabricate person-period observations. A downstream analysis must decide whether missingness reflects ineligibility, discharge, observation failure, or censoring. Those mechanisms have different implications. Complete-case analysis may change the target population if being observed depends on health or treatment.\n\n## Match the outcome clock to the prediction clock\n\n`to_entity_snapshots` joins scores and outcomes by ID at the same stored timestep. It deliberately does not carry yesterday's scores forward. In a lagged appointment process, today's outcomes can refer to yesterday's slots while today's predictions refer to new slots. Unmatched scores are missing rather than silently reassigned.\n\nTo validate a forecast, construct a forecast-origin cohort: identifier, prediction time, score, horizon, eligibility, outcome window, and maturity status. Then join the appropriate later events. If a departure risk predicts weeks p+1 through p+h, events at week p do not belong to that future window. Nor can weeks beyond the available run be assumed event-free. Repeated forecasts for the same person also produce correlated observations; the number of rows alone does not establish the effective validation sample size.\n\n## Denominators determine what a rate means\n\nFor a period-level event rate:\n\n```math\nr_t=\\frac{E_t}{N_t}\n```\n\nHere E_t is the number of qualifying events and N_t is the explicitly defined eligible denominator during period t. Possible denominators include active people at period start, discharge episodes, appointments due, or person-time. A count divided by the current population after departures can differ from the same count divided by the population actually at risk.\n\nConsider two invented sites: 2 events among 10 eligible people and 9 among 90. Their unweighted average rate is 15%; the pooled rate is 11%. The first gives each site equal influence; the second gives each eligible person equal influence. Neither computation is inherently an error, but substituting one for the other changes the question. Changes in case mix and denominator size can also move an aggregate rate without changing any individual's risk.\n\nRetain numerators and denominators beside rates. For subgroup exports, an unknown group should remain visible as unknown, with its count, instead of disappearing from the totals. Check that mutually exclusive subgroup counts reconcile with the overall eligible population before comparing their rates.\n\n## Oracle information and a feasible study are different resources\n\nSimulation can reveal both factual and counterfactual histories under a specified mechanism. A real observational dataset generally cannot reveal both outcomes for the same entity. The two targets can be written as:\n\n```math\n\\Delta_{\\mathrm{oracle}}=\\mathrm{E}[Y^{C}-Y^{F}]\n```\n\nHere Y^C and Y^F are counterfactual and factual simulated outcomes; positive benefit is appropriate only when lower outcome values are better. A real study's estimator must recover a chosen contrast using observed data and identification assumptions. Its numerical agreement with an oracle is an evaluation result, not permission to include hidden state among study covariates.\n\nThe [Hernán and Robins target-trial framework](https://pmc.ncbi.nlm.nih.gov/articles/PMC4832051/) makes the design explicit through eligibility, strategies, assignment, follow-up, outcomes, causal contrasts, and analysis. Aligning eligibility, assignment, and the start of follow-up helps expose designs that use future treatment information to define baseline groups. In this project, write that protocol before choosing an export method.\n\n## Read the malnutrition example with the right target\n\nThe malnutrition overlay calculates paired length-of-stay and readmission contrasts on a frozen queue. Its cohort uses malnutrition status and a baseline discharge window; readmission is a modeled outcome generated from stored creation-time randomness and the assumed probability function. It is not evidence collected from clinical follow-up.\n\nThe overlay explicitly freezes queue membership and baseline discharge-related quantities while varying efficacy. Earlier discharge could alter occupancy, subsequent care, and reporting-window membership in a full dynamic run. Exact reproduction at zero efficacy checks arithmetic consistency but does not remove those structural approximations. `seed_estimands` also contrasts a coded cohort with the true simulated malnourished cohort and shows a naive factual early-versus-late comparison. The former demonstrates ascertainment; the latter is not an unbiased effect simply because its label sounds clinically plausible.\n\nFor review, take three exported rows back to the history: identify their entities, selected actions, observation windows, numerator membership, and denominator membership. Then identify every variable available only to the simulator. This small reconstruction often reveals a consequential design mismatch before a sophisticated model ever runs.",
+  "references": [
+    {
+      "id": "hernan-target-trial",
+      "title": "Hernán and Robins (2016): Using Big Data to Emulate a Target Trial When a Randomized Trial Is Not Available",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4832051/",
+      "note": "Primary methodological framework for specifying study eligibility, time zero, follow-up, outcomes, and causal contrasts."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/core/results.py",
+      "symbol": "AnalysisDataset",
+      "claim": "Exports data with explicit identifiers, time semantics, and missing-observation behavior."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/results.py",
+      "symbol": "SimulationResults.get_treatment_indicator",
+      "claim": "Separates scheduled intervention processing from a nonempty treated selection."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/results.py",
+      "symbol": "AnalysisDataset.to_panel",
+      "claim": "Supports current-step and ever-treated exposure histories."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/results.py",
+      "symbol": "AnalysisDataset.to_entity_snapshots",
+      "claim": "Joins same-timestep scores by identity without carrying forecasts across time."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/malnutrition_prioritization/outcome_overlay.py",
+      "symbol": "overlay_arm",
+      "claim": "Recomputes modeled outcomes on a frozen queue and discloses dynamic approximations."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/malnutrition_prioritization/estimands.py",
+      "symbol": "seed_estimands",
+      "claim": "Separates oracle paired contrasts, naive timing comparisons, and coded-cohort ascertainment."
+    }
+  ],
+  "review_questions": [
+    "What exactly does one row represent, and can its identity survive reordered arrays?",
+    "When does exposure begin, and when is the outcome fully observed?",
+    "Which target changes if we alter the denominator, discharge window, or availability of hidden state?"
+  ],
+  "exercises": [
+    {
+      "question": "An intervention is scheduled at time 4 but selects nobody. What do scheduled and any_treated record?",
+      "answer": "Scheduled records 1 because intervention processing occurred; any_treated records 0 because selection was empty. Neither proves that care was delivered."
+    },
+    {
+      "question": "A risk score at week 10 predicts departures in weeks 11–14, but the run ends at week 12. Can a person with no departure be labeled a negative?",
+      "answer": "Not for the complete four-week horizon. The outcome is immature or censored. Preserve that status or use a prespecified method that explicitly addresses partial follow-up."
+    }
+  ]
+}

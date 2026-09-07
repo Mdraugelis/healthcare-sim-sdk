@@ -1,0 +1,1441 @@
+{
+  "status": "PASS",
+  "epub": "/Users/michaeldraugelis/Library/CloudStorage/Dropbox/proj/healthcare-sim-sdk/docs/textbook/ebook/healthcare-simulation-sdk-textbook.epub",
+  "epub_sha256": "7bc2bde0666deb93438a6ad180c372f593fa016914268eed9bb3c8f4ad857461",
+  "source_html_sha256": "ec23afc806913546c6d191145cc982d882102d1038e950d06ddeef0083e5c901",
+  "check_count": 131,
+  "checks": [
+    {
+      "id": "zip_crc",
+      "status": "PASS",
+      "detail": "Archive CRC inspection"
+    },
+    {
+      "id": "unique_archive_entries",
+      "status": "PASS",
+      "detail": 105
+    },
+    {
+      "id": "relative_archive_paths",
+      "status": "PASS",
+      "detail": "No absolute or traversing archive entry paths"
+    },
+    {
+      "id": "mimetype_first",
+      "status": "PASS",
+      "detail": "mimetype"
+    },
+    {
+      "id": "mimetype_uncompressed",
+      "status": "PASS",
+      "detail": 0
+    },
+    {
+      "id": "mimetype_no_extra",
+      "status": "PASS",
+      "detail": 0
+    },
+    {
+      "id": "mimetype_local_header",
+      "status": "PASS",
+      "detail": {
+        "compression": 0,
+        "extra_length": 0
+      }
+    },
+    {
+      "id": "mimetype_exact",
+      "status": "PASS",
+      "detail": "application/epub+zip"
+    },
+    {
+      "id": "send_to_kindle_web_size",
+      "status": "PASS",
+      "detail": 1186487
+    },
+    {
+      "id": "container_rootfile",
+      "status": "PASS",
+      "detail": [
+        {
+          "full-path": "EPUB/content.opf",
+          "media-type": "application/oebps-package+xml"
+        }
+      ]
+    },
+    {
+      "id": "epub3_package",
+      "status": "PASS",
+      "detail": {
+        "version": "3.0",
+        "{http://www.w3.org/XML/1998/namespace}lang": "en-US",
+        "unique-identifier": "epub-id-1",
+        "prefix": "ibooks: http://vocabulary.itunes.apple.com/rdf/ibooks/vocabulary-extensions-1.0/"
+      }
+    },
+    {
+      "id": "manifest_ids_unique",
+      "status": "PASS",
+      "detail": 101
+    },
+    {
+      "id": "manifest_files_exist",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "manifest_hrefs_unique",
+      "status": "PASS",
+      "detail": 101
+    },
+    {
+      "id": "unique_identifier_resolves",
+      "status": "PASS",
+      "detail": "epub-id-1"
+    },
+    {
+      "id": "metadata_title",
+      "status": "PASS",
+      "detail": "The Science of Simulating Healthcare AI"
+    },
+    {
+      "id": "metadata_language",
+      "status": "PASS",
+      "detail": "en-US"
+    },
+    {
+      "id": "modified_timestamp",
+      "status": "PASS",
+      "detail": [
+        "2026-09-06T12:32:59Z"
+      ]
+    },
+    {
+      "id": "spine_manifest_refs",
+      "status": "PASS",
+      "detail": [
+        "cover_xhtml",
+        "nav",
+        "ch001_xhtml",
+        "ch002_xhtml",
+        "ch003_xhtml",
+        "ch004_xhtml",
+        "ch005_xhtml",
+        "ch006_xhtml",
+        "ch007_xhtml",
+        "ch008_xhtml",
+        "ch009_xhtml",
+        "ch010_xhtml",
+        "ch011_xhtml",
+        "ch012_xhtml",
+        "ch013_xhtml",
+        "ch014_xhtml",
+        "ch015_xhtml",
+        "ch016_xhtml",
+        "ch017_xhtml",
+        "ch018_xhtml",
+        "ch019_xhtml",
+        "ch020_xhtml",
+        "ch021_xhtml",
+        "ch022_xhtml",
+        "ch023_xhtml",
+        "ch024_xhtml",
+        "ch025_xhtml",
+        "ch026_xhtml",
+        "ch027_xhtml",
+        "ch028_xhtml",
+        "ch029_xhtml",
+        "ch030_xhtml",
+        "ch031_xhtml",
+        "ch032_xhtml",
+        "ch033_xhtml",
+        "ch034_xhtml",
+        "ch035_xhtml",
+        "ch036_xhtml",
+        "ch037_xhtml",
+        "ch038_xhtml"
+      ]
+    },
+    {
+      "id": "spine_unique",
+      "status": "PASS",
+      "detail": [
+        "cover_xhtml",
+        "nav",
+        "ch001_xhtml",
+        "ch002_xhtml",
+        "ch003_xhtml",
+        "ch004_xhtml",
+        "ch005_xhtml",
+        "ch006_xhtml",
+        "ch007_xhtml",
+        "ch008_xhtml",
+        "ch009_xhtml",
+        "ch010_xhtml",
+        "ch011_xhtml",
+        "ch012_xhtml",
+        "ch013_xhtml",
+        "ch014_xhtml",
+        "ch015_xhtml",
+        "ch016_xhtml",
+        "ch017_xhtml",
+        "ch018_xhtml",
+        "ch019_xhtml",
+        "ch020_xhtml",
+        "ch021_xhtml",
+        "ch022_xhtml",
+        "ch023_xhtml",
+        "ch024_xhtml",
+        "ch025_xhtml",
+        "ch026_xhtml",
+        "ch027_xhtml",
+        "ch028_xhtml",
+        "ch029_xhtml",
+        "ch030_xhtml",
+        "ch031_xhtml",
+        "ch032_xhtml",
+        "ch033_xhtml",
+        "ch034_xhtml",
+        "ch035_xhtml",
+        "ch036_xhtml",
+        "ch037_xhtml",
+        "ch038_xhtml"
+      ]
+    },
+    {
+      "id": "one_navigation_document",
+      "status": "PASS",
+      "detail": [
+        "nav"
+      ]
+    },
+    {
+      "id": "ids_unique:EPUB/nav.xhtml",
+      "status": "PASS",
+      "detail": 41
+    },
+    {
+      "id": "xhtml_namespace:EPUB/nav.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/cover.xhtml",
+      "status": "PASS",
+      "detail": 2
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/cover.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch001.xhtml",
+      "status": "PASS",
+      "detail": 4
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch001.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch002.xhtml",
+      "status": "PASS",
+      "detail": 14
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch002.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch003.xhtml",
+      "status": "PASS",
+      "detail": 19
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch003.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch004.xhtml",
+      "status": "PASS",
+      "detail": 20
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch004.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch005.xhtml",
+      "status": "PASS",
+      "detail": 22
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch005.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch006.xhtml",
+      "status": "PASS",
+      "detail": 23
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch006.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch007.xhtml",
+      "status": "PASS",
+      "detail": 19
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch007.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch008.xhtml",
+      "status": "PASS",
+      "detail": 19
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch008.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch009.xhtml",
+      "status": "PASS",
+      "detail": 17
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch009.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch010.xhtml",
+      "status": "PASS",
+      "detail": 19
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch010.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch011.xhtml",
+      "status": "PASS",
+      "detail": 21
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch011.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch012.xhtml",
+      "status": "PASS",
+      "detail": 19
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch012.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch013.xhtml",
+      "status": "PASS",
+      "detail": 17
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch013.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch014.xhtml",
+      "status": "PASS",
+      "detail": 18
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch014.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch015.xhtml",
+      "status": "PASS",
+      "detail": 19
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch015.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch016.xhtml",
+      "status": "PASS",
+      "detail": 19
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch016.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch017.xhtml",
+      "status": "PASS",
+      "detail": 16
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch017.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch018.xhtml",
+      "status": "PASS",
+      "detail": 1
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch018.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch019.xhtml",
+      "status": "PASS",
+      "detail": 1
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch019.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch020.xhtml",
+      "status": "PASS",
+      "detail": 2
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch020.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch021.xhtml",
+      "status": "PASS",
+      "detail": 3
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch021.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch022.xhtml",
+      "status": "PASS",
+      "detail": 3
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch022.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch023.xhtml",
+      "status": "PASS",
+      "detail": 5
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch023.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch024.xhtml",
+      "status": "PASS",
+      "detail": 6
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch024.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch025.xhtml",
+      "status": "PASS",
+      "detail": 4
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch025.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch026.xhtml",
+      "status": "PASS",
+      "detail": 8
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch026.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch027.xhtml",
+      "status": "PASS",
+      "detail": 9
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch027.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch028.xhtml",
+      "status": "PASS",
+      "detail": 9
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch028.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch029.xhtml",
+      "status": "PASS",
+      "detail": 7
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch029.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch030.xhtml",
+      "status": "PASS",
+      "detail": 6
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch030.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch031.xhtml",
+      "status": "PASS",
+      "detail": 9
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch031.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch032.xhtml",
+      "status": "PASS",
+      "detail": 10
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch032.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch033.xhtml",
+      "status": "PASS",
+      "detail": 16
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch033.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch034.xhtml",
+      "status": "PASS",
+      "detail": 9
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch034.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch035.xhtml",
+      "status": "PASS",
+      "detail": 9
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch035.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch036.xhtml",
+      "status": "PASS",
+      "detail": 4
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch036.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch037.xhtml",
+      "status": "PASS",
+      "detail": 48
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch037.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "ids_unique:EPUB/text/ch038.xhtml",
+      "status": "PASS",
+      "detail": 1
+    },
+    {
+      "id": "xhtml_namespace:EPUB/text/ch038.xhtml",
+      "status": "PASS",
+      "detail": "{http://www.w3.org/1999/xhtml}html"
+    },
+    {
+      "id": "one_toc_nav",
+      "status": "PASS",
+      "detail": 1
+    },
+    {
+      "id": "toc_content_in_spine",
+      "status": "PASS",
+      "detail": [
+        "EPUB/text/ch001.xhtml",
+        "EPUB/text/ch002.xhtml",
+        "EPUB/text/ch003.xhtml",
+        "EPUB/text/ch004.xhtml",
+        "EPUB/text/ch005.xhtml",
+        "EPUB/text/ch006.xhtml",
+        "EPUB/text/ch007.xhtml",
+        "EPUB/text/ch008.xhtml",
+        "EPUB/text/ch009.xhtml",
+        "EPUB/text/ch010.xhtml",
+        "EPUB/text/ch011.xhtml",
+        "EPUB/text/ch012.xhtml",
+        "EPUB/text/ch013.xhtml",
+        "EPUB/text/ch014.xhtml",
+        "EPUB/text/ch015.xhtml",
+        "EPUB/text/ch016.xhtml",
+        "EPUB/text/ch017.xhtml",
+        "EPUB/text/ch018.xhtml",
+        "EPUB/text/ch019.xhtml",
+        "EPUB/text/ch020.xhtml",
+        "EPUB/text/ch021.xhtml",
+        "EPUB/text/ch022.xhtml",
+        "EPUB/text/ch023.xhtml",
+        "EPUB/text/ch024.xhtml",
+        "EPUB/text/ch025.xhtml",
+        "EPUB/text/ch026.xhtml",
+        "EPUB/text/ch027.xhtml",
+        "EPUB/text/ch028.xhtml",
+        "EPUB/text/ch029.xhtml",
+        "EPUB/text/ch030.xhtml",
+        "EPUB/text/ch031.xhtml",
+        "EPUB/text/ch032.xhtml",
+        "EPUB/text/ch033.xhtml",
+        "EPUB/text/ch034.xhtml",
+        "EPUB/text/ch035.xhtml",
+        "EPUB/text/ch036.xhtml",
+        "EPUB/text/ch037.xhtml",
+        "EPUB/text/ch038.xhtml"
+      ]
+    },
+    {
+      "id": "local_links_resolve",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "static_reading_no_required_widgets",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "image_alternatives",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "raster_images_decode",
+      "status": "PASS",
+      "detail": [
+        {
+          "path": "EPUB/media/file58.png",
+          "dimensions": [
+            1600,
+            2560
+          ]
+        },
+        {
+          "path": "EPUB/media/file57.png",
+          "dimensions": [
+            900,
+            294
+          ]
+        },
+        {
+          "path": "EPUB/media/file56.png",
+          "dimensions": [
+            912,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file55.png",
+          "dimensions": [
+            858,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file54.png",
+          "dimensions": [
+            1920,
+            432
+          ]
+        },
+        {
+          "path": "EPUB/media/file53.png",
+          "dimensions": [
+            1434,
+            162
+          ]
+        },
+        {
+          "path": "EPUB/media/file52.png",
+          "dimensions": [
+            1686,
+            150
+          ]
+        },
+        {
+          "path": "EPUB/media/file51.png",
+          "dimensions": [
+            1104,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file50.png",
+          "dimensions": [
+            1920,
+            135
+          ]
+        },
+        {
+          "path": "EPUB/media/file49.png",
+          "dimensions": [
+            1212,
+            150
+          ]
+        },
+        {
+          "path": "EPUB/media/file48.png",
+          "dimensions": [
+            1008,
+            180
+          ]
+        },
+        {
+          "path": "EPUB/media/file47.png",
+          "dimensions": [
+            1080,
+            750
+          ]
+        },
+        {
+          "path": "EPUB/media/file46.png",
+          "dimensions": [
+            1080,
+            750
+          ]
+        },
+        {
+          "path": "EPUB/media/file45.png",
+          "dimensions": [
+            1158,
+            168
+          ]
+        },
+        {
+          "path": "EPUB/media/file44.png",
+          "dimensions": [
+            1050,
+            324
+          ]
+        },
+        {
+          "path": "EPUB/media/file43.png",
+          "dimensions": [
+            738,
+            210
+          ]
+        },
+        {
+          "path": "EPUB/media/file42.png",
+          "dimensions": [
+            1080,
+            750
+          ]
+        },
+        {
+          "path": "EPUB/media/file41.png",
+          "dimensions": [
+            612,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file40.png",
+          "dimensions": [
+            1548,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file39.png",
+          "dimensions": [
+            834,
+            162
+          ]
+        },
+        {
+          "path": "EPUB/media/file38.png",
+          "dimensions": [
+            312,
+            186
+          ]
+        },
+        {
+          "path": "EPUB/media/file37.png",
+          "dimensions": [
+            630,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file36.png",
+          "dimensions": [
+            1194,
+            234
+          ]
+        },
+        {
+          "path": "EPUB/media/file35.png",
+          "dimensions": [
+            1080,
+            396
+          ]
+        },
+        {
+          "path": "EPUB/media/file34.png",
+          "dimensions": [
+            870,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file33.png",
+          "dimensions": [
+            1416,
+            174
+          ]
+        },
+        {
+          "path": "EPUB/media/file32.png",
+          "dimensions": [
+            1122,
+            168
+          ]
+        },
+        {
+          "path": "EPUB/media/file31.png",
+          "dimensions": [
+            1080,
+            750
+          ]
+        },
+        {
+          "path": "EPUB/media/file30.png",
+          "dimensions": [
+            924,
+            162
+          ]
+        },
+        {
+          "path": "EPUB/media/file29.png",
+          "dimensions": [
+            1086,
+            174
+          ]
+        },
+        {
+          "path": "EPUB/media/file28.png",
+          "dimensions": [
+            1650,
+            168
+          ]
+        },
+        {
+          "path": "EPUB/media/file27.png",
+          "dimensions": [
+            918,
+            282
+          ]
+        },
+        {
+          "path": "EPUB/media/file26.png",
+          "dimensions": [
+            930,
+            234
+          ]
+        },
+        {
+          "path": "EPUB/media/file25.png",
+          "dimensions": [
+            1542,
+            168
+          ]
+        },
+        {
+          "path": "EPUB/media/file24.png",
+          "dimensions": [
+            1080,
+            732
+          ]
+        },
+        {
+          "path": "EPUB/media/file23.png",
+          "dimensions": [
+            888,
+            168
+          ]
+        },
+        {
+          "path": "EPUB/media/file22.png",
+          "dimensions": [
+            1614,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file21.png",
+          "dimensions": [
+            480,
+            198
+          ]
+        },
+        {
+          "path": "EPUB/media/file20.png",
+          "dimensions": [
+            882,
+            222
+          ]
+        },
+        {
+          "path": "EPUB/media/file19.png",
+          "dimensions": [
+            288,
+            168
+          ]
+        },
+        {
+          "path": "EPUB/media/file18.png",
+          "dimensions": [
+            1080,
+            750
+          ]
+        },
+        {
+          "path": "EPUB/media/file17.png",
+          "dimensions": [
+            714,
+            192
+          ]
+        },
+        {
+          "path": "EPUB/media/file16.png",
+          "dimensions": [
+            636,
+            216
+          ]
+        },
+        {
+          "path": "EPUB/media/file15.png",
+          "dimensions": [
+            1080,
+            396
+          ]
+        },
+        {
+          "path": "EPUB/media/file14.png",
+          "dimensions": [
+            1920,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file13.png",
+          "dimensions": [
+            510,
+            294
+          ]
+        },
+        {
+          "path": "EPUB/media/file12.png",
+          "dimensions": [
+            366,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file11.png",
+          "dimensions": [
+            1566,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file10.png",
+          "dimensions": [
+            1614,
+            204
+          ]
+        },
+        {
+          "path": "EPUB/media/file9.png",
+          "dimensions": [
+            1062,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file8.png",
+          "dimensions": [
+            1488,
+            294
+          ]
+        },
+        {
+          "path": "EPUB/media/file7.png",
+          "dimensions": [
+            1080,
+            396
+          ]
+        },
+        {
+          "path": "EPUB/media/file6.png",
+          "dimensions": [
+            1464,
+            156
+          ]
+        },
+        {
+          "path": "EPUB/media/file5.png",
+          "dimensions": [
+            1662,
+            144
+          ]
+        },
+        {
+          "path": "EPUB/media/file4.png",
+          "dimensions": [
+            1608,
+            204
+          ]
+        },
+        {
+          "path": "EPUB/media/file3.png",
+          "dimensions": [
+            1920,
+            183
+          ]
+        },
+        {
+          "path": "EPUB/media/file2.png",
+          "dimensions": [
+            1788,
+            234
+          ]
+        },
+        {
+          "path": "EPUB/media/file1.png",
+          "dimensions": [
+            600,
+            132
+          ]
+        },
+        {
+          "path": "EPUB/media/file0.png",
+          "dimensions": [
+            1920,
+            1530
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sixteen_chapters_in_toc_order",
+      "status": "PASS",
+      "detail": {
+        "expected": [
+          "book-01-orientation",
+          "book-02-probability",
+          "book-03-dynamics",
+          "book-04-counterfactuals",
+          "book-05-monte-carlo",
+          "book-06-ml-metrics",
+          "book-07-controlled-models",
+          "book-08-decision-policies",
+          "book-09-analysis-data",
+          "book-10-study-design",
+          "book-11-monitoring",
+          "book-12-malnutrition",
+          "book-13-scenario-atlas",
+          "book-14-software",
+          "book-15-verification",
+          "book-16-peer-review"
+        ],
+        "actual": [
+          "book-01-orientation",
+          "book-02-probability",
+          "book-03-dynamics",
+          "book-04-counterfactuals",
+          "book-05-monte-carlo",
+          "book-06-ml-metrics",
+          "book-07-controlled-models",
+          "book-08-decision-policies",
+          "book-09-analysis-data",
+          "book-10-study-design",
+          "book-11-monitoring",
+          "book-12-malnutrition",
+          "book-13-scenario-atlas",
+          "book-14-software",
+          "book-15-verification",
+          "book-16-peer-review"
+        ]
+      }
+    },
+    {
+      "id": "all_cited_code_excerpts_exact",
+      "status": "PASS",
+      "detail": {
+        "expected_instances": 101,
+        "missing_instances": 0,
+        "missing_prefixes": []
+      }
+    },
+    {
+      "id": "sixteen_source_chapters",
+      "status": "PASS",
+      "detail": 16
+    },
+    {
+      "id": "source_content_units_preserved",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:01-orientation",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:02-probability",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:03-dynamics",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:04-counterfactuals",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:05-monte-carlo",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:06-ml-metrics",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:07-controlled-models",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:08-decision-policies",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:09-analysis-data",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:10-study-design",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:11-monitoring",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:12-malnutrition",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:13-scenario-atlas",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:14-software",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:15-verification",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "learning_material:16-peer-review",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "id": "literal_notation_appendix_preserved",
+      "status": "PASS",
+      "detail": {
+        "expected": 47,
+        "missing": []
+      }
+    },
+    {
+      "id": "hero_diagram_version_packaged",
+      "status": "PASS",
+      "detail": [
+        "assets/diagram-hero-compact.png"
+      ]
+    },
+    {
+      "id": "exported_visuals_packaged_exact",
+      "status": "PASS",
+      "detail": {
+        "expected": 57,
+        "missing": []
+      }
+    },
+    {
+      "id": "static_labs_replace_web_fallbacks",
+      "status": "PASS",
+      "detail": {
+        "static_labs": 8,
+        "omitted_web_fallbacks": 8
+      }
+    }
+  ],
+  "link_counts": {
+    "local": 238,
+    "external": 113
+  },
+  "chapter_content": [
+    {
+      "chapter": "01-orientation",
+      "source_units": 69,
+      "matched_units": 69,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "02-probability",
+      "source_units": 63,
+      "matched_units": 63,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "03-dynamics",
+      "source_units": 71,
+      "matched_units": 71,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "04-counterfactuals",
+      "source_units": 85,
+      "matched_units": 85,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "05-monte-carlo",
+      "source_units": 88,
+      "matched_units": 88,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "06-ml-metrics",
+      "source_units": 94,
+      "matched_units": 94,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "07-controlled-models",
+      "source_units": 89,
+      "matched_units": 89,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "08-decision-policies",
+      "source_units": 104,
+      "matched_units": 104,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "09-analysis-data",
+      "source_units": 95,
+      "matched_units": 95,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "10-study-design",
+      "source_units": 79,
+      "matched_units": 79,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "11-monitoring",
+      "source_units": 102,
+      "matched_units": 102,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "12-malnutrition",
+      "source_units": 105,
+      "matched_units": 105,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "13-scenario-atlas",
+      "source_units": 139,
+      "matched_units": 139,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "14-software",
+      "source_units": 112,
+      "matched_units": 112,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "15-verification",
+      "source_units": 110,
+      "matched_units": 110,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "16-peer-review",
+      "source_units": 85,
+      "matched_units": 85,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "glossary",
+      "source_units": 29,
+      "matched_units": 29,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "bibliography",
+      "source_units": 38,
+      "matched_units": 38,
+      "unmatched_units": []
+    },
+    {
+      "chapter": "evidence",
+      "source_units": 108,
+      "matched_units": 108,
+      "unmatched_units": []
+    }
+  ],
+  "content_normalizations": {
+    "printed_path_annotations": 8,
+    "web_only_fallback_notices": 8,
+    "rule": "Ignore markup whitespace and declared added path annotations; preserve source unit tokens and exact cited code excerpts."
+  },
+  "spine": [
+    "EPUB/text/cover.xhtml",
+    "EPUB/nav.xhtml",
+    "EPUB/text/ch001.xhtml",
+    "EPUB/text/ch002.xhtml",
+    "EPUB/text/ch003.xhtml",
+    "EPUB/text/ch004.xhtml",
+    "EPUB/text/ch005.xhtml",
+    "EPUB/text/ch006.xhtml",
+    "EPUB/text/ch007.xhtml",
+    "EPUB/text/ch008.xhtml",
+    "EPUB/text/ch009.xhtml",
+    "EPUB/text/ch010.xhtml",
+    "EPUB/text/ch011.xhtml",
+    "EPUB/text/ch012.xhtml",
+    "EPUB/text/ch013.xhtml",
+    "EPUB/text/ch014.xhtml",
+    "EPUB/text/ch015.xhtml",
+    "EPUB/text/ch016.xhtml",
+    "EPUB/text/ch017.xhtml",
+    "EPUB/text/ch018.xhtml",
+    "EPUB/text/ch019.xhtml",
+    "EPUB/text/ch020.xhtml",
+    "EPUB/text/ch021.xhtml",
+    "EPUB/text/ch022.xhtml",
+    "EPUB/text/ch023.xhtml",
+    "EPUB/text/ch024.xhtml",
+    "EPUB/text/ch025.xhtml",
+    "EPUB/text/ch026.xhtml",
+    "EPUB/text/ch027.xhtml",
+    "EPUB/text/ch028.xhtml",
+    "EPUB/text/ch029.xhtml",
+    "EPUB/text/ch030.xhtml",
+    "EPUB/text/ch031.xhtml",
+    "EPUB/text/ch032.xhtml",
+    "EPUB/text/ch033.xhtml",
+    "EPUB/text/ch034.xhtml",
+    "EPUB/text/ch035.xhtml",
+    "EPUB/text/ch036.xhtml",
+    "EPUB/text/ch037.xhtml",
+    "EPUB/text/ch038.xhtml"
+  ],
+  "epubcheck": "NOT_RUN: no available EPUBCheck/Java installation",
+  "kindle_conversion": "NOT_RUN: no account upload or device delivery",
+  "limitations": [
+    "Bounded checks, not complete EPUB conformance validation",
+    "Image readability and layout need separate visual inspection"
+  ]
+}

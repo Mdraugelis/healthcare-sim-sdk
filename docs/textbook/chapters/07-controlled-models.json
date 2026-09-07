@@ -1,0 +1,88 @@
+{
+  "id": "07-controlled-models",
+  "number": 7,
+  "part": "Prediction and decisions",
+  "title": "Building a model with controlled performance",
+  "subtitle": "Synthetic score distributions, calibration objectives, feasibility, and the boundary of prediction",
+  "objectives": [
+    "Reconstruct the score-generation and fitting paths of the three controlled-model classes.",
+    "Distinguish requested targets, fitted diagnostics, independent verification, and deployment outcomes.",
+    "Explain why label-conditioned generators are useful simulation devices but invalid substitutes for real prospective predictors."
+  ],
+  "prerequisites": [
+    "02-probability",
+    "06-ml-metrics"
+  ],
+  "body": "## A simulator sometimes needs the behavior of a model\n\nSuppose a hospital asks whether improving AUC from 0.70 to 0.80 would justify additional staff. Training two real predictors is not always the immediate task. We first need synthetic scores with specified statistical properties, so that workflow assumptions can be varied while model performance is controlled.\n\nThe SDK provides score generators for this purpose. They construct a relationship between synthetic truth, latent risk, and reported scores. They do not learn a complete clinical feature-to-outcome pipeline. This distinction makes the experiments useful and also defines their limits: finding a beneficial simulated operating point does not show that anyone can train a real model to reach it.\n\nThree classes coexist: `ControlledProbabilityModel`, `ControlledBinaryClassifier`, and the main `ControlledMLModel`. The main class has **four modes**: `discrimination`, `classification`, `threshold_ppv`, and `operating_point`. Three classes and four modes describe different levels of the API.\n\n## Four components make a synthetic score\n\n`ControlledMLModel._generate_scores` first clips latent risk to the unit interval. It blends that risk with Gaussian noise, adds a label-dependent component and independent noise, then maps the result through a sigmoid:\n\n```math\ns=\\sigma\\!\\left(4\\left[\\rho r+(1-\\rho)\\epsilon_1+a(\\epsilon_2+\\epsilon_3)-\\frac{1}{2}\\right]\\right)\n```\n\nHere `r` is latent risk, `ρ` the mixing coefficient, `a` the noise-scale parameter, and `σ` the logistic sigmoid. The first noise has standard deviation `a`; the third has standard deviation 0.1. The second depends on the supplied label: its mean is `0.05l` for positives and `−0.025l` for negatives, with standard deviation `0.05l` in either class. The parameter `l` controls label separation. These constants are simulator design choices, not clinical laws.\n\nIf labels are omitted, the second component instead has zero mean and standard deviation 0.05. Thus fitting with labels and predicting without them changes the score-generating distribution. Reusing the fitted object alone does not guarantee reuse of its calibrated behavior.\n\nIncreasing `ρ` strengthens the risk contribution; changing `a` affects several noise terms; changing `l` changes conditional separation. Their effects interact. The word “correlation” in the parameter name does not establish that the realized Pearson correlation between risk and score equals that number.\n\n## Fitting is a search over distributions\n\nThe main fitter explores grids of these parameters and regenerates noisy scores over repeated iterations. Default grids contain 15 risk-mixing values, 15 scale values, and six label-separation values. It is searching a family of synthetic distributions, rather than estimating coefficients on ordinary patient features.\n\nIn discrimination mode, the objective is:\n\n```math\nJ=|\\widehat{A}-A^*|+0.3|\\widehat{c}-c^*|\n```\n\n`Â` is the candidate’s measured AUC, `A*` the requested AUC, `ĉ` the binned calibration slope, and `c*` its target. The weight 0.3 is a software choice. Classification mode instead weights sensitivity and PPV errors, searches thresholds, and penalizes sensitivity above 0.95. Threshold-PPV mode holds the threshold fixed while balancing AUC and PPV errors. A small weighted objective need not mean every individual target meets its tolerance.\n\nAfter this search, `_fit_platt_scaling` minimizes binary log loss for a sigmoid applied to the raw score’s log odds:\n\n```math\np=\\sigma\\!\\left(b_1\\log\\frac{s}{1-s}+b_0\\right)\n```\n\n`b1` and `b0` are fitted slope and intercept; clipping protects the logarithm near zero and one. Ranking is preserved when `b1` is positive. The optimizer does not impose that condition, so ranking preservation is conditional, despite the broad wording of an older docstring. A sigmoid output also does not certify calibration. The [official calibration guide](https://scikit-learn.org/stable/modules/calibration.html) explains why calibration requires separate evaluation data.\n\n<div data-lab=\"calibration\"></div>\n\nThe lab transforms ten fixed toy risks using a positive logit multiplier and an offset; it does not fit a production scorer. AUC uses one fixed label vector, while expected Brier score averages over possible Bernoulli outcomes at the known toy risks. Those are different evaluation quantities.\n\nIn the main fit path, search, recalibration, and final fit metrics reuse the supplied cohort. They describe fitting performance. An independent cohort passed through the frozen scoring path supplies different evidence.\n\n## Worked example: the geometry behind an operating point\n\nAsk for prevalence 10%, sensitivity 80%, and PPV 40%. In 1,000 expected observations there are 80 true positives. PPV 40% permits 120 false positives, giving false-positive rate `120/900`, approximately 0.1333.\n\nAn equal-variance binormal score model connects that ROC point to AUC:\n\n```math\nu=\\Phi\\!\\left(\\Phi^{-1}(f)+\\sqrt{2}\\Phi^{-1}(A)\\right)\n```\n\n`u` is sensitivity, `f` false-positive rate, `A` AUC, and `Φ` the standard normal cumulative distribution. Solving gives AUC approximately 0.916. This answer depends on normally distributed class scores with equal variances after an appropriate monotone scoring representation. It is not a universal AUC requirement for that operating point: different ROC shapes can share an area.\n\n`required_auc_for_operating_point` implements this geometry. Main-class operating-point mode binds either PPV or sensitivity and accepts an AUC target or a goal for the other metric. It places a threshold and checks achieved values. Finite cohorts, ties, and the available generator family may prevent exact attainment. `allow_infeasible` records a shortfall or warning instead of making it disappear.\n\nThe model also computes an empirical latent-risk AUC and uses it as a population-ceiling gate. This is an implementation assumption. True conditional risk is the optimal population ranking among predictors with the same allowed information, but a finite-sample estimate is not a universal upper bound. Label-conditioned generation introduces additional outcome information. A broad claim that no conceivable model can exceed this empirical number would therefore be unjustified.\n\n## The alternative classes and a frozen subgroup model\n\n`ControlledProbabilityModel` perturbs latent log odds with Gaussian noise and searches noise levels to approximate AUC and calibration targets. `ControlledBinaryClassifier` separately searches noise parameters and a threshold; its prediction interface includes true labels. These older classes expose related ideas through different APIs. They should not be assumed to inherit all main-class feasibility checks or newer assurance gates.\n\nMalnutrition uses a more specialized `FrozenSubgroupScorer`. It combines true current malnutrition with persistent per-person noise, a hard-case mixture, subgroup-dependent dispersion and signal scrambling, and an optional current-severity shift. The severity adjustment has zero mean on the raw latent-score scale within positives at the configured onset mix. The nonlinear sigmoid need not preserve the mean reported probability, and evolving severity mix need not preserve even the raw-score mean later. Frozen parameters and persistent noise make repeated scoring deterministic for the same state. A changed clinical state can still change the score.\n\nThis path loads explicit frozen parameters; a missing private model file raises an error. Stage A fits and verifies subgroup targets using separate cohorts, including the configured severity mechanism. The public review demo uses illustrative parameters and cannot stand in for that institution-specific verification.\n\n## Where simulation truth is allowed to enter\n\nSupplying the outcome to a real prospective predictor would leak the answer. Here it can be a legitimate **synthetic oracle construction**: generate scores conditional on a simulated truth to study a hypothetical classifier. Legitimacy depends on labeling the construction honestly and keeping its information out of claims about deployable feature-based prediction.\n\nSepsis now consistently supplies current septic-stage labels during fitting and scoring; its fidelity metadata therefore concerns concurrent classification, not future onset forecasting. Fitting is deferred until both classes exist. Before that, a latent-risk fallback is explicitly unverified. Retention uses synthetic prediction-window labels, while actual departures are drawn separately. Its frozen-path check generates an independent cohort, and its monitor can evaluate matured factual future outcomes. Those are distinct targets; treatment can change the latter.\n\nA useful review record names the requested target, fitting metric and method, frozen model identity, independent sample, positive and negative counts, and label horizon. `PASS` on a synthetic AUC diagnostic certifies that scoped comparison. It does not certify feature availability, future calibration, transportability, or clinical benefit.",
+  "references": [
+    {
+      "id": "sklearn-calibration",
+      "title": "scikit-learn: Probability calibration",
+      "url": "https://scikit-learn.org/stable/modules/calibration.html",
+      "note": "Official guidance on sigmoid calibration and independent evaluation; simulator mechanics are documented from local source."
+    },
+    {
+      "id": "sklearn-roc",
+      "title": "scikit-learn: roc_auc_score",
+      "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html",
+      "note": "Official reference for the discrimination metric; the binormal identity in this chapter is derived under stated assumptions."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/ml/model.py",
+      "symbol": "ControlledMLModel",
+      "claim": "Four operating modes, stochastic parameter search, Platt fitting, and operating-point enforcement."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/model.py",
+      "symbol": "ControlledMLModel._generate_scores",
+      "claim": "Actual four-component conditional score-generation formula."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/performance.py",
+      "symbol": "required_auc_for_operating_point",
+      "claim": "Equal-variance binormal operating-point inversion."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/probability_model.py",
+      "symbol": "ControlledProbabilityModel",
+      "claim": "Noise on log odds with a separate calibration-search interface."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/binary_classifier.py",
+      "symbol": "ControlledBinaryClassifier",
+      "claim": "Separate controlled binary-classifier optimization and prediction interface."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/malnutrition_prioritization/subgroup_performance.py",
+      "symbol": "FrozenSubgroupScorer",
+      "claim": "Frozen, deterministic, truth- and severity-conditioned subgroup scores."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/model_verification.py",
+      "symbol": "verify_frozen_scoring_path",
+      "claim": "Independent synthetic-cohort check of the actual frozen retention scoring path."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/sepsis_early_alert/scenario.py",
+      "symbol": "SepsisEarlyAlertScenario.predict",
+      "claim": "Deferred fitting, consistent current-label conditioning, and explicit score fidelity metadata."
+    }
+  ],
+  "review_questions": [
+    "Why does fitting with labels and scoring without labels alter the experiment?",
+    "Which claims can an independent synthetic score check support, and which require prospective feature-based data?",
+    "Why is an empirical latent-risk AUC ceiling a conditional implementation gate rather than a universal theorem?"
+  ],
+  "exercises": [
+    {
+      "question": "A fitted sigmoid has slope −2. What happens to the original ranking?",
+      "answer": "The mapping is strictly decreasing away from numerical clipping, so it reverses the ranking rather than preserving it. Positive fitted slope is required for the usual ranking-preservation statement."
+    },
+    {
+      "question": "A retention model meets its synthetic AUC target but misses the target against matured departures. Is that necessarily a coding error?",
+      "answer": "No. Synthetic labels and realized future departures are different outcomes. Sampling, treatment, horizon completion, and changing case mix can explain the difference. The evaluation must name each label source and investigate the scoring path before attributing the discrepancy."
+    }
+  ]
+}

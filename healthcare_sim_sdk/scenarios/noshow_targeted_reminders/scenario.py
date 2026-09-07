@@ -261,6 +261,12 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
         KEY DIFFERENCE from overbooking: resolves using effective_noshow_prob
         (which incorporates reminder effect from intervene()).
         """
+        # The initial day-zero schedule is a decision opportunity. Resolve it
+        # on day one, after predict/intervene have had a chance to act. Resolving
+        # it here would also regenerate day-zero IDs and count those IDs twice.
+        if t == 0 and state.day == 0 and state.total_slots_resolved == 0:
+            return state
+
         rng = self.rng.temporal
 
         for slot in state.schedule:
@@ -435,16 +441,13 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
     def measure(self, state: ReminderState, t: int) -> Outcomes:
         """Record appointment-level outcomes with demographics.
 
-        Reports from resolved_slots (previous day's resolved
-        appointments). On day 0 before any resolution, reports
-        from the current schedule (unresolved).
+        Reports only resolved_slots (the prior day's appointments). Before
+        the first resolution the measurement is empty and explicitly unobserved;
+        an unresolved appointment must never be counted as a no-show.
         """
-        slots = (
-            state.resolved_slots if state.resolved_slots
-            else state.schedule
-        )
+        slots = state.resolved_slots
 
-        slot_ids = np.array([s.slot_id for s in slots])
+        slot_ids = np.array([s.slot_id for s in slots], dtype=int)
         noshows = np.array([
             0.0 if s.showed else 1.0
             for s in slots
@@ -483,6 +486,11 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
                 "age_band": age_band,
             },
             metadata={
+                "outcome_observed": bool(slots),
+                "measurement_status": (
+                    "resolved" if slots else "no_resolved_slots"
+                ),
+                "n_resolved_slots": len(slots),
                 "total_noshows": state.total_noshows,
                 "total_resolved": state.total_slots_resolved,
                 "total_calls_made": state.total_calls_made,

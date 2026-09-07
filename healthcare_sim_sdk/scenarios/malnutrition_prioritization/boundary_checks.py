@@ -258,6 +258,13 @@ def run_boundary_suite(verbose: bool = True) -> bool:
     (REPORT_DIR / "case_walkthroughs.md").write_text(
         "# Case walkthroughs (seed 42, default config)\n\n"
         + "\n\n".join(walkthroughs) + "\n")
+    from ...experiments.review import write_certificate
+    from .review import certificate_identity
+    write_certificate(
+        REPORT_DIR / "stage_b_certificate.json",
+        certificate_identity("B", MalnutritionConfig()), checks,
+        ["stage_b_report.json", "case_walkthroughs.md"],
+    )
     return all_pass
 
 

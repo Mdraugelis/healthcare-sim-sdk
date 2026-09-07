@@ -1,22 +1,27 @@
-"""Equity proof-point validation tests for targeted reminders.
+"""Equity checks under explicitly configured synthetic reminder assumptions.
 
-Validates the Rosen et al. (2023) finding that ML-targeted reminders
-reduce racial disparities in no-show rates because Black patients
-(higher base rates) are correctly ranked higher by the model and
-disproportionately benefit from the multiplicative intervention.
+Race-associated risk differences below are model inputs, not intrinsic patient
+properties. These checks do not establish the cited deployment's effectiveness.
+The final regressions isolate a hand-worked allocation mechanism and quantify
+paired simulation uncertainty; aggregate AUC alone does not guarantee equity.
 """
+
+from itertools import combinations
+import json
 
 import numpy as np
 
 from healthcare_sim_sdk.scenarios.noshow_targeted_reminders.scenario import (
     CallerConfig,
     NoShowTargetedReminderScenario,
+    AppointmentSlot, Patient, ReminderState,
 )
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
 )
-from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.core.scenario import TimeConfig, Predictions
+from healthcare_sim_sdk.experiments.uncertainty import summarize_values
 
 
 def _make_equity_scenario(seed=42, model_auc=0.74, **kwargs):
@@ -201,57 +206,98 @@ class TestDisparityReduction:
                 f"CF gap={cf_gap:.3f}"
             )
 
-    def test_ml_targeting_reduces_disparity_more_than_random(self):
-        """High-AUC model should reduce disparity more than low-AUC."""
-        # High AUC = good targeting
-        sc_good = _make_equity_scenario(
-            seed=42, model_auc=0.80,
+    def test_known_risk_targeting_matches_hand_worked_allocation(self):
+        """Capacity two, perfect contact, half-risk efficacy: .35 gap reduction."""
+        scenario = _KnownRiskReminderScenario(seed=0, allocation="risk")
+        state = scenario.create_population(4)
+        predictions = scenario.predict(state, 0)
+        state, actions = scenario.intervene(state, predictions, 0)
+        np.testing.assert_array_equal(actions.treated_indices, [0, 1])
+        probabilities = [slot.effective_noshow_prob for slot in state.schedule]
+        np.testing.assert_allclose(probabilities, [.4, .3, .4, .2])
+        # Baseline B-W gap = (.8+.6)/2 - (.4+.2)/2 = .4.
+        # Targeted post gap = (.4+.3)/2 - (.4+.2)/2 = .05.
+        assert abs((.4 - _probability_gap(probabilities)) - .35) < 1e-12
+        # Uniform two-of-four assignment has six equally likely allocations.
+        # Each patient has P(call)=.5, so expected gap reduction is .1.
+        uniform_reductions = []
+        for called in combinations(range(4), 2):
+            rates = np.array([.8, .6, .4, .2])
+            rates[list(called)] *= .5
+            uniform_reductions.append(.4 - _probability_gap(rates))
+        assert abs(np.mean(uniform_reductions) - .1) < 1e-12
+
+    def test_paired_equity_gain_recovers_known_effect_with_mc_uncertainty(
+        self, record_testsuite_property,
+    ):
+        """Test actual branch outcomes, not a monotonicity claim about AUC."""
+        paired_gains = []
+        # Fixed before execution; no seed search or tuning to observed equity.
+        for seed in range(512):
+            reductions = {}
+            for allocation in ("risk", "uniform"):
+                result = BranchedSimulationEngine(
+                    _KnownRiskReminderScenario(seed, allocation),
+                    CounterfactualMode.BRANCHED,
+                ).run(4)
+                # Day-zero decisions resolve exactly once on day one.
+                assert result.outcomes[0].events.size == 0
+                np.testing.assert_array_equal(
+                    result.outcomes[1].entity_ids, [0, 1, 2, 3])
+                factual = result.outcomes[1].events
+                counterfactual = result.counterfactual_outcomes[1].events
+                reductions[allocation] = (
+                    _probability_gap(counterfactual) - _probability_gap(factual))
+            paired_gains.append(reductions["risk"] - reductions["uniform"])
+        summary = summarize_values(paired_gains)
+        record_testsuite_property(
+            "paired_equity_gain", json.dumps(summary, allow_nan=False))
+        # Analytic target .35-.10=.25. Four MCSEs bound sampling fluctuation;
+        # the separately reported 95% t interval expresses achieved precision.
+        assert abs(summary["mean"] - .25) <= 4 * summary["mcse_mean"]
+        assert summary["mean_ci95_low"] > 0, summary
+
+
+def _probability_gap(values):
+    """B-W gap in the fixed order B, B, W, W (two patients per group)."""
+    return (values[0] + values[1] - values[2] - values[3]) / 2
+
+
+class _KnownRiskReminderScenario(NoShowTargetedReminderScenario):
+    """Hand-worked cohort; production calling, resolution and measurement hooks.
+
+    Risk scores here are known probabilities. Uniform scores are a random
+    ranking independent of patient risk. Neither is described as an AUC target.
+    """
+    def __init__(self, seed, allocation):
+        super().__init__(
+            time_config=TimeConfig(2, 1 / 365, "day", [0]),
+            seed=seed, n_patients=4, model_type="baseline",
+            noshow_variability=0,
             caller_config=CallerConfig(
-                n_providers=6,
-                slots_per_provider_per_day=10,
-                call_capacity_per_day=25,
-                call_success_rate=0.75,
-                reminder_effectiveness=0.50,
+                n_providers=1, slots_per_provider_per_day=4,
+                call_capacity_per_day=2, call_success_rate=1,
+                reminder_effectiveness=.5,
             ),
         )
-        res_good = BranchedSimulationEngine(
-            sc_good, CounterfactualMode.BRANCHED
-        ).run(2000)
+        self.allocation = allocation
 
-        # Low AUC ~ random targeting
-        sc_rand = _make_equity_scenario(
-            seed=42, model_auc=0.52,
-            caller_config=CallerConfig(
-                n_providers=6,
-                slots_per_provider_per_day=10,
-                call_capacity_per_day=25,
-                call_success_rate=0.75,
-                reminder_effectiveness=0.50,
-            ),
-        )
-        res_rand = BranchedSimulationEngine(
-            sc_rand, CounterfactualMode.BRANCHED
-        ).run(2000)
+    def create_population(self, n_entities):
+        assert n_entities == 4
+        risks = [.8, .6, .4, .2]
+        patients = {
+            i: Patient(i, risk, race_ethnicity="Black" if i < 2 else "White")
+            for i, risk in enumerate(risks)
+        }
+        slots = [AppointmentSlot(i, 0, 0, i, risk, risk)
+                 for i, risk in enumerate(risks)]
+        return ReminderState(0, patients, slots, [], self.caller_config)
 
-        good_f = _get_race_noshow_rates(res_good, 30, "factual")
-        good_cf = _get_race_noshow_rates(res_good, 30, "counterfactual")
-        rand_f = _get_race_noshow_rates(res_rand, 30, "factual")
-        rand_cf = _get_race_noshow_rates(res_rand, 30, "counterfactual")
-
-        if all(
-            "Black" in d and "White" in d
-            for d in [good_f, good_cf, rand_f, rand_cf]
-        ):
-            good_reduction = (
-                (good_cf["Black"] - good_cf["White"])
-                - (good_f["Black"] - good_f["White"])
-            )
-            rand_reduction = (
-                (rand_cf["Black"] - rand_cf["White"])
-                - (rand_f["Black"] - rand_f["White"])
-            )
-
-            assert good_reduction >= rand_reduction, (
-                f"Good model should reduce disparity more: "
-                f"good={good_reduction:.3f}, random={rand_reduction:.3f}"
-            )
+    def predict(self, state, t):
+        scores = (np.array([slot.true_noshow_prob for slot in state.schedule])
+                  if self.allocation == "risk"
+                  else self.rng.prediction.permutation(4) / 4)
+        for slot, score in zip(state.schedule, scores):
+            slot.predicted_noshow_prob = float(score)
+        return Predictions(scores, metadata={
+            "slot_ids": [slot.slot_id for slot in state.schedule]})

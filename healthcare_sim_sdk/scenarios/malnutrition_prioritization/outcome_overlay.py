@@ -37,6 +37,8 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+from ...experiments.uncertainty import summarize_values
+
 from .scenario import (
     MalnutritionConfig,
     los_reduction,
@@ -184,16 +186,25 @@ def seed_ates(d: Dict[str, np.ndarray],
 
 
 def _agg(per_seed: List[Dict[str, Any]], key: str) -> Dict[str, Any]:
+    if not per_seed:
+        raise ValueError("No seeds available for overlay")
     out: Dict[str, Any] = {}
     for combo in per_seed[0][key]:
-        vals = np.array([s[key][combo] for s in per_seed])
-        out[combo] = {
-            "mean": float(vals.mean()),
-            "ci_lo": float(np.percentile(vals, 2.5)),
-            "ci_hi": float(np.percentile(vals, 97.5)),
-            "se": float(vals.std(ddof=1) / np.sqrt(len(vals))),
-        }
+        out[combo] = summarize_values(s[key][combo] for s in per_seed)
+        out[combo]["se"] = out[combo]["mcse_mean"]  # legacy consumer alias
     return out
+
+
+def expected_seed_files(cell_dir, summary):
+    """Refuse to silently reduce whatever seed files happen to remain."""
+    paths = sorted(cell_dir.glob("seed_*.npz"))
+    actual = [int(p.stem.removeprefix("seed_")) for p in paths]
+    expected = summary.get("seeds")
+    if expected is None:
+        raise ValueError("Queue manifest lacks exact seed IDs; rerun the queue stage")
+    if len(actual) != len(expected) or set(actual) != set(expected):
+        raise ValueError(f"Missing, duplicate, or unexpected seed arrays in {cell_dir}")
+    return paths
 
 
 def run_overlay(root: Path,
@@ -211,7 +222,7 @@ def run_overlay(root: Path,
     for i, label in enumerate(summary["cells"]):
         cell_dir = root / f"cell_{i:02d}"
         per_seed = []
-        for npz in sorted(cell_dir.glob("seed_*.npz")):
+        for npz in expected_seed_files(cell_dir, summary):
             d = _load(npz)
             exactness_test(d, cfg)
             per_seed.append(seed_ates(d, cfg))

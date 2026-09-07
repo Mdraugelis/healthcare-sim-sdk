@@ -142,3 +142,39 @@ class TestTier4Calibration:
             if s.calibration_slope is not None
         ]
         assert len(cal_slopes) >= 3
+
+
+class TestTier4MetricSemantics:
+    def test_calibrated_probabilities_have_logistic_slope_one(self):
+        from healthcare_sim_sdk.scenarios.nurse_retention.monitoring import (
+            tier4_model_drift,
+        )
+        # Each score has exactly its predicted event fraction; no sampling error.
+        probabilities = np.repeat(np.arange(0.1, 1.0, 0.1), 100)
+        labels = np.concatenate([
+            np.r_[np.ones(i * 10), np.zeros(100 - i * 10)]
+            for i in range(1, 10)
+        ])
+        slope, intercept = tier4_model_drift._calibration_slope_intercept(
+            probabilities, labels,
+        )
+        assert abs(slope - 1.0) < 1e-4
+        assert abs(intercept) < 1e-4
+
+    def test_zero_scores_are_real_predictions(self):
+        result = analyze_tier4([{
+            "week": 0, "scores": np.zeros(20),
+            "true_labels": np.r_[np.ones(10), np.zeros(10)],
+        }])
+        assert result.rolling_stats[0].n_predictions == 20
+        assert result.rolling_stats[0].realized_auc == 0.5
+        assert result.rolling_stats[0].brier_score == 0.5
+
+    def test_consecutive_rule_is_labeled_as_observations(self):
+        log = [{"week": week, "scores": np.full(20, 0.5),
+                "true_labels": np.r_[np.ones(10), np.zeros(10)]}
+               for week in [2, 4, 6, 8]]
+        result = analyze_tier4(log, auc_consecutive_observations=4)
+        event, = result.detection_events
+        assert event.week == 8
+        assert "4_consecutive_observations" in event.rule

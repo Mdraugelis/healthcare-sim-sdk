@@ -32,6 +32,8 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+from ...experiments.uncertainty import summarize_values
+
 from .outcome_overlay import (
     GRID_DETECT_LOS,
     GRID_DETECT_REL,
@@ -39,6 +41,7 @@ from .outcome_overlay import (
     GRID_TIMING_REL,
     WINDOW,
     _load,
+    expected_seed_files,
     overlay_arm,
 )
 from .scenario import MalnutritionConfig
@@ -130,14 +133,14 @@ def seed_estimands(d: Dict[str, np.ndarray],
 
 
 def _agg_scalar(rows: List[Dict[str, Any]], k: str) -> Dict[str, Any]:
-    vals = np.array([r[k] for r in rows], dtype=float)
-    vals = vals[~np.isnan(vals)]
-    if len(vals) == 0:
-        return {"mean": None}
-    return {"mean": float(vals.mean()),
-            "ci_lo": float(np.percentile(vals, 2.5)),
-            "ci_hi": float(np.percentile(vals, 97.5)),
-            "se": float(vals.std(ddof=1) / np.sqrt(len(vals)))}
+    try:
+        summary = summarize_values(r[k] for r in rows)
+    except ValueError as error:
+        raise ValueError(
+            f"{k}: incomplete or undefined estimand; no seeds omitted"
+        ) from error
+    summary["se"] = summary["mcse_mean"]  # legacy consumer alias
+    return summary
 
 
 # -- D-table emitters -------------------------------------------------
@@ -146,7 +149,7 @@ def _share_row(total: Dict[str, Any], det: float, tim: float
                ) -> str:
     """detect%/timing%/interaction% or -- under the 2xSE rule."""
     t = total["mean"]
-    if abs(t) < 2 * total["se"] or t == 0:
+    if total["se"] is None or abs(t) < 2 * total["se"] or t == 0:
         return "--"
     inter = t - det - tim
     return (f"{100*det/t:.0f}%/{100*tim/t:.0f}%/"
@@ -169,14 +172,14 @@ def emit_d1(cell: Dict[str, Any], endpoint: str,
             tot = g[f"{r}|{c}"]
             tim = g[f"0.0|{c}"]["mean"]
             cells.append(
-                f"{tot['mean']:{fmt}} [{tot['ci_lo']:{fmt}},"
-                f" {tot['ci_hi']:{fmt}}]<br>"
+                f"{tot['mean']:{fmt}} [{tot['seed_p025']:{fmt}},"
+                f" {tot['seed_p975']:{fmt}}]<br>"
                 + _share_row(tot, det, tim))
         lines.append(f"| **{r}** | " + " | ".join(cells) + " |")
     lines.append("")
     lines.append(
         f"*{unit}; counterfactual − factual, benefit positive; "
-        "cell = total ATE mean [95% CI] over seeds, then "
+        "cell = total ATE mean [95% seed distribution interval] over seeds, then "
         "detect%/timing%/interaction% shares (-- when "
         "|ATE| < 2× seed-SE).*")
     return "\n".join(lines)
@@ -220,7 +223,7 @@ def emit_d3(cell: Dict[str, Any]) -> str:
     l_tot = cell["los_ate_days"][
         f"{CENTRAL['eff_detect_los']}|{CENTRAL['eff_timing_los']}"]
     share = (f"{100*det/tot['mean']:.0f}%"
-             if abs(tot["mean"]) >= 2 * tot["se"] else
+             if tot["se"] is not None and abs(tot["mean"]) >= 2 * tot["se"] else
              "an indeterminate share (ATE below 2x seed-SE)")
     return (
         f"At the literature-central cell (detection {ed:.0%} "
@@ -228,11 +231,11 @@ def emit_d3(cell: Dict[str, Any]) -> str:
         f"timing {et:.0%}/day / {CENTRAL['eff_timing_los']} d/day), "
         "the simulation suggests, under these assumptions, a "
         f"malnourished-cohort readmission ATE of "
-        f"{tot['mean']:+.2f} pp [{tot['ci_lo']:+.2f}, "
-        f"{tot['ci_hi']:+.2f}] with {share} attributable to the "
+        f"{tot['mean']:+.2f} pp [{tot['seed_p025']:+.2f}, "
+        f"{tot['seed_p975']:+.2f}] with {share} attributable to the "
         "detection channel, and an LOS ATE of "
-        f"{l_tot['mean']:+.3f} d [{l_tot['ci_lo']:+.3f}, "
-        f"{l_tot['ci_hi']:+.3f}].\n\n"
+        f"{l_tot['mean']:+.3f} d [{l_tot['seed_p025']:+.3f}, "
+        f"{l_tot['seed_p975']:+.3f}].\n\n"
         "*Pre-registration smell-check: a single headline cell "
         "invites anchoring; the full D1 grid always travels with "
         "this sentence.*")
@@ -255,7 +258,7 @@ def main() -> None:
     cell_dir = root / f"cell_{idx:02d}"
 
     rows = []
-    for npz in sorted(cell_dir.glob("seed_*.npz")):
+    for npz in expected_seed_files(cell_dir, summary):
         rows.append(seed_estimands(_load(npz), cfg))
     est = {k: _agg_scalar(rows, k) for k in rows[0]}
 

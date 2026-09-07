@@ -1,0 +1,67 @@
+{
+  "id": "02-probability",
+  "number": 2,
+  "part": "Foundations",
+  "title": "Probability: uncertainty has a structure",
+  "subtitle": "Build from events and conditional probabilities to heterogeneous populations and reproducible random worlds.",
+  "objectives": [
+    "Distinguish an individual risk, a realized event and a population event rate.",
+    "Derive the relevant Bernoulli, binomial and beta quantities with their conditions.",
+    "Explain why random streams and sample transformations matter for scientific interpretation."
+  ],
+  "prerequisites": [
+    "01-orientation"
+  ],
+  "body": "## A probability is a model of uncertainty\n\nLet Y be one if an event occurs and zero otherwise. If its probability is p, then Y has a Bernoulli distribution. Before the draw, p is an expectation; after the draw, Y is an outcome. A patient with predicted probability 0.8 can remain event-free. That single observation is not evidence that the probability was necessarily wrong.\n\nFrom the two possible values, E[Y] = 0·(1−p) + 1·p = p. Since Y² = Y, its variance is E[Y²] − E[Y]² = p(1−p). The expected value need not itself be a possible individual outcome. An expected 0.8 event is a mathematical average over repetitions, not a fractional clinical event.\n\nFor n independent patients with the same probability p, the sum of events is binomial. Its expectation is np and its variance is np(1−p). Independence and a common p are conditions, not decorative notation. With known unequal probabilities and conditional independence, the sum instead has a Poisson-binomial distribution:\n\n```math\n\\mathrm{E}[C\\mid\\mathbf{p}]=\\sum_i p_i,\\qquad \\mathrm{Var}(C\\mid\\mathbf{p})=\\sum_i p_i(1-p_i)\n```\n\nIf patients share shocks or capacity, covariance terms must also enter the variance. Observations collected repeatedly from the same patient should not be treated as new independent people merely because a table has one row per week.\n\n## Conditional probability and Bayes’ rule\n\nP(A given B) is the fraction of the B population that also satisfies A. It is generally different from P(B given A). For a positive model flag, sensitivity conditions on actual cases; positive predictive value conditions on flags. This reversal is the reason prevalence matters.\n\nThe multiplication rule gives P(A and B) = P(A given B)P(B). Apply it to cases and positive flags, and partition all positive flags into cases and noncases:\n\n```math\nP(Y=1\\mid F=1)=\\frac{P(F=1\\mid Y=1)P(Y=1)}{P(F=1\\mid Y=1)P(Y=1)+P(F=1\\mid Y=0)P(Y=0)}\n```\n\nThis derivation is algebra on the same joint distribution. If sensitivity comes from a severe inpatient cohort and prevalence comes from outpatient screening, combining them assumes transportability that the identity itself does not provide. The [MIT probability materials](https://ocw.mit.edu/courses/res-6-012-introduction-to-probability-spring-2018/pages/part-i-the-fundamentals/) develop these basic conditional-probability ideas; Chapter 6 applies them to model evaluation.\n\nAn invented population with 5% cases, 80% sensitivity and 90% specificity produces 400 true flags and 950 false flags per 10,000 people in expectation. PPV is 400/1,350 = 29.63%. A reader who mistakes sensitivity for PPV would expect far more useful work than this model supplies.\n\n## Heterogeneous risks: the beta distribution\n\nA population in which everybody has risk 0.05 differs from one in which some people have near-zero risk and others have much higher risk. Both may have mean risk 0.05. Their ranking opportunities and repeated histories differ.\n\nA standard beta distribution has support between zero and one and two positive shape parameters α and β. Its mean and variance are:\n\n```math\n\\mathrm{E}[P]=\\frac{\\alpha}{\\alpha+\\beta},\\qquad \\mathrm{Var}(P)=\\frac{\\alpha\\beta}{(\\alpha+\\beta)^2(\\alpha+\\beta+1)}\n```\n\nThese definitions and the density are documented in the [NIST beta reference](https://itl.nist.gov/div898/handbook/eda/section3/eda366h.htm). The SDK helper uses `concentration` as **α**, with β = α(1/μ−1), where μ is the requested mean. Some statistical software instead calls α+β the concentration. Applying that other convention here would generate the wrong distribution.\n\nAt μ = 0.05 and α = 0.5, β = 9.5. The untransformed beta population has variance 0.004318 and standard deviation about 0.0657. At α = 5, β = 95 and the standard deviation is about 0.0217. Holding the mean fixed, the smaller α creates more heterogeneity under this parameterization.\n\nThe actual helper then rescales the sampled risks by requested mean divided by sampled mean, and clips them at 0.99. This is an implementation choice beyond drawing independent beta variables. Before clipping, rescaling enforces the finite sample mean; after clipping, the mean can fall below its target. The transformed sample is no longer an independent sample from the original beta law. A test of raw beta moments is therefore not an exact test of the final helper output.\n\n## Two levels of variability\n\nSuppose a patient’s latent P varies across the population, and Y given P is Bernoulli(P). The law of total variance gives:\n\n```math\n\\mathrm{Var}(Y)=\\mathrm{E}[P(1-P)]+\\mathrm{Var}(P)=\\mu(1-\\mu)\n```\n\nThe cancellation explains a subtle point: population risk heterogeneity does not, by itself, change the marginal variance of a single binary event with the same mean. It changes conditional prediction and dependence structures. If two events for the same person are independent conditional on a persistent P, their unconditional covariance is Var(P). A history can therefore be informative even when events are conditionally independent.\n\nDo not extend this toy argument automatically to the SDK’s longitudinal scenarios. Their risks evolve, treatment changes state, and patients may leave or return. Also distinguish annual risk from shorter-window risk. A nonlinear time conversion can change the mean after averaging, even when the mean annual probability is held fixed. “Same base rate” requires a horizon and a precise definition.\n\n## Simulating a Bernoulli event\n\nGenerate U uniformly between zero and one; set Y = 1 when U < p. The chance of landing in that interval is p. This construction gives both an implementation and an independent check. If two policies use the same U and probabilities p₁ ≤ p₀ for the same event, then the treated event cannot occur without the untreated event also occurring. This is a pathwise monotonicity property of this particular coupling.\n\nIt stops being a universal claim when events, eligibility, timing or resource allocations differ. A policy can lower one patient’s risk while leaving another patient untreated. A null treatment effect can coexist with intervention workload or altered accounting. Boundary tests must state which mechanism is disabled and which outcomes are expected to agree.\n\n## Random streams are experimental design\n\nThe SDK allocates named streams for population, temporal evolution, prediction, intervention and outcomes. This separation reduces accidental coupling: requesting extra prediction draws need not shift the temporal generator. NumPy’s [SeedSequence documentation](https://numpy.org/doc/stable/reference/random/bit_generators/generated/numpy.random.SeedSequence.html) describes the reproducible seed expansion used by the project. Its stream-separation properties are probabilistic assurances of the generator design, not a proof of stochastic independence for every derived quantity.\n\n`create_streams()` advances a partitioner’s spawn state. Calling it twice on the same partitioner does not replay the first set of streams. `fork()` creates a new partitioner with the same master seed so matching branch streams start at matching positions. Consuming different numbers of draws can subsequently misalign them; Chapter 4 examines the consequence.\n\nFor reproducibility, record the seed, code, configuration, model bytes and numerical environment. A seed alone does not freeze an algorithm, a data source or a dependency’s implementation. For inference, also record the planned number of independent replications and every failed or missing run. Reproducibility answers “can we replay this computation?”; probability theory answers “what does its variation mean?”",
+  "references": [
+    {
+      "id": "mit-probability",
+      "title": "MIT OCW, Introduction to Probability: fundamentals",
+      "url": "https://ocw.mit.edu/courses/res-6-012-introduction-to-probability-spring-2018/pages/part-i-the-fundamentals/",
+      "note": "Conditional probability, independence and Bayes’ rule."
+    },
+    {
+      "id": "nist-beta",
+      "title": "NIST, Beta Distribution",
+      "url": "https://itl.nist.gov/div898/handbook/eda/section3/eda366h.htm",
+      "note": "Standard beta density and moments; the SDK adds finite-sample transformations."
+    },
+    {
+      "id": "numpy-seed",
+      "title": "NumPy SeedSequence reference",
+      "url": "https://numpy.org/doc/stable/reference/random/bit_generators/generated/numpy.random.SeedSequence.html",
+      "note": "Seed expansion and spawning semantics."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/population/risk_distributions.py",
+      "symbol": "beta_distributed_risks",
+      "claim": "Uses alpha-style concentration, rescales sample mean, then clips."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/rng.py",
+      "symbol": "RNGPartitioner",
+      "claim": "Allocates named streams and supports a fresh same-seed fork."
+    }
+  ],
+  "review_questions": [
+    "Which independence assumptions justify the reported variance?",
+    "Is the stated event probability tied to the same population and horizon as the labels?",
+    "Are tests checking the theoretical distribution or the transformed implementation?"
+  ],
+  "exercises": [
+    {
+      "question": "Three independent patients have risks .1, .2 and .4. Compute the expected event count and variance.",
+      "answer": "The expectation is .7 and variance is .09 + .16 + .24 = .49."
+    },
+    {
+      "question": "At mean .1 and the SDK concentration .5, what is beta?",
+      "answer": ".5 × (1/.1 − 1) = 4.5; the total shape α+β is 5, not .5."
+    },
+    {
+      "question": "If a raw sample mean is below the requested mean, can clipping after rescaling preserve exact mean matching?",
+      "answer": "Only if no values are clipped. Any downward clipping after exact rescaling reduces the sample mean below the requested target."
+    }
+  ]
+}

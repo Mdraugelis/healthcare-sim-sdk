@@ -1,5 +1,12 @@
 # Healthcare Intervention Simulation SDK: Cross-Paper Synthesis Report
 
+> **Evidence-scope update, September 7, 2026:** Statements below that numerical
+> reproduction validates the SDK are stronger than the evidence supports.
+> Outcome-derived parameters make several examples calibration exercises.
+> Historical results are preserved; see the
+> [frozen-input evaluation framework](../docs/blinded_benchmark.md) for the
+> separate software, statistical and external-prediction tests now required.
+
 **30-Paper Reproducibility Audit**
 **Date:** April 6, 2026 (updated April 8, 2026)
 **Scope:** 30 landmark healthcare ML/AI papers evaluated against the Healthcare Intervention Simulation SDK

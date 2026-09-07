@@ -1,0 +1,82 @@
+decision_question: Does the ML worklist improve assessment under the same dietitian capacity, and what evidence is still needed before interpreting benefit?
+claims:
+  - id: process_integrity
+    question: Are the simulated workflows and outcome accounting internally consistent?
+    estimand: Missed cases among malnourished discharges and total harm under each worklist
+    population: All simulated admissions; pre-admission and inpatient cases remain explicit
+    denominator: Malnutrition present by discharge for missed-rate comparisons
+    comparison: ML worklist versus consult-first/MST usual care at equal capacity
+    horizon: Resolved runner.horizon_days; incomplete follow-up is reported
+    acceptance: Complete paired timesteps, valid fields, exact event reconciliation, and capacity respected on every step
+    reviewers: [clinical, operations, statistics, engineering]
+    evidence: [run_provenance, timesteps_complete, population_accounting, finite_outcomes, capacity, event_reconciliation, prediction_bounds]
+  - id: model_certification
+    question: Is the frozen model independently certified for this scoring configuration?
+    estimand: Independent-cohort AUROC, capture, precision, sensitivity, PPV, and flag rate
+    population: The declared model certification cohort
+    denominator: Positive cases and flagged cases at the declared prediction horizon
+    comparison: Actual frozen score generation versus specified model targets
+    horizon: Concurrent malnutrition status at scoring; not a prospective clinical prediction
+    acceptance: Current model/scoring identity must match a passing Stage A certificate
+    reviewers: [statistics, governance, engineering]
+    scope: experiment
+    evidence: [stage_a]
+  - id: scenario_certification
+    question: Do certified boundary mechanisms apply to this experiment?
+    estimand: Mechanism-specific null, saturation, and ordering identities
+    population: Declared Stage B supported configuration
+    denominator: Eligible admissions and available assessments
+    comparison: Boundary reference policies under matched random draws
+    horizon: Declared certification horizon and seed set
+    acceptance: Exact certification identity match; changed configuration requires renewed evidence
+    reviewers: [clinical, operations, engineering]
+    scope: experiment
+    evidence: [stage_b]
+  - id: inspectability
+    question: Can a reviewer trace both helpful and adverse paths from this actual run?
+    estimand: Individual process and outcome trajectories; illustrative rather than effect estimates
+    population: Fixed-seed random sample plus explicitly selected mechanism cases
+    denominator: Candidate count for each category, including zero candidates
+    comparison: Factual and counterfactual paths for the same entity
+    horizon: Every observed timestep of the recorded run
+    acceptance: Trace generated from actual results, source links and unavailable categories explicit
+    reviewers: [clinical, operations, governance, engineering]
+    evidence: [case_traces]
+  - id: study_design
+    question: Has the proposed real-world evaluation been shown to recover the desired effect?
+    estimand: To be specified for the actual study design
+    population: Intended evaluation sites and eligibility criteria
+    denominator: To be specified by the statistical reviewer
+    comparison: Observable-data study estimator against planted truth
+    horizon: Intended pre/post follow-up and outcome maturation
+    acceptance: Bias, coverage, Type I error and power with Monte Carlo uncertainty for the actual design
+    reviewers: [statistics, clinical, governance]
+    scope: experiment
+    evidence: [study_design_validation]
+metrics:
+  - {key: delta_missed_pp, label: Reduction in missed cases, unit: percentage points}
+  - {key: delta_harm, label: Reduction in accrued harm, unit: configured harm units}
+  - {key: ml_sourced_assessments, label: Assessments attributed to ML ranking, unit: assessments}
+  - {key: censored_truepos_frac, label: True cases without complete follow-up, unit: proportion}
+assumptions:
+  - id: clinical_effect
+    description: Detection and timing effects are configured assumptions, not established by simulation success.
+    provenance: hypothetical or literature-derived as specified by the experiment owner
+    source: Resolved scenario efficacy parameters; external evidence must be supplied for the use case
+    range: Include zero efficacy and clinically plausible alternatives
+    owner: Clinical reviewer (unassigned)
+    reviewers: [clinical, statistics, governance]
+  - id: workflow
+    description: Mandatory/provider consults precede ranking; assessments are one-shot and nursing screening occurs at admission.
+    provenance: modeled workflow
+    source: scenario.py and local workflow confirmation
+    range: Capacity, screening, consult demand, and safety-net erosion should be varied
+    owner: Operations reviewer (unassigned)
+    reviewers: [clinical, operations, governance]
+  - id: simulation_truth
+    description: Both-branch individual contrasts and harm weights are simulation-only evidence.
+    provenance: model construction
+    source: Five-method scenario and configured harm weights
+    range: Real-world study controls and outcome measurements require a separate design
+    owner: Statistical reviewer (unassigned)
+    reviewers: [statistics, governance, engineering]

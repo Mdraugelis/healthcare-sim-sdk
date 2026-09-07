@@ -1,5 +1,13 @@
 # Paper 6: Hong et al. — SHIELD-RT (JCO 2020)
 
+> **Evidence-scope update, September 7, 2026:** The historical reproduction
+> below used outcome-informed calibration and does not establish a blinded
+> prediction of the trial effect. The new
+> [SHIELD-RT evaluation adapter](../../docs/blinded_benchmark.md) uses explicit
+> inputs, a single course outcome, randomized arms and separately held
+> reference evidence. Its supplied pilot remains outcome-exposed development
+> work, with illustrative rather than independently validated clinical inputs.
+
 ## Classification: FIT
 ## Reproducibility: REPRODUCED
 

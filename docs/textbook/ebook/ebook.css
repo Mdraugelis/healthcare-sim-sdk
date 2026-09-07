@@ -1,0 +1,32 @@
+/* Conservative, reflowable reading styles. Reader controls retain font choice. */
+body{line-height:1.5;margin:0 5%;overflow-wrap:anywhere;word-wrap:break-word;}
+h1,h2,h3,h4{line-height:1.2;page-break-after:avoid;break-after:avoid;font-weight:bold;text-align:left;overflow-wrap:anywhere;word-wrap:break-word;}
+h1{font-size:1.65em;margin:1.6em 0 .8em;}
+h2{font-size:1.25em;margin:1.4em 0 .6em;}
+h3{font-size:1.05em;margin:1.2em 0 .5em;}
+p{margin:.65em 0;text-indent:0;orphans:2;widows:2;}
+ul,ol{padding-left:1.5em;}
+li{margin:.4em 0;}
+a{text-decoration:underline;}
+.subtitle{font-size:1.15em;}
+.chapter-kicker,.mini-label,.chapter-kicker+.subtitle,.caption,figcaption,.source-stamp,.prerequisites{font-size:.85em;}
+.chapter-kicker{margin-top:1em;font-weight:bold;}
+.objectives,.chapter-review,.static-lab,.expanded-note{margin:1em 0;padding:.6em 0;border-top:1px solid #777;}
+figure{margin:1em 0;padding:0;text-align:left;page-break-inside:avoid;break-inside:avoid;}
+img{max-width:100%;height:auto;display:block;margin:.5em 0;}
+.chart-image,.diagram-image{width:100%;height:auto;}
+.equation-image{height:auto;}
+.equation{page-break-inside:avoid;break-inside:avoid;}
+pre,code{font-family:monospace;font-size:.8em;white-space:pre-wrap;overflow-wrap:break-word;word-wrap:break-word;}
+pre{font-size:.75em;line-height:1.35;margin:.8em 0;white-space:pre-wrap;overflow-wrap:anywhere;word-wrap:break-word;}
+pre code{font-size:1em;}
+.source-stamp,.identity,.repository-reference{overflow-wrap:anywhere;word-wrap:break-word;}
+.source-stamp,.identity{font-family:monospace;font-size:.72em;}
+.comparison-record{padding:.5em 0;margin:.6em 0;border-bottom:1px solid #999;}
+.comparison-record p{margin:.25em 0;}
+.comparison-records{margin:1em 0;}
+blockquote{margin:1em 0;padding:.4em .8em;border-left:3px solid #888;}
+dt{font-weight:bold;margin-top:1em;}
+dd{margin:.3em 0 .8em;}
+.source-link{font-weight:bold;}
+@page{margin:5%;}

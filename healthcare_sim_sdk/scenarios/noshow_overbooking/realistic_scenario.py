@@ -312,6 +312,12 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
 
         PURITY: uses only self.rng.temporal and state.
         """
+        # The initial day-zero schedule is a decision opportunity. Resolve it
+        # on day one, after predict/intervene have had a chance to act. Resolving
+        # it here would also regenerate day-zero IDs and count those IDs twice.
+        if t == 0 and state.day == 0 and state.total_slots_resolved == 0:
+            return state
+
         rng = self.rng.temporal
         cc = state.clinic_config
 
@@ -598,12 +604,9 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
 
     def measure(self, state: ClinicState, t: int) -> Outcomes:
         """Record outcomes from resolved slots."""
-        slots = (
-            state.resolved_slots if state.resolved_slots
-            else state.schedule
-        )
+        slots = state.resolved_slots
 
-        slot_ids = np.array([s.slot_id for s in slots])
+        slot_ids = np.array([s.slot_id for s in slots], dtype=int)
         noshows = np.array([
             0.0 if s.original_showed else 1.0 for s in slots
         ])
@@ -637,6 +640,11 @@ class RealisticNoShowScenario(BaseScenario["ClinicState"]):
                 "insurance_type": insurance,
             },
             metadata={
+                "outcome_observed": bool(slots),
+                "measurement_status": (
+                    "resolved" if slots else "no_resolved_slots"
+                ),
+                "n_resolved_slots": len(slots),
                 "total_collisions": state.total_collisions,
                 "total_overbooked": state.total_overbooked,
                 "total_overbooked_showed": state.total_overbooked_showed,

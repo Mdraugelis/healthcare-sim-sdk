@@ -1,0 +1,69 @@
+{
+  "id": "05-monte-carlo",
+  "number": 5,
+  "part": "Inference and evaluation",
+  "title": "What repeated simulations can tell us",
+  "subtitle": "Four uncertainties, one disciplined interpretation of a seed.",
+  "objectives": [
+    "Distinguish variation across simulated worlds from uncertainty in their average.",
+    "Plan repetitions and interpret boundary results without claiming certainty.",
+    "Separate simulation noise, study uncertainty, and uncertain inputs."
+  ],
+  "prerequisites": [
+    "02-probability",
+    "04-counterfactuals"
+  ],
+  "body": "## One seed is one possible world\n\nImagine simulating a service for one year. The same staffing policy sometimes prevents eight events and sometimes twelve because arrivals, patient needs, and outcomes differ. A seed makes one realization reproducible. Repeating that seed confirms reproducibility; it does not create another independent realization. Repeating the experiment with independently partitioned seeds estimates how this specified simulated service behaves across possible realizations.\n\nThe unit of repetition matters. Ten thousand patients inside a hospital simulation are not ten thousand independent estimates of the hospital policy's effect. They share staffing, queues, and environmental shocks. For a hospital-level contrast, first calculate one contrast per simulated hospital run, then summarize the independent runs. When factual and counterfactual branches share randomness, calculate their difference within each seed before aggregating. That pairing can remove irrelevant noise while preserving the variation of the contrast we actually want.\n\n## Name the uncertainty before drawing a ribbon\n\nA **seed distribution interval** describes the spread of run-level results under fixed assumptions. The SDK reports empirical 2.5th and 97.5th percentiles. These are sample quantiles, not a guaranteed prediction interval for the next hospital, and their tails are poorly resolved with few runs.\n\nA **Monte Carlo standard error**, or MCSE, describes numerical uncertainty in an estimated average caused by using finitely many repetitions. A **study confidence interval** belongs to an estimator applied inside one simulated study: for example, the interval around an interrupted time series coefficient. Repeating studies lets us evaluate that interval's coverage. **Input uncertainty** concerns unknown parameters such as an intervention effect or arrival process. More seeds at one fixed parameter value do not resolve it.\n\n| Quantity | Repeated object | Question |\n|---|---|---|\n| Seed spread | Complete simulation run | How variable are simulated outcomes? |\n| MCSE | Estimated average across runs | How accurately have we computed that average? |\n| Study interval | Dataset generated within a run | How uncertain is this study's estimate? |\n| Input uncertainty | Assumed model parameters | How much does the conclusion depend on uncertain inputs? |\n\n## Why the square root appears\n\nFor independent run-level values with a common finite variance, the variance of their average decreases in proportion to the number of repetitions. Estimate the standard error with:\n\n```math\n\\widehat{\\mathrm{MCSE}}(\\bar{Y})=\\frac{s_Y}{\\sqrt{R}}\n```\n\nHere R is the number of independent runs, Y is the run-level quantity, the bar denotes its average, and s_Y is its sample standard deviation. Quadrupling R approximately halves this source of uncertainty. It does not halve the variation of individual runs.\n\nThe SDK uses the following interval for the mean:\n\n```math\n\\bar{Y}\\pm t_{0.975,R-1}\\frac{s_Y}{\\sqrt{R}}\n```\n\nHere t is the Student distribution quantile with R−1 degrees of freedom. Under independent normally distributed run-level values, this construction has exact nominal coverage; with nonnormal values, its justification is approximate. The central limit theorem concerns the distribution of the average as repetition grows, not a transformation of every outcome into a normal variable. Severe skew, rare events, and dependence can make a small run count inadequate. The confidence level describes the interval procedure across repetitions, rather than a probability assigned to the fixed mean after observing an interval. [NIST's mean interval reference](https://www.itl.nist.gov/div898/handbook/eda/section3/eda352.htm) gives the underlying construction.\n\n## Work one small example by hand\n\nUse four invented paired benefits: 8, 10, 12, and 10 events. Their mean is 10. Their sample standard deviation is about 1.633, so MCSE is 0.816. With only three degrees of freedom, the 95% t multiplier is about 3.182: the interval is approximately 7.40 to 12.60. Calling this a four-run demonstration is essential; the formula does not establish that these four values adequately represent a complicated simulator.\n\nWith 100 independent runs, a mean of 10 and seed standard deviation of 4 give MCSE 0.4 and a mean interval of approximately 9.21 to 10.79. Individual runs still vary on the scale of four events. A narrow interval around ten therefore does not promise that every deployment prevents approximately ten events.\n\n<div data-lab=\"monte-carlo\"></div>\n\nUse the laboratory to distinguish the distribution of individual runs from the distribution of their averages. Its mean stays fixed at ten events; the controls change run variability and replication count. Varying a clinical-effect assumption would be a separate experiment that can move the expectation itself.\n\n## Power and false alarms need their own uncertainty\n\nSome run-level results are binary: did a test reject, did an interval cover the planted truth, or did a monitoring system raise any false alarm? With H successes among R independent repetitions:\n\n```math\n\\hat{p}=\\frac{H}{R}\n```\n\nHere p is the underlying success probability under this simulation design. The usual plug-in MCSE is:\n\n```math\n\\widehat{\\mathrm{MCSE}}(\\hat{p})=\\sqrt{\\frac{\\hat{p}(1-\\hat{p})}{R}}\n```\n\nAt estimated power 0.8 with 30 repetitions, this is about 0.073: the apparent 80% is still imprecise. At zero observed false alarms, the formula gives zero, which plainly cannot establish that false alarms are impossible. The SDK therefore also reports exact Clopper–Pearson intervals. These invert binomial probabilities and can be conservative because a count is discrete. [SciPy documents the exact interval method](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats._result_classes.BinomTestResult.proportion_ci.html).\n\nFor zero alarms in 30 independent null runs, the one-sided 95% upper bound is approximately 9.5%; the two-sided 95% interval has upper endpoint approximately 11.6%. The SDK's generic `binomial_performance` uses the latter. The monitoring summary additionally exposes the one-sided bound. State which bound supports a claim.\n\n## Plan repetitions before celebrating a result\n\nFor a desired binary MCSE d, a planning approximation is:\n\n```math\nR\\approx\\frac{p(1-p)}{d^2}\n```\n\nHere p is a planning value, not a known truth, and d is the desired absolute MCSE. Planning near p=0.8 for MCSE 0.01 suggests 1,600 repetitions. Using p=0.5 gives a conservative 2,500. This targets numerical precision, not a clinical sample size or a guarantee that a certification threshold will be met. Interval-width planning and demonstrating a bound below a threshold are different calculations. Prespecify stopping rules; repeatedly stopping when a favorable ordinary interval appears can invalidate its nominal interpretation.\n\n## Follow the actual implementation\n\n```python\nfrom healthcare_sim_sdk.experiments.uncertainty import (\n    summarize_values, binomial_performance,\n)\n\nsummary = summarize_values([8.0, 10.0, 12.0, 10.0])\nnull_summary = binomial_performance(hits=0, repetitions=30)\n```\n\n`summary` separates `seed_sd`, `seed_p025`, `seed_p975`, `mcse_mean`, and `mean_ci95_low/high`. With one seed, variance and mean-interval fields are unavailable and uncertainty is `INCONCLUSIVE`. `summarize_metrics` can require an exact expected seed set and rejects duplicate seeds, absent required values, and nonfinite metrics. A missing difficult run must not quietly disappear from an otherwise reassuring summary. Reporting Monte Carlo error is a central recommendation in the [Morris, White, and Crowther simulation-study tutorial](https://pmc.ncbi.nlm.nih.gov/articles/PMC6492164/).\n\n## Outer uncertainty, inner randomness\n\nIf uncertain parameters are represented by an explicitly justified distribution, draw an outer parameter setting and run inner simulations conditional on it. The variance decomposition is:\n\n```math\n\\mathrm{Var}(Y)=\\mathrm{E}_{\\theta}[\\mathrm{Var}(Y\\mid\\theta)]+\\mathrm{Var}_{\\theta}(\\mathrm{E}[Y\\mid\\theta])\n```\n\nHere theta represents uncertain inputs. The first term averages variability within an input setting; the second describes changes in conditional means across settings. Samples sharing an outer setting are clustered, so counting every inner result as an independent outer draw exaggerates precision. A sensitivity grid is also useful, but its points do not become a probability distribution without defensible weights.\n\nFor peer review, ask what was varied, what was fixed, what was paired, and what was omitted. A successful calculation supports its declared simulated target. It cannot, by itself, establish that the model structure or input distribution describes a real service.",
+  "references": [
+    {
+      "id": "nist-mean-ci",
+      "title": "NIST: Confidence Limits for the Mean",
+      "url": "https://www.itl.nist.gov/div898/handbook/eda/section3/eda352.htm",
+      "note": "Official reference for the Student t interval and repeated-sampling interpretation."
+    },
+    {
+      "id": "scipy-binomial-ci",
+      "title": "SciPy: BinomTestResult.proportion_ci",
+      "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats._result_classes.BinomTestResult.proportion_ci.html",
+      "note": "Official API documentation identifying the exact Clopper–Pearson method."
+    },
+    {
+      "id": "morris-simulation",
+      "title": "Morris, White, and Crowther (2019): Using simulation studies to evaluate statistical methods",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6492164/",
+      "note": "Primary methodological paper covering simulation-study planning and Monte Carlo error."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/experiments/uncertainty.py",
+      "symbol": "summarize_values",
+      "claim": "Separates empirical seed spread, Monte Carlo error, and a t interval for the simulated mean."
+    },
+    {
+      "path": "healthcare_sim_sdk/experiments/uncertainty.py",
+      "symbol": "summarize_metrics",
+      "claim": "Requires complete metrics and validates expected seed identities when supplied."
+    },
+    {
+      "path": "healthcare_sim_sdk/experiments/uncertainty.py",
+      "symbol": "binomial_performance",
+      "claim": "Reports binary performance with exact two-sided intervals and a boundary warning."
+    }
+  ],
+  "review_questions": [
+    "What varies across the repetitions used to calculate this interval?",
+    "Could dependence or omitted failed runs make the reported MCSE too small?",
+    "Which uncertainty would remain if we could run infinitely many seeds?"
+  ],
+  "exercises": [
+    {
+      "question": "A seed standard deviation is 12 across 144 independent runs. What is the MCSE, and what happens if you run 576?",
+      "answer": "MCSE is 12/√144=1. At 576 runs it is approximately 0.5 if the underlying variation is unchanged. The seed standard deviation remains approximately 12."
+    },
+    {
+      "question": "Thirty null runs contain no alarms. Is a false-alarm probability below 5% established at one-sided 95% confidence?",
+      "answer": "No. The exact one-sided upper bound is about 9.5%, exceeding 5%. Zero observed alarms is evidence of a low rate, with substantial remaining uncertainty."
+    }
+  ]
+}

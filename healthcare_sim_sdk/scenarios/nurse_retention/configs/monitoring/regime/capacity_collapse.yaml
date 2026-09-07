@@ -8,3 +8,12 @@ policy:
     change_points:
       - [30, 2.0]
     interpolation: step
+
+# Windows are inclusive; the runner sets horizon to n_weeks - 1.
+monitoring_claims:
+  - claim_id: capacity_loss
+    tier: 1
+    metric: check_ins_done
+    direction: down
+    change_week: 30
+    eligibility_start: 30

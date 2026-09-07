@@ -161,6 +161,9 @@ def run_cell(cfg: MalnutritionConfig, horizon: int,
     rows = []
     for seed in seeds:
         _, res = run_once(cfg, horizon, seed)
+        verification = verify_results(cfg, res)
+        if not verification["all_pass"]:
+            raise ValueError(f"Run seed {seed} failed verification: {verification}")
         rows.append(reduce_results(res))  # release res immediately
         rows[-1]["seed"] = seed
     return rows
@@ -168,102 +171,139 @@ def run_cell(cfg: MalnutritionConfig, horizon: int,
 
 def summarize(rows: List[Dict[str, Any]],
               keys: List[str]) -> Dict[str, Any]:
-    out = {}
-    for k in keys:
-        vals = np.array([r[k] for r in rows if k in r], dtype=float)
-        if len(vals) == 0:
-            continue
-        out[k] = {
-            "mean": float(vals.mean()),
-            "ci_lo": float(np.percentile(vals, 2.5)),
-            "ci_hi": float(np.percentile(vals, 97.5)),
-            "n_seeds": int(len(vals)),
-        }
-    return out
+    from ...experiments.uncertainty import summarize_metrics
+    return summarize_metrics(rows, keys)
 
 
 # -- Always-On Verification (sim-guide Phase 4) ---------------------------
 
+def verify_results(cfg: MalnutritionConfig, res) -> Dict[str, Any]:
+    """Check the actual run on every timestep and both branches.
+
+    Calibration/censoring checks are diagnostics because sweeps deliberately
+    change these quantities. Structural failures always block interpretation.
+    Infinity is permitted only for the documented never-onset sentinel.
+    """
+    from ...experiments.review import evidence
+    checks = []
+    horizon = res.time_config.n_timesteps
+    branches = (res.outcomes, res.counterfactual_outcomes)
+    complete = all(set(b) == set(range(horizon)) for b in branches)
+    checks.append(evidence("timesteps_complete", "PASS" if complete else "FAIL"))
+    if not complete:
+        return {"checks": checks, "all_pass": False}
+    n = res.n_entities
+    shapes, statuses, finite, capacity, reconciliation = [], [], [], [], []
+    binary = ("assessed", "missed", "coded", "readmit", "diagnosed")
+    for branch in branches:
+        previous_missed = np.zeros(n)
+        for t in range(horizon):
+            out = branch[t]
+            sec = out.secondary
+            shapes.append(len(out.events) == n and out.entity_ids is not None
+                          and len(out.entity_ids) == n
+                          and len(np.unique(out.entity_ids)) == n
+                          and np.array_equal(out.entity_ids, np.arange(n))
+                          and all(np.asarray(a).shape == (n,) for a in sec.values()))
+            statuses.append(bool(np.isin(sec["status"], [0, 1, 2]).all()))
+            for key, values in {"events": out.events, **sec}.items():
+                arr = np.asarray(values)
+                if arr.dtype.kind not in "biufc":
+                    continue
+                finite.append(bool((~np.isnan(arr) & ~np.isneginf(arr)).all())
+                              if key == "onset_day" else bool(np.isfinite(arr).all()))
+            finite.extend(bool(np.isin(sec[k], [0, 1]).all()) for k in binary)
+            finite.append(bool(np.isin(out.events, [0, 1]).all()))
+            reconciliation.append(np.array_equal(
+                out.events, sec["missed"] - previous_missed,
+            ))
+            previous_missed = sec["missed"]
+            assessed_today = int(np.sum(sec["assess_day"] == t))
+            capacity.append(0 <= assessed_today <= cfg.rdn_assessments_per_day
+                            and assessed_today == out.metadata["assessed_today"]
+                            and np.array_equal(sec["assessed"] == 1,
+                                               sec["assess_day"] >= 0))
+            statuses.append(np.array_equal(sec["assessed"] == 1,
+                                           sec["assess_source"] > 0))
+        reconciliation.append(sum(out.events.sum() for out in branch.values())
+                              == branch[horizon - 1].secondary["missed"].sum())
+    for name, values in (("population_accounting", shapes + statuses),
+                         ("finite_outcomes", finite),
+                         ("capacity", capacity),
+                         ("event_reconciliation", reconciliation)):
+        checks.append(evidence(name, "PASS" if all(values) else "FAIL",
+                               actual=sum(values), expected=len(values)))
+    prediction_ok = [set(res.predictions) == set(res.time_config.prediction_schedule)]
+    for pred in res.predictions.values():
+        if np.asarray(pred.scores).shape != (n,):
+            prediction_ok.append(False)
+            continue
+        scoreable = pred.metadata.get(
+            "scoreable", np.ones(len(pred.scores), dtype=bool),
+        )
+        if np.asarray(scoreable).shape != (n,):
+            prediction_ok.append(False)
+            continue
+        scores = pred.scores[scoreable]
+        prediction_ok.append(bool(np.isfinite(scores).all()
+                                  and ((scores >= 0) & (scores <= 1)).all()))
+    checks.append(evidence(
+        "prediction_bounds", "PASS" if all(prediction_ok) else "FAIL",
+        detail=("Non-scoreable NaN values are allowed; "
+                "scoreable scores must be finite in [0,1]."),
+    ))
+    c = res.counterfactual_outcomes[horizon - 1].secondary
+    discharged = c["status"] == STATUS_DISCHARGED
+    count = int(discharged.sum())
+    rate = float(c["coded"][discharged].mean()) if count else None
+    sigma = (np.sqrt(cfg.coded_prevalence * (1 - cfg.coded_prevalence) / count)
+             if count else 0)
+    checks.append(evidence("baseline_coding_calibration",
+                           "PASS" if rate is not None
+                           and abs(rate - cfg.coded_prevalence) < 4 * sigma + 0.01
+                           else "INCONCLUSIVE",
+                           actual=rate, expected=cfg.coded_prevalence,
+                           required=False, category="diagnostic",
+                           detail=("Conditional baseline diagnostic; capacity/policy "
+                                   "sweeps may intentionally move this rate.")))
+    f = res.outcomes[horizon - 1].secondary
+    true_positive = f["true_malnourished"] == 1
+    count = int(true_positive.sum())
+    censored = (
+        float((true_positive & (f["status"] != STATUS_DISCHARGED)).sum() / count)
+        if count else None
+    )
+    checks.append(evidence(
+        "censoring", "PASS" if censored is not None and censored < .15
+        else "INCONCLUSIVE",
+        actual=censored, expected="< 0.15", required=False,
+        category="diagnostic", detail="Report horizon-dependent incomplete follow-up.",
+    ))
+    for check in checks:
+        check["pass"] = check["status"] == "PASS"
+        check["check"] = check["name"]
+    return {"checks": checks,
+            "all_pass": all(c["pass"] for c in checks if c["required"])}
+
+
 def always_on_verification(cfg: MalnutritionConfig,
                            horizon: int, seed: int) -> Dict[str, Any]:
-    """Structural / statistical / conservation checks on one full run.
-    Returns {'checks': [...], 'all_pass': bool}."""
+    """Compatibility helper for a standalone check; runners check actual runs."""
     _, res = run_once(cfg, horizon, seed)
-    H = len(res.outcomes) - 1
-    f = res.outcomes[H].secondary
-    checks = []
-
-    def add(name, ok, detail=""):
-        checks.append({"check": name, "pass": bool(ok),
-                       "detail": str(detail)})
-
-    # Structural: population conservation + status partition.
-    n = len(f["status"])
-    statuses_ok = all(
-        np.isin(res.outcomes[t].secondary["status"],
-                [0, 1, 2]).all()
-        and len(res.outcomes[t].secondary["status"]) == n
-        for t in range(0, H + 1, max(H // 6, 1)))
-    add("population conservation / status partition", statuses_ok)
-
-    # Structural: no NaN in outcome arrays.
-    nan_free = all(
-        not np.isnan(np.asarray(f[k], dtype=float)).any()
-        for k in ("missed", "harm", "coded", "los", "readmit"))
-    add("no NaN in outcomes", nan_free)
-
-    # Conservation: event semantics (sum daily events == missed).
-    total_events = sum(
-        res.outcomes[t].events.sum() for t in range(H + 1))
-    add("event semantics (sum events == missed count)",
-        total_events == f["missed"].sum(),
-        f"{total_events:.0f} vs {f['missed'].sum():.0f}")
-
-    # Conservation: capacity respected both branches.
-    cap = cfg.rdn_assessments_per_day
-    cap_ok = all(
-        res.outcomes[t].metadata["assessed_today"] <= cap
-        and res.counterfactual_outcomes[t].metadata[
-            "assessed_today"] <= cap
-        for t in range(H + 1))
-    add("capacity respected (both branches)", cap_ok)
-
-    # Statistical: Arm-C coded prevalence within 4-sigma of the
-    # campus target (CLT).
-    c = res.counterfactual_outcomes[H].secondary
-    discharged = c["status"] == STATUS_DISCHARGED
-    n_disch = max(int(discharged.sum()), 1)
-    rate = float(c["coded"][discharged].sum() / n_disch)
-    target = cfg.coded_prevalence
-    sigma = float(np.sqrt(target * (1 - target) / n_disch))
-    add("Arm-C coded prevalence 4-sigma CLT",
-        abs(rate - target) < 4 * sigma + 0.01,
-        f"{rate:.4f} vs {target} (4s={4*sigma:.4f})")
-
-    # Accounting: censored true+ fraction bounded.
-    tm = f["true_malnourished"] == 1
-    cens = float(
-        (tm & (f["status"] != STATUS_DISCHARGED)).sum()
-        / max(tm.sum(), 1))
-    add("censored true+ fraction < 15%", cens < 0.15,
-        f"{cens:.3f}")
-
-    return {"checks": checks,
-            "all_pass": all(x["pass"] for x in checks)}
+    return verify_results(cfg, res)
 
 
 def format_verification(v: Dict[str, Any]) -> str:
     lines = ["## Always-On Verification", ""]
     for c in v["checks"]:
-        mark = "PASS" if c["pass"] else "**FAIL**"
+        mark = c.get("status", "PASS" if c.get("pass") else "FAIL")
         detail = f" ({c['detail']})" if c["detail"] else ""
-        lines.append(f"- [{mark}] {c['check']}{detail}")
+        name = c.get("name", c.get("check", "unnamed"))
+        lines.append(f"- [{mark}] {name}{detail}")
     lines.append("")
     lines.append(
-        "Case walkthroughs: see "
-        "`outputs/malnutrition_verification/case_walkthroughs.md` "
-        "(Stage B). Model fidelity: Stage A gate "
-        "(`stage_a_report.json`).")
+        "Case and model certification evidence must match this run's "
+        "review packet. A separate default-run report is not current-run evidence.")
     if not v["all_pass"]:
         lines.append(
             "\n**VERIFICATION FAILED -- do not interpret results "

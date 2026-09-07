@@ -2,3 +2,18 @@
 # Regime A — Calibrated Success
 # All parameters at calibrated operating point for 104 weeks.
 regime: calibrated_success
+
+# Windows are inclusive; the runner sets horizon to n_weeks - 1.
+monitoring_claims:
+  - claim_id: stable_capacity_alarms
+    tier: 1
+    metric: check_ins_done
+    direction: any
+    change_week: null
+    eligibility_start: 8
+  - claim_id: stable_auc_alarms
+    tier: 4
+    metric: realized_auc
+    direction: any
+    change_week: null
+    eligibility_start: 0

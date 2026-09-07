@@ -165,11 +165,11 @@ You are accountable for running these checks and reporting results to the human 
 
 These catch configuration errors and engine bugs. They should always pass. If they don't, stop and investigate before interpreting any results.
 
-- **Population conservation**: Entity count is constant across all timesteps. No entities appear or disappear.
-- **Outcome shapes**: Arrays match expected population size at every timestep.
-- **No NaN/Inf**: Predictions, outcomes, and intermediate state contain no NaN or Inf values.
-- **Prediction bounds**: All ML prediction scores are in [0, 1].
-- **Confusion matrix identity**: TP + FP + TN + FN = N for every timestep where predictions are made.
+- **Population accounting**: Fixed cohorts conserve IDs; open cohorts reconcile admissions, departures and stable entity identities. Appointment outcomes reconcile resolved slots, not the size of the patient pool.
+- **Outcome shapes**: Arrays match the declared unit of analysis and IDs at every observed timestep. Missing observations are distinct from observed zeros.
+- **Finite eligible values**: Eligible scores and measured outcomes must be finite. Explicit missingness masks and documented sentinels (such as infinity for never-onset or NaN for an ineligible score) are permitted only in their declared fields. Generic code must not inspect opaque scenario state.
+- **Prediction bounds**: Eligible probability scores are in [0, 1]; use an explicit metric rule for other score scales.
+- **Confusion matrix identity**: TP + FP + TN + FN equals the number of aligned, eligible, observed labels. Use the actual prediction horizon and label availability time.
 - **Scenario validation hooks**: Run `validate_population()` and `validate_results()` if the scenario implements them.
 
 ### Level 2: Statistical Sanity (Always Run)
@@ -186,10 +186,10 @@ These verify that the simulation's statistical properties match expectations. Fa
 
 These encode "the physics of the simulation." Violations indicate a scenario logic error.
 
-- **Higher intervention effectiveness → fewer factual events** (monotone in effectiveness).
-- **Lower threshold → more entities flagged** (monotone in threshold).
-- **Zero effectiveness → factual ≈ counterfactual** (no treatment effect when treatment does nothing).
-- **Accounting identities**: For resource-constrained scenarios, verify that capacity is respected (e.g., total resolved slots = daily_cap × days).
+- **Effectiveness monotonicity**: Assert only where the mechanism guarantees it under the chosen coupling. Capacity, selection, displacement and competing risks may break aggregate pathwise monotonicity; otherwise assess an expected direction across independent seeds with uncertainty.
+- **Threshold monotonicity**: With fixed scores, eligibility and threshold policy, lowering the threshold expands the flagged set. Rank-all policies, capped actions and downstream benefits require separate claims.
+- **Null behavior**: Distinguish disabled policy, zero biological efficacy and a random score generator. Zero efficacy does not remove assessment burden, changed coding, ranking or capacity effects. Use a branch identity assertion only where every causal channel is disabled and the random draws align.
+- **Accounting identities**: Reconcile actual decisions, capacity used, event increments and cumulative totals on both branches. Only include resolved periods; the first appointment day is a decision and has no resolved outcome.
 - **Bayes' theorem constraints**: PPV is bounded by prevalence and specificity; report if achieved metrics violate theoretical limits.
 
 ### Level 4: Case-Level Walkthrough (Always Run)
@@ -211,13 +211,12 @@ This is how the human builds intuition about whether the simulation is capturing
 
 For the first run of any new scenario configuration, also verify behavior at known extremes:
 
-- **Threshold = 0** (flag everyone): Does intervention rate approach 100%?
-- **Threshold = 1** (flag nobody): Does intervention rate approach 0%?
-- **Model AUC ≈ 0.50** (random model): Does the intervention perform no better than chance?
-- **Effectiveness = 0**: Are factual and counterfactual outcomes approximately equal?
-- **Maximum effectiveness**: Is the treatment effect large and in the expected direction?
+- **Threshold endpoints**: Specify score support, strict/inclusive comparison and eligibility. Flagging all eligible people does not imply treating everyone under a capacity limit.
+- **Random score**: Compare with a random allocation using the same eligibility and resources. Additional resources can produce benefit even with AUC 0.50.
+- **Zero effectiveness**: Name which channels are zero and which process effects remain; assert equality only for the outcomes that must be equal.
+- **Maximum effectiveness**: Define the expected direction and residual constraints before running; treatment cannot rescue events outside its eligibility or timing window.
 
-Report these as a brief table. If any boundary condition fails, do not proceed to interpretation.
+Report a claim-specific table with PASS, FAIL, NOT_RUN, INCONCLUSIVE or NOT_APPLICABLE. Every inapplicable claim needs a rationale. A failed structural claim blocks substantive interpretation; a failed design criterion is itself evidence that the proposed design is inadequate. Never certify a sweep using a separately rerun center cell.
 
 ### Reporting Verification Results
 
@@ -235,7 +234,7 @@ Boundary conditions:   [PASS / N checks] (first run only)
 Issues to discuss: [list anything that warrants human attention]
 ```
 
-If everything passes, say so clearly and move to interpretation. If anything fails, explain what it means in plain language and work with the human to resolve it before interpreting results.
+Report required evidence that did not run as prominently as failures. Bind reusable certificates to exact code, configuration, model, environment and scope. Distinguish the empirical distribution across simulation seeds, Monte Carlo precision of its mean and an individual study estimator's interval. Preserve missing/failed seeds; never omit them to improve a summary. Use the review-packet workflow in `docs/review_packets.md` to provide role-specific evidence and separate human sign-off from machine status.
 
 ---
 

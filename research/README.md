@@ -1,5 +1,13 @@
 # Research: 30-Paper Reproducibility Audit
 
+> **Evidence-scope update, September 7, 2026:** This is a historical,
+> outcome-informed audit. Several scenarios used published outcomes to fit
+> parameters; their reproduction labels do not establish independently
+> withheld-outcome prediction or validate the generic SDK engine. The new
+> [SHIELD-RT evaluation framework](../docs/blinded_benchmark.md) preserves these
+> examples as development evidence and separates input provenance, execution,
+> numerical comparison and independent validation.
+
 **Completed:** April 6, 2026
 **Branch:** `research/30-paper-audit`
 

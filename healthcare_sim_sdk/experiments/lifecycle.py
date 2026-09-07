@@ -18,6 +18,8 @@ Usage:
 
 import json
 import logging
+from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -138,16 +140,51 @@ def finalize_experiment(
     metrics: Dict[str, Any],
     results: Optional[Dict[str, Any]] = None,
     notes: str = "",
+    *,
+    validation_checks=None,
+    required_checks=(),
+    require_validated: bool = False,
 ) -> Path:
-    """Full lifecycle: save -> register.
+    """Save, validate explicitly, and register; saving is not certification.
 
     This is the recommended single call for runners to use
     after simulation completes.
     """
     output_dir = Path(output_dir)
 
+    from .validate import (
+        Check, CheckStatus, checks_passed, ensure_required_checks,
+        validate_generic,
+    )
+    config = dict(config)
+    config.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
     save_experiment(output_dir, config, metrics, results)
-    register_experiment(output_dir)
+    checks = validate_generic(output_dir)
+    supplied_checks = list(validation_checks) if validation_checks is not None else []
+    if not supplied_checks:
+        checks.extend([
+            Check("simulation_validation", "No simulation checks supplied",
+                  "run-specific checks", None, "declared scope", False,
+                  status=CheckStatus.NOT_RUN, category="simulation"),
+            Check("analysis_validation", "No analysis checks supplied",
+                  "run-specific checks", None, "declared scope", False,
+                  status=CheckStatus.NOT_RUN, category="analysis"),
+        ])
+    else:
+        checks.extend(supplied_checks)
+    checks = ensure_required_checks(checks, required_checks)
+    valid = checks_passed(checks)
+    (output_dir / "validation.json").write_text(json.dumps({
+        "validated": valid, "scope": "Only the explicitly supplied checks",
+        "checks": [asdict(check) for check in checks],
+    }, indent=2, default=str, allow_nan=False))
+    # Invalid saved JSON must not enter a catalog as a completed experiment.
+    # Incomplete semantic evidence remains registerable and is explicitly
+    # recorded in validation.json; require_validated controls that gate.
+    if checks_passed(validate_generic(output_dir)):
+        register_experiment(output_dir)
+    if require_validated and not valid:
+        raise ValueError(f"Experiment validation incomplete or failed: {output_dir}")
 
     return output_dir
 

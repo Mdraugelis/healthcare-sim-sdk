@@ -1,0 +1,95 @@
+{
+  "id": "06-ml-metrics",
+  "number": 6,
+  "part": "Prediction and decisions",
+  "title": "What a prediction metric actually measures",
+  "subtitle": "From a probability to a ranked list, an alert, and a defensible interpretation",
+  "objectives": [
+    "Calculate predictive value from prevalence and distinguish ranking from threshold performance.",
+    "Explain exact AUC, average precision, calibration, and Brier score without treating them as interchangeable.",
+    "Audit the repository’s metric implementations and state the population and outcome each result describes."
+  ],
+  "prerequisites": [
+    "02-probability",
+    "05-monte-carlo"
+  ],
+  "body": "## Begin with the question hidden inside a score\n\nA score of 0.20 is ambiguous until we name an event, a population, and a horizon. It might mean malnutrition present today, a departure within four weeks, or a missed appointment tomorrow. Those labels produce different learning problems. A score can also be merely a ranking number between zero and one; its numerical range does not make it a probability.\n\nLet `Y` denote a binary outcome and `S` the score. Classification asks whether `Y=1`; probabilistic prediction estimates its conditional probability. Thresholding creates a decision flag, usually `S >= threshold`. In `confusion_matrix_metrics`, that inclusive comparison determines which side receives a tied score. Eligibility and available staff still determine whether a flag becomes an action.\n\nA metric therefore needs an accompanying sentence: “Among these eligible patients, using these labels and this horizon, this score achieved this result.” Without that sentence, apparent model comparisons may compare different questions.\n\n## Bayes turns a test into a workload\n\nSensitivity is the fraction of positive cases flagged; specificity is the fraction of negative cases left unflagged. Positive predictive value, or precision, asks a different question: among flags, what fraction are positive?\n\n```math\n\\operatorname{PPV}=\\frac{\\pi u}{\\pi u+(1-\\pi)(1-v)}\n```\n\nHere `π` is prevalence, `u` sensitivity, and `v` specificity. The numerator is the probability of a true positive. The denominator adds true and false positives. This follows directly by partitioning the flagged population; it does not require a normal score distribution.\n\nConsider 1,000 people, prevalence 2%, sensitivity 80%, and specificity 90%. Expected counts are:\n\n| Actual outcome | Flagged | Unflagged |\n|---|---:|---:|\n| Positive | 16 | 4 |\n| Negative | 98 | 882 |\n\nThe 114 flags contain only 16 positive cases: PPV is about 14%. These are expected counts under the assumed rates, not a promise that every sample has exactly these counts. Accuracy is 89.8%; flagging nobody would achieve 98% accuracy. Neither number answers whether reviewing the 114 flags is useful.\n\nAt 20% prevalence, keeping sensitivity and specificity fixed gives 160 true positives and 80 false positives, hence PPV about 67%. This change requires no improvement in the classifier. It is the consequence of changing the mixture of cases and noncases.\n\n<div data-lab=\"bayes\"></div>\n\nTry increasing specificity while holding sensitivity fixed, then consider whether an actual score distribution permits that operating point. The SDK’s `theoretical_ppv` performs the Bayes calculation, but returns zero when its denominator is below 1e−12. The teaching lab displays undefined when there are no positive flags, preserving the mathematical distinction between an unavailable PPV and a measured PPV of zero. `check_target_feasibility` checks arithmetic consistency; it cannot establish that a particular model can attain the requested combination.\n\n## Ranking: ROC AUC counts comparisons\n\nA receiver operating characteristic, or ROC curve, traces sensitivity against false-positive rate as the threshold moves. Its area has a useful exact interpretation:\n\n```math\n\\operatorname{AUC}=\\Pr(S_+>S_-)+\\frac{1}{2}\\Pr(S_+=S_-)\n```\n\n`S+` is the score of a randomly chosen positive and `S−` that of a randomly chosen negative from the evaluation population. Each pair contributes one for correct ordering, zero for reversed ordering, and one-half for a tie. AUC measures ordering across all thresholds; it does not say how many people staff will review at the chosen threshold. The [official ROC AUC documentation](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html) specifies related binary and multiclass uses; this chapter concerns the binary case.\n\nFor scores 0.9, 0.8, 0.7, 0.1 with labels 1, 0, 1, 0, the first positive outranks both negatives and the second outranks one. Three of four pairs are correct, so exact AUC is 0.75.\n\nThe repository has two relevant implementations. Legacy `performance.auc_score` integrates a ROC sampled at 200 thresholds between zero and one. Closely packed scores can escape that grid’s resolution. The newer `fidelity.auc_fidelity` uses average ranks for ties and the exact empirical pair-count equivalent. Consequently, a fit report and an assurance report can differ without either having read different patients. State the method alongside the value.\n\nAUC remains unchanged under a prevalence-only mixture shift **if both class-conditional score distributions remain fixed**. Changing case severity, eligibility, measurement quality, or treatment can change those distributions. “AUC is independent of prevalence” is not a guarantee of transportability to a different hospital or time period.\n\n## Precision–recall: inspect the front of the list\n\nRecall is sensitivity. Precision asks how many selected cases are positive. Average precision summarizes precision as additional positives enter the selected set:\n\n```math\n\\operatorname{AP}=\\sum_k (R_k-R_{k-1})P_k\n```\n\n`Rk` and `Pk` are recall and precision at successive distinct score thresholds. With distinct scores, this equals the average precision at the rank of each positive. Our four-person example gives `(1 + 2/3)/2 = 5/6`, approximately 0.833. This differs from its AUC of 0.75 because the metrics average different quantities.\n\nAP is not trapezoidal area under a linearly interpolated precision–recall curve, as the [official average-precision documentation](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.average_precision_score.html) explains. The project’s function is named `auprc`, but computes positive-rank average precision. It uses stable sorting without grouping score ties. Consequently, tied inputs can yield order-dependent results. A reviewer should not assume equivalence to a threshold-grouped implementation when scores tie.\n\nPrecision–recall displays expose the positive-case yield of a selected workload, which is useful when positives are rare; [Saito and Rehmsmeier](https://pmc.ncbi.nlm.nih.gov/articles/PMC4349800/) investigate this distinction. Nevertheless, AP depends on the population’s prevalence. For an actual daily budget, also report `precision_at_k`, `capture_at_k`, and the integer number selected. The SDK rounds the requested fraction and selects at least one entity from a nonempty cohort, so “top 10%” is not always exactly one tenth.\n\n## Calibration: can we trust the number itself?\n\nA calibrated 20% group experiences the specified event about 20% of the time over repeated comparable observations. Calibration is a population property; it does not mean every individual with score 0.20 has an observable personal frequency of exactly 20%.\n\n```math\n\\operatorname{Brier}=\\frac{1}{n}\\sum_{i=1}^{n}(p_i-y_i)^2\n```\n\nHere `pi` is a predicted probability, `yi` its binary label, and `n` the evaluation count. Predictions 0.8 and 0.2 for outcomes 1 and 0 give Brier 0.04. Reversing those probabilities gives 0.64. Lower is better, but Brier reflects more than calibration alone, as the [official calibration guide](https://scikit-learn.org/stable/modules/calibration.html) discusses.\n\nA constant prediction equal to prevalence can be calibrated yet have AUC 0.5. Conversely, a strictly increasing transformation preserves ranking while potentially damaging calibration. The SDK’s legacy `calibration_slope` fits a line through binned observed and predicted means; its flat-score fallback of 1.0 is an implementation convention. It is not the logistic recalibration slope used by retention’s drift monitor, nor evidence of perfect calibration.\n\n## From a number to evidence\n\nChoose labels before inspecting performance. Retention’s synthetic prediction-window labels describe its score generator; matured factual departures describe actual simulated future outcomes after care. Sparse positives make either estimate unstable. Fidelity gates return `INCONCLUSIVE` for insufficient classes instead of awarding a passing AUC. Terminal predictions without complete follow-up require censoring or an explicit incomplete-horizon status.\n\nFinally, discrimination is not clinical utility. A useful ordering cannot manufacture effective treatment, staff capacity, or harmless false positives. The next two chapters connect the score-generating mechanism to the decisions that can change outcomes.",
+  "references": [
+    {
+      "id": "sklearn-roc",
+      "title": "scikit-learn: roc_auc_score",
+      "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html",
+      "note": "Official metric documentation; binary AUC interpretation is used here."
+    },
+    {
+      "id": "sklearn-ap",
+      "title": "scikit-learn: average_precision_score",
+      "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.average_precision_score.html",
+      "note": "Specifies noninterpolated AP and distinguishes trapezoidal PR area."
+    },
+    {
+      "id": "saito-2015",
+      "title": "Saito and Rehmsmeier (2015): The Precision-Recall Plot Is More Informative than the ROC Plot When Evaluating Binary Classifiers on Imbalanced Datasets",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4349800/",
+      "note": "Primary methodological investigation of ROC and precision–recall displays."
+    },
+    {
+      "id": "sklearn-calibration",
+      "title": "scikit-learn: Probability calibration",
+      "url": "https://scikit-learn.org/stable/modules/calibration.html",
+      "note": "Official discussion of calibration, proper scores, and independent calibration data."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/ml/performance.py",
+      "symbol": "confusion_matrix_metrics",
+      "claim": "Inclusive threshold classification, confusion counts, and zero-denominator conventions."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/performance.py",
+      "symbol": "theoretical_ppv",
+      "claim": "Bayes predictive-value calculation."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/performance.py",
+      "symbol": "auc_score",
+      "claim": "Legacy integration of a finite threshold-grid ROC."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/performance.py",
+      "symbol": "auprc",
+      "claim": "Positive-rank AP with stable, ungrouped ties."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/performance.py",
+      "symbol": "calibration_slope",
+      "claim": "Binned linear calibration diagnostic, distinct from logistic recalibration."
+    },
+    {
+      "path": "healthcare_sim_sdk/ml/fidelity.py",
+      "symbol": "auc_fidelity",
+      "claim": "Exact empirical AUC with average tied ranks and explicit sparse-class status."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/tier4_model_drift.py",
+      "symbol": "_calibration_slope_intercept",
+      "claim": "Logistic recalibration of probabilities against observed binary labels."
+    }
+  ],
+  "review_questions": [
+    "Which assumptions allow prevalence to change while ROC AUC stays fixed?",
+    "Why can a model with excellent AUC have poor PPV at its operational threshold?",
+    "Which repository metric names conceal numerical conventions a reviewer should disclose?"
+  ],
+  "exercises": [
+    {
+      "question": "For 2% prevalence and 80% sensitivity, what specificity is needed for 50% PPV?",
+      "answer": "True positives occupy 0.016 of the population. A PPV of 0.5 requires false positives also to occupy 0.016. Thus specificity is 1−0.016/0.98, approximately 0.98367. This arithmetic does not prove the model can attain that point."
+    },
+    {
+      "question": "A positive and a negative receive the same score. What is their contribution to exact AUC, and why is the SDK AP tie behavior a separate issue?",
+      "answer": "The tied pair contributes one-half to exact AUC. AP depends on where positives enter the ranked list; the SDK does not group tied scores, so stable input order can affect its result."
+    }
+  ]
+}

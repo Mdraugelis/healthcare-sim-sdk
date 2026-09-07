@@ -1,0 +1,90 @@
+{
+  "id": "11-monitoring",
+  "number": 11,
+  "part": "Inference and evaluation",
+  "title": "Know what an alarm has actually detected",
+  "subtitle": "Operational signals, outcome shifts, model performance, and honest detection evidence.",
+  "objectives": [
+    "Explain the four retention-monitoring tiers and the question each can answer.",
+    "Evaluate alarms over declared directions, eligibility times, and horizons.",
+    "Distinguish model-fit diagnostics from mature realized-outcome validation."
+  ],
+  "prerequisites": [
+    "05-monte-carlo",
+    "06-ml-metrics",
+    "09-analysis-data",
+    "10-study-design"
+  ],
+  "body": "## A monitor is a decision rule operating through time\n\nSuppose a retention program becomes less effective. Check-ins might fall immediately, departures might rise later, and predictive performance might change only after enough future outcomes mature. One chart cannot represent all three clocks. The retention scenario therefore exposes four monitoring tiers. Their separation helps a reviewer ask whether an alarm concerns delivery of the program, observed outcomes, a comparison trajectory, or the model's predictions.\n\nAn alarm is evidence that a rule crossed its threshold. Calling it “a detected intervention failure” additionally requires the right metric, direction, timing, and scientific interpretation. A silent monitor can reflect stable operation, insufficient follow-up, poor sensitivity, or unavailable data. The evaluation must distinguish those possibilities.\n\n## Four tiers, four questions\n\n| Tier | Method | Question |\n|---|---|---|\n| 1 | Shewhart individual-value charts | Have operational measures departed from their baseline pattern? |\n| 2 | Two-sided CUSUM | Has a persistent outcome shift accumulated? |\n| 3 | Controlled comparison or observed-series trend | What contrast or trend is visible under the selected information scope? |\n| 4 | AUC, Brier score, logistic calibration | How do issued scores relate to mature realized labels? |\n\nThe implemented first tier freezes baseline estimates, then checks a point outside three estimated standard deviations and eight consecutive observations on one side of the centerline. It uses an individuals/moving-range estimate of variability. An estimated baseline, discrete rates, serial correlation, and extra run rules all affect the actual alarm rate; a familiar “three sigma” label does not determine performance for every scenario.\n\nThe official [NIST control-chart handbook](https://www.itl.nist.gov/div898/handbook/pmc/section3/pmc313.htm) explains why CUSUM can accumulate evidence for smaller sustained shifts that a single-point rule may miss. The repository implements both directions because rising and falling values have different meanings across metrics. Rising turnover may be undesirable; rising check-in completion may be desirable.\n\n## How CUSUM remembers small departures\n\nA standardized upper CUSUM can be written:\n\n```math\nC_t^{+}=\\max(0,C_{t-1}^{+}+z_t-k)\n```\n\nHere z_t is the observed deviation from the baseline mean divided by baseline standard deviation, k is a reference allowance, and C starts at zero. An alarm occurs when C exceeds a chosen threshold h. A lower CUSUM accumulates deviations in the opposite direction. The code uses equivalent original-unit deviations with k and h scaled by the estimated standard deviation.\n\nFor an invented example, choose k=0.5 and h=2.5. Standardized observations 0.8, 0.9, 1.1, 1.2, and 1.3 produce cumulative values 0.3, 0.7, 1.3, 2.0, and 2.8. The fifth observation crosses the threshold although no observation exceeds three standard deviations. These are teaching settings; the class defaults are multipliers 0.5 and 4.0, with reset after detection.\n\n<div data-lab=\"monitoring\"></div>\n\nExplore an abrupt change and a 15-period ramp. Compare the immediate z>3 rule with the accumulating CUSUM; neither is guaranteed to detect first. The lab holds its standardized noise fixture fixed and varies shift size, allowance and threshold. In a real monitoring system, changing baseline variability also changes the standardized size of a fixed raw shift.\n\n## A trend is not an oracle effect\n\nTier 3 can use `cits_with_cf`, comparing factual outcomes with an available simulated counterfactual, or `its_only`, fitting an observed-series trend. In observed-only mode, hidden counterfactual outcomes must not influence the result. The scope is part of the evidence, rather than a display preference.\n\nA decreasing observed departure rate can result from changing workforce composition or an existing trend. It does not establish a treatment benefit by itself. The controlled helper estimates a difference between group-specific linear trajectories at a selected time; its ordinary covariance calculation is not a complete solution for paired serial dependence. The counterfactual trajectory is privileged simulated information and can inherit the branch history specified by the simulator. A reviewer must inspect that history before interpreting it as a never-treated world.\n\n## Predictions need future outcomes, not convenient labels\n\nTier 4 evaluates events that actually occur in the factual simulation after a prediction. It is computed by replaying saved results, not by a live deployment service. For a prediction at week p and horizon h, the harness waits for weeks p+1 through p+h. Statistics are dated at outcome maturity, p+h, rather than backdated to prediction week p. It leaves immature predictions unavailable.\n\nThe harness pairs scores and future event arrays by fixed nurse position, using the active-at-prediction mask. This relies on retention’s stable full-cohort ordering; it is not a general identity-based join. The review packet checks expected outcome ID order and array shapes. Reordered external histories require explicit alignment before using this harness. Synthetic labels used to tune a controlled model remain separate fit diagnostics; they are not substituted for later observed departures.\n\nThis also changes interpretation: realized labels occur after intervening care. A model of untreated risk can look differently calibrated when high-risk people receive effective support. Distinguish a failure to generate the intended synthetic score distribution from a change in realized performance under the deployed policy.\n\nLogistic recalibration models the observed event probability q as:\n\n```math\n\\log\\frac{q_i}{1-q_i}=a+b\\log\\frac{p_i}{1-p_i}\n```\n\nHere p_i is the issued predicted probability for observation i, a is calibration intercept, and b is calibration slope. The ideal reference is a=0 and b=1. A slope below one often indicates predictions that are too spread out on the log-odds scale, conditional on this recalibration model. This is logistic fitting to binary events, not linear regression of zeros and ones on probability scores.\n\nThe code clips extreme scores before taking logits and returns unavailable estimates when labels have one class, scores have no variation, the sample is too small, or optimization fails. Intercept and slope assess limited features of calibration; they do not guarantee agreement in every risk region or subgroup. The [Van Calster and colleagues calibration hierarchy](https://pubmed.ncbi.nlm.nih.gov/26772608/) explains why average agreement and full risk-level agreement are distinct requirements.\n\nRolling windows and repeated predictions can overlap. Consequently, successive AUC or calibration values are dependent. The tier's consecutive-observation rule counts available prediction windows, not necessarily consecutive calendar weeks. Mature labels, event counts, window definitions, and missing periods belong beside the plotted metrics.\n\n## Count false alarms over the decision horizon\n\nA 1% false-alarm probability per independent weekly check does not imply 1% over a year. Under an illustrative independence assumption:\n\n```math\n\\mathrm{P}(\\mathrm{any\\ alarm})=1-(1-\\alpha)^m\n```\n\nHere alpha is the per-check probability and m is the number of checks. With alpha=0.01 and m=52, the probability is about 40.7%. Four independent streams over 52 weeks would raise it to about 87.6%. Actual tiers share data and are dependent, so those multiplications are an illustration, not the retention system's measured performance.\n\nEvaluate the whole monitoring policy across independent null runs, including every enabled metric, manager, rule, and reset. Count whether any qualifying false alarm occurred within the declared horizon. Report the count, repetitions, exact interval, and relevant upper confidence bound. An average run length is another useful property, but it is not interchangeable with the probability of any alarm during a fixed operational period.\n\n## Define detection before looking for it\n\nA `MonitoringClaim` specifies tier, metric, direction, change week, monitoring start, eligibility start, horizon, and optionally a rule. `evaluate_claim` separates early alerts, wrong-direction alerts, eligible detections, and incomplete observation. Under a null claim, an alarm in either direction counts as a false alarm; direction filtering must not hide failures.\n\nSuppose a capacity drop occurs at week 20, the declared signal is fewer check-ins, and eligibility begins at week 22. An alert at week 8 is not a successful detection. A qualifying downward alert at week 23 has delay three weeks from the change. If follow-up is complete through week 39 with no qualifying alarm, detection time is right-censored at that horizon. If required weeks are absent, evaluation is incomplete rather than a clean nondetection.\n\n`summarize_claim_evaluations` rejects mixed claim definitions and duplicate seeds. It reports excluded incomplete records and separates the detection fraction from delay among detected runs. A mean delay of two weeks among three detections out of a hundred runs would conceal poor sensitivity if presented alone. The evaluation's `PASS` status indicates completeness of the declared calculation, not that a detector met every operational objective. Its completeness check verifies required weekly records; availability of the relevant monitor inputs and mature labels must also be reviewed.\n\nFor peer review, read several alerts back to the underlying events, then read several silent runs. Require enough mature follow-up to assess delayed outcomes. Finally, compare the joint null-alarm burden with detection probability and censored delay under relevant changes. Useful monitoring balances those quantities for an explicit decision, rather than maximizing the number of colored signals on a dashboard.",
+  "references": [
+    {
+      "id": "nist-cusum",
+      "title": "NIST: CUSUM Control Charts",
+      "url": "https://www.itl.nist.gov/div898/handbook/pmc/section3/pmc313.htm",
+      "note": "Official methodological explanation of cumulative monitoring and sensitivity to sustained shifts."
+    },
+    {
+      "id": "van-calster-calibration",
+      "title": "Van Calster et al. (2016): A calibration hierarchy for risk models was defined: from utopia to empirical data",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/26772608/",
+      "note": "Primary methodological paper distinguishing levels of predictive calibration."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/tier1_shewhart.py",
+      "symbol": "ShewhartChart",
+      "claim": "Uses baseline individuals/moving-range limits and two implemented alarm rules."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/tier2_cusum.py",
+      "symbol": "Tier2CUSUM",
+      "claim": "Maintains upper and lower cumulative deviations with configurable thresholds and reset."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/tier3_cits.py",
+      "symbol": "Tier3CITS",
+      "claim": "Separates counterfactual comparison from observed-only trend scope."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/tier4_model_drift.py",
+      "symbol": "_calibration_slope_intercept",
+      "claim": "Fits logistic recalibration and returns unavailable estimates for insufficient or degenerate evidence."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/harness.py",
+      "symbol": "MonitoringHarness.run_from_results",
+      "claim": "Matures factual future-departure labels over the declared prediction horizon."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/evaluation.py",
+      "symbol": "MonitoringClaim",
+      "claim": "Declares the direction, metric, timing, and horizon of an evaluation."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/evaluation.py",
+      "symbol": "evaluate_claim",
+      "claim": "Separates eligible detections, false alarms, wrong directions, and censoring."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/monitoring/evaluation.py",
+      "symbol": "summarize_claim_evaluations",
+      "claim": "Summarizes binary performance and conditional delay with explicit incomplete evidence."
+    }
+  ],
+  "review_questions": [
+    "Does this alarm identify an operational change, a statistical trend, or an effect under privileged simulated information?",
+    "Are prediction labels fully mature and linked to the correct identity and horizon?",
+    "What is the joint false-alarm probability for the complete monitoring policy over its intended duration?"
+  ],
+  "exercises": [
+    {
+      "question": "Five of fifty complete changed-regime runs detect, with mean delay one week among those five. What should accompany that delay?",
+      "answer": "Report the 10% detection fraction with Monte Carlo uncertainty, forty-five right-censored nondetections, the fixed horizon and eligibility rule, and any early or wrong-direction alarms. One-week conditional delay alone is misleading."
+    },
+    {
+      "question": "A downward alarm occurs in a null turnover run whose claim usually expects deterioration upward. May it be ignored?",
+      "answer": "No. Under the null claim, either-direction qualifying alarms are false alarms. Direction distinguishes success after a declared change; it must not erase null alerts."
+    }
+  ]
+}

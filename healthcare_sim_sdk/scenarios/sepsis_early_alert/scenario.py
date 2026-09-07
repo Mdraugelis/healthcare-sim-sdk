@@ -6,7 +6,8 @@ Simulates an ML-driven sepsis early warning system in an inpatient setting.
 
 Entity: Patient-admission (one entity per hospital stay).
 Timestep: 4 hours (matches the 3-6hr clinical decision window).
-ML Task: Discrimination — predict which patients are progressing toward sepsis.
+ML Task: Synthetic discrimination of concurrent sepsis stage in active patients.
+         Configured AUC does not establish future-onset prediction performance.
 Intervention: Alert fires -> clinician evaluates -> early treatment (antibiotics,
               fluids, cultures) reduces probability of sepsis progression.
 
@@ -35,6 +36,7 @@ from healthcare_sim_sdk.core.scenario import (
     TimeConfig,
 )
 from healthcare_sim_sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.ml.fidelity import auc_fidelity
 from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
 
 
@@ -45,7 +47,8 @@ from healthcare_sim_sdk.population.risk_distributions import beta_distributed_ri
 ROW_BASE_RISK = 0          # Immutable baseline sepsis risk
 ROW_AR1_MOD = 1            # AR(1) risk modifier (evolves in step)
 ROW_CURRENT_RISK = 2       # base_risk * ar1_mod * demographic_mult
-ROW_STAGE = 3              # 0=at_risk, 1=sepsis, 2=severe, 3=shock, 4=deceased, 5=discharged
+ROW_STAGE = 3              # 0=at_risk, 1=sepsis, 2=severe, 3=shock,
+# Remaining stage codes: 4=deceased, 5=discharged.
 ROW_STAGE_TIMER = 4        # Timesteps since entering current stage
 ROW_TREATED = 5            # 1 if patient has been treated this admission
 ROW_TREATMENT_TIMER = 6    # Timesteps since treatment (0 if untreated)
@@ -108,6 +111,8 @@ class SepsisConfig:
 
     # ML model
     model_auc: float = 0.76
+    model_auc_tolerance: float = 0.05
+    model_min_class_count: int = 20
     alert_threshold_percentile: float = 90.0  # Flag top N% of risk scores
 
     # Alert fatigue
@@ -196,6 +201,8 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             target_auc=self.cfg.model_auc,
         )
         self._model_fitted = False
+        self._model_fit_report: Optional[Dict[str, Any]] = None
+        self._model_fit_timestep: Optional[int] = None
 
         # Track cumulative false alerts across the population (for fatigue)
         # This is a scenario-level counter that reflects system-wide fatigue.
@@ -322,7 +329,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             # Time-dependent effectiveness (Kumar decay curve):
             # effectiveness halves every kumar_half_life_hours after onset
             # treatment_start_t = t - treatment_timer
-            treatment_start_t = t - state[ROW_TREATMENT_TIMER]
+            treatment_start_t: np.ndarray = t - state[ROW_TREATMENT_TIMER]
             delay_timesteps = np.where(
                 (state[ROW_TREATED] == 1) & (state[ROW_ONSET_TIMESTEP] >= 0),
                 np.maximum(treatment_start_t - state[ROW_ONSET_TIMESTEP], 0),
@@ -360,7 +367,8 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         # the population mean risk. Patients above the mean progress faster;
         # patients below the mean progress slower. The base transition
         # probabilities are calibrated for a patient at mean risk.
-        mean_risk = np.mean(new_state[ROW_CURRENT_RISK][active]) if active.any() else 0.04
+        mean_risk = (np.mean(new_state[ROW_CURRENT_RISK][active])
+                     if active.any() else 0.04)
         risk_scale = np.clip(
             new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001),
             0.1, 5.0,
@@ -406,7 +414,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
                 & (new_state[ROW_TREATED] == 0)
                 & (new_state[ROW_ONSET_TIMESTEP] >= 0)
             )
-            time_since_onset = t - new_state[ROW_ONSET_TIMESTEP]
+            time_since_onset: np.ndarray = t - new_state[ROW_ONSET_TIMESTEP]
             detected = eligible & (
                 time_since_onset >= new_state[ROW_BASELINE_DETECT_DELAY]
             )
@@ -452,9 +460,14 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
     # 3. PREDICT — ML model scoring
     # ------------------------------------------------------------------
     def predict(self, state: np.ndarray, t: int) -> Predictions:
-        """Score all active patients with the sepsis prediction model."""
+        """Generate synthetic scores for concurrent sepsis among active patients.
+
+        The score generator conditions on simulated current-stage labels in
+        both fit and predict. This controls a synthetic classifier's quality;
+        it is not evidence of forecasting future onset from observable inputs.
+        Each call reports achieved AUC on the actual active-cohort scores.
+        """
         rng = self.rng.prediction
-        n = state.shape[1]
 
         # True sepsis status: 1 if patient is in sepsis/severe/shock, 0 otherwise
         true_labels = (
@@ -463,18 +476,42 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
 
         # True underlying risk (what a perfect model would know)
         true_risks = state[ROW_CURRENT_RISK]
+        active = (state[ROW_STAGE] < STAGE_DECEASED)
 
         # Fit model on first call
-        if not self._model_fitted:
-            self._model.fit(true_labels, true_risks, rng, n_iterations=3)
+        if not self._model_fitted and np.unique(true_labels[active]).size == 2:
+            self._model_fit_report = self._model.fit(
+                true_labels[active], true_risks[active], rng, n_iterations=3,
+            )
             self._model_fitted = True
+            self._model_fit_timestep = t
 
-        # Generate predictions with controlled AUC
-        scores = self._model.predict(true_risks, rng)
+        # Use the same conditional score-generation path used during fitting.
+        # Previously predict omitted labels, silently removing fitted class
+        # separation. Correcting this changes seeded alert/treatment outcomes.
+        if self._model_fitted:
+            scores = self._model.predict(true_risks, rng, true_labels=true_labels)
+        else:
+            # No class contrast exists yet. Retain risk ranking and disclose
+            # that the requested model performance has not been fitted.
+            scores = true_risks.copy()
 
         # Only score active patients; set discharged/deceased to 0
-        active = (state[ROW_STAGE] < STAGE_DECEASED)
         scores = np.where(active, scores, 0.0)
+
+        fidelity = auc_fidelity(
+            true_labels[active], scores[active], self.cfg.model_auc,
+            tolerance=self.cfg.model_auc_tolerance,
+            min_class_count=self.cfg.model_min_class_count,
+            scope="concurrent sepsis stage among active patients at this timestep",
+        )
+        fidelity["fit_timestep"] = self._model_fit_timestep
+        fidelity["fit_auc"] = (self._model_fit_report.get("achieved_auc")
+                               if self._model_fit_report else None)
+        fidelity["score_generation"] = "synthetic conditional-label classifier"
+        if not self._model_fitted:
+            fidelity.update(status="NOT_RUN", detail=(
+                "Fitting deferred until both classes are present; risk ranking used."))
 
         # Percentile-based threshold on active patient scores
         active_scores = scores[active]
@@ -495,6 +532,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
                 "n_active": int(active.sum()),
                 "n_flagged": int(labels.sum()),
                 "prevalence": float(true_labels[active].mean()) if active.any() else 0,
+                "model_fidelity": fidelity,
             },
         )
 
@@ -513,7 +551,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         n = state.shape[1]
 
         # Who was flagged by the model?
-        flagged = predictions.labels == 1
+        flagged = np.asarray(predictions.labels) == 1
         flagged_indices = np.where(flagged)[0]
 
         # --- Alert fatigue: response rate decays with cumulative false alerts ---
@@ -537,7 +575,8 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             ]
 
         # Apply treatment to responded patients (who haven't been treated yet)
-        newly_treated = responded_indices[new_state[ROW_TREATED, responded_indices] == 0]
+        newly_treated = responded_indices[
+            new_state[ROW_TREATED, responded_indices] == 0]
         new_state[ROW_TREATED, newly_treated] = 1
         new_state[ROW_TREATMENT_TIMER, newly_treated] = 0
 

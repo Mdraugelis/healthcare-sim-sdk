@@ -9,3 +9,13 @@ policy:
       - [26, 0.50]
       - [52, 0.0]
     interpolation: linear
+
+# Windows are inclusive; the runner sets horizon to n_weeks - 1.
+# Change week is the first discrete week whose parameter differs from baseline.
+monitoring_claims:
+  - claim_id: turnover_increase_after_decay
+    tier: 2
+    metric: unit_turnover_rate
+    direction: up
+    change_week: 27
+    eligibility_start: 27

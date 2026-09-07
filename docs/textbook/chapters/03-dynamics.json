@@ -1,0 +1,71 @@
+{
+  "id": "03-dynamics",
+  "number": 3,
+  "part": "Foundations",
+  "title": "Time, hazards and evolving state",
+  "subtitle": "Translate probabilities across time correctly, and connect stochastic processes to the engine’s actual order of operations.",
+  "objectives": [
+    "Convert an annual event probability to a timestep probability under a constant hazard.",
+    "Derive stationary AR(1) moments and identify why clipping and seasonality change them.",
+    "Distinguish incident events, state occupancy and accumulated outcomes."
+  ],
+  "prerequisites": [
+    "02-probability"
+  ],
+  "body": "## Time is part of every quantity\n\nAn annual probability, a weekly probability and an instantaneous hazard are different quantities. A hazard is a rate per unit time conditional on remaining event-free. A probability is dimensionless and lies between zero and one. A value labeled “risk .05” is incomplete until its outcome and horizon are specified.\n\nFor a constant nonnegative hazard λ per year, survival through t years is S(t) = exp(−λt). An annual risk r therefore implies 1−r = exp(−λ), so λ = −log(1−r). The probability over Δt years is:\n\n```math\np_{\\Delta t}=1-\\exp(-\\lambda\\Delta t)=1-(1-r)^{\\Delta t}\n```\n\nThe exponential survival and constant-hazard interpretation are described in the [NIST reliability reference](https://www.itl.nist.gov/div898/handbook/apr/section1/apr161.htm). This conversion preserves the annual survival probability when the hazard is constant and survival across successive intervals follows that model. It does not assert that a real patient’s hazard is constant.\n\nAt annual risk 5%, λ is approximately 0.051293 per year. Weekly risk is approximately 0.09859%, and four-week risk is 0.39379%. Directly dividing 5% by 52 gives 0.09615% per week. The linear shortcut is close at small risk but has a different meaning and becomes less accurate at larger risks.\n\n<div data-lab=\"dynamics\"></div>\n\nThe lab compares the exact constant-hazard conversion with linear scaling. Its annual risk is capped below one because risk one corresponds to an infinite constant hazard. In production, `annual_risk_to_hazard` clips inputs into [0, 0.999999]. This numerical guard prevents an infinite logarithm, but it also means an invalid negative input is silently converted to zero. Validation should detect invalid upstream values rather than rely on clipping as scientific justification.\n\n## Composing periods and changing hazards\n\nIf hazards are constant within intervals but vary between them, survival is the product of interval survival probabilities. Taking logarithms turns the product into a sum:\n\n```math\nS_T=\\prod_{t=1}^{T}(1-p_t)=\\exp\\left(-\\sum_{t=1}^{T}\\lambda_t\\Delta t_t\\right)\n```\n\nThis is why multiplying an annual probability by the number of weeks is wrong. The hazard accumulates over time; probability accounts for the remaining event-free population. For recurrent events or current-state indicators, a different counting model may be needed.\n\nThe stroke scenario samples weekly events but does not remove a patient after a stroke in the reference implementation. Its accumulated weekly event count can therefore include recurrent events. It should not automatically be interpreted as the number of unique patients with a first stroke. Even with a fixed hazard, the expected sum of 52 independent weekly indicators is 52p_week, whereas the probability of at least one event is 1−(1−p_week)^52. These differ because the first includes repeat occurrences.\n\n## A state transition is a model equation\n\nAt time t, write Sₜ for the full scenario state and Uₜ for temporal randomness. A generic transition has the form Sₜ₊₁ = f(Sₜ,t,Uₜ). This notation makes two responsibilities clear. The state must contain all history required by the next step, and the transition must specify what changes before an intervention can occur.\n\nThe SDK’s state can include latent risks, demographic categories, admission status, treatment persistence, queue position and prior actions. Keeping history in state permits isolated branch evolution. Storing branch-specific evolving history in a shared scenario attribute can invalidate that isolation.\n\nA finite-state Markov chain is one special case: the next-state distribution depends on the current state and a transition matrix whose rows are nonnegative and sum to one. Healthcare histories are rarely Markov in a coarse label such as “admitted.” Expanding the state to include time since admission, previous treatment and severity can make the modeled dependency explicit. This is a modeling construction, not proof that omitted history is irrelevant in reality.\n\n## AR(1): persistence with a tractable reference\n\nAn autoregressive process of order one supplies a simple model for persistent risk modifiers:\n\n```math\nX_t-\\mu=\\rho(X_{t-1}-\\mu)+\\epsilon_t\n```\n\nAssume |ρ| < 1, constant μ, independent zero-mean innovations with variance σ², innovations independent of the past, and no clipping. At stationarity, taking variances gives v = ρ²v + σ²; solving yields:\n\n```math\n\\mathrm{Var}(X_t)=\\frac{\\sigma^2}{1-\\rho^2},\\qquad \\mathrm{Corr}(X_t,X_{t-k})=\\rho^k\n```\n\nThe [Berkeley AR-model notes](https://stat153.berkeley.edu/spring-2026/ar-models-notes/) give the stationary result and its conditions. At ρ = .95 and σ = .05, the stationary standard deviation is about .1601. This is larger than the innovation standard deviation because past shocks persist. Starting every patient at μ does not initialize the stationary distribution; the finite-time variance builds up toward it.\n\nThe stroke implementation adds a seasonal target and clips modifiers to [.5, 2]. Clipping can create probability mass at the boundaries and alter moments and correlations. A time-varying seasonal target changes the mean trajectory. The stationary formula is therefore a reference for the unclipped, constant-mean limiting case, not an exact expected value for every production configuration.\n\nThe generic `AR1Process` helper stores its evolving value in `self.current`. It is useful as a utility, but sharing one mutable instance across counterfactual branches would be unsafe. Stroke instead keeps modifiers in each state array. A familiar mathematical model does not automatically make its software placement correct.\n\n## The order of events defines the intervention\n\nIn branched mode, the engine advances both states, then predicts and intervenes on the factual branch if scheduled, then measures both. This order is part of the scientific model. A measurement after intervention can show an immediate modeled effect. A worklist written by intervention but consumed in the next `step` acts later.\n\nMalnutrition uses the latter pattern. `intervene` writes ranking information, while the next day’s `step` performs assessments through a single capacity-accounted worklist. A high score generated today does not mean an assessment already occurred today. Appointment scenarios also separate a schedule from its later resolved attendance. These timing conventions must survive into the analysis dataset and individual case narrative.\n\nFor a simple timing audit, write one row per phase for one entity: entry state, evolution, available information, decision, action, measured outcome and next state. Then ask whether any prediction used information that would not yet exist. A diagram of stages is useful only when its arrows correspond to actual code order.\n\n## Three things that look like an event count\n\n**Incidence** counts new events during an interval. **Occupancy** records whether a person is currently in a state. **Cumulative burden** sums an amount over time. A patient septic for three days can contribute one onset, three patient-days of septic occupancy, and a severity-weighted cumulative burden. These quantities answer different questions.\n\nThe sepsis scenario’s `events` currently represents septic-state occupancy, so summing it over timesteps does not count unique sepsis onsets. The malnutrition scenario carries cumulative harm in state; adding that cumulative state repeatedly would double-count prior harm. Event increments and terminal totals must be reconciled according to the scenario’s declared semantics.\n\nRigorous temporal validation checks units, event timing, state transitions and accounting together. A plausible-looking curve cannot reveal a hidden factor of 52, a one-day intervention lag, or an outcome accumulated twice. Those failures require explicit reference calculations and trace inspection.",
+  "references": [
+    {
+      "id": "nist-hazard",
+      "title": "NIST, Exponential reliability model",
+      "url": "https://www.itl.nist.gov/div898/handbook/apr/section1/apr161.htm",
+      "note": "Constant hazard, survival and event probability."
+    },
+    {
+      "id": "berkeley-ar1",
+      "title": "UC Berkeley Stat 153/248, AR Models notes",
+      "url": "https://stat153.berkeley.edu/spring-2026/ar-models-notes/",
+      "note": "Stationary AR(1) variance, autocorrelation and stability conditions."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/population/temporal_dynamics.py",
+      "symbol": "annual_risk_to_hazard",
+      "claim": "Converts clipped annual probability to annual hazard."
+    },
+    {
+      "path": "healthcare_sim_sdk/population/temporal_dynamics.py",
+      "symbol": "hazard_to_timestep_probability",
+      "claim": "Converts hazard and interval duration to probability."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/stroke_prevention/scenario.py",
+      "symbol": "StrokePreventionScenario.step",
+      "claim": "Uses state-contained persistence, seasonality and clipping."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/stroke_prevention/scenario.py",
+      "symbol": "StrokePreventionScenario.measure",
+      "claim": "Samples interval events without an absorbing first-stroke state."
+    }
+  ],
+  "review_questions": [
+    "Do hazard units match the duration passed to the conversion?",
+    "Which theoretical process assumptions are broken by implementation guards?",
+    "Are the reported outcomes onsets, occupancy, unique people or cumulative burden?"
+  ],
+  "exercises": [
+    {
+      "question": "At a constant annual risk .36, what is the six-month risk?",
+      "answer": "1 − √(.64) = .20. Half the annual probability, .18, is the linear approximation."
+    },
+    {
+      "question": "For an unclipped stationary AR(1), rho=.8 and innovation SD=.12. Find the process SD.",
+      "answer": "√(.12²/(1−.8²)) = .20. This result does not apply exactly after clipping or under a varying seasonal mean."
+    },
+    {
+      "question": "A patient is positive on days 2, 3 and 4 after becoming ill on day 2. How many incident cases and positive patient-days are represented?",
+      "answer": "One incident case and three positive patient-days, assuming one continuous illness episode."
+    }
+  ]
+}

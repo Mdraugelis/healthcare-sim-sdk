@@ -1,0 +1,155 @@
+{
+  "id": "13-scenario-atlas",
+  "number": 13,
+  "part": "Applications",
+  "title": "An atlas of the implemented scenarios",
+  "subtitle": "What each model simulates, how its clock works, and what its evidence can support",
+  "objectives": [
+    "Locate every domain scenario and distinguish runnable mechanisms from the teaching template.",
+    "Translate scenario parameters into units, timing, outcomes, and important omitted mechanisms.",
+    "Separate source-inspired simulation, statistical replication, and independently validated clinical evidence."
+  ],
+  "prerequisites": [
+    "03-dynamics",
+    "08-decision-policies",
+    "10-study-design",
+    "12-malnutrition"
+  ],
+  "body": "## Read this atlas as a map of mechanisms\n\nThis checkout contains **14 domain scenario classes across 13 families**: six primary families, including two overbooking variants, and seven paper-prefixed families. A fifteenth class, `CoinFlipScenario`, is the teaching template. A runnable class demonstrates an executable mechanism; it does not establish clinical validity or faithful reproduction of a named paper.\n\nEvery entry needs four coordinates: the entity represented, the clock’s unit, the event definition, and the comparison policy. Defaults below are software assumptions. They are starting points for sensitivity analysis, not recommended staffing levels or clinical effect estimates.\n\n## Stroke: repeated risk over a weekly clock\n\n`StrokePreventionScenario` represents patients with heterogeneous latent annual risk, autoregressive fluctuations, and seasonal variation. Defaults specify 10,000 patients, 52 weeks, mean annual incidence parameter 0.05, prediction every four weeks, and intervention effectiveness 0.50. The target classifier sensitivity is 0.80 and PPV 0.15.\n\n`step` evolves risk, `predict` creates synthetic prediction-window labels and scores, `intervene` applies a persistent treatment multiplier, and `measure` draws weekly events separately. Treatment also changes current risk immediately. The state lacks an absorbing first-stroke or death process: the same person may experience events at multiple measurements. Repeated incident counts therefore differ from the number of people ever experiencing stroke. Anticoagulant-specific bleeding harms and clinical treatment selection are not represented.\n\n## No-shows: scheduling and outreach are different interventions\n\n`NoShowOverbookingScenario` uses persistent patients and appointment schedules. Its default clinic has eight providers, twelve regular slots per provider per day, and up to two overbooked slots per provider. A timestep resolves the previous schedule and constructs another, so measured attendance belongs to the resolved schedule. Historical-rate and model-based strategies change overbooking choices. Collisions, waiting, and repeated patient burden are relevant alongside utilization.\n\n`RealisticNoShowScenario` is a second implementation in the same family. Visit-frequency-weighted panels, an accumulating waitlist, and carried unmet demand add scheduling feedback. Extra capacity can change who waits and who eventually attends. Neither variant should be assumed to implement a general hospital queueing system.\n\n`NoShowTargetedReminderScenario` instead changes attendance probability through telephone outreach. Defaults allow 24 attempted calls per day, contact probability 0.65, and a 35% relative no-show reduction when reached. The clinic again has 96 regular daily slots. Top-K, top-fraction, and threshold policies can target calls; a per-patient flag prevents multiple calls on the same day. The next schedule’s attendance resolves later, and an unsuccessful call still uses staff capacity. Contact heterogeneity can make risk ranking differ from benefit ranking.\n\n## Sepsis: progression, baseline detection, and limited response\n\n`SepsisEarlyAlertScenario` represents an admission cohort moving among at-risk, sepsis, severe sepsis, shock, deceased, and discharged states. Four-hour steps make a default mean stay of 35 steps approximately 5.8 days. The default cohort is 2,000, the nominal incidence parameter 0.04, target AUC 0.76, and rapid-response capacity eight per step. These inputs do not individually determine observed incidence or mortality.\n\nDisease progression and mortality depend on stage; discharge ends exposure. Standard clinical detection is enabled by default in both branches. Alerts additionally encounter response probabilities, cumulative false-alert fatigue, and capacity. Optional timing parameters change the benefit of earlier treatment.\n\nThe current classifier labels patients already in septic states. Its exact AUC metadata describes concurrent synthetic classification, not independently verified advance warning. The primary `events` vector also marks **current septic-state occupancy**, not newly incident transitions. Summing it across steps measures septic person-steps. Likewise, summing a cumulative death count would repeatedly count earlier deaths. Outcome definitions must precede statistical analysis.\n\n## Retention: a closed workforce with manager constraints\n\n`NurseRetentionScenario` follows a weekly closed cohort: defaults are 1,000 nurses, 100 per manager, annual turnover parameter 0.22, and predictions every two weeks. Tenure, a new-hire risk multiplier of two, and manager span affect risk. Departures are absorbing; replacement hiring is not implemented.\n\nWeekly standard-of-care outreach precedes departure sampling. AI outreach follows on prediction weeks and therefore influences later exposure. Each manager’s AI budget defaults to four interventions, subject to adoption and a four-week cooldown. SOC has a separate budget. Protection defaults to 50% effectiveness and decays with a six-week half-life; the two care effects are not simply added.\n\nThe family includes fixed-shape branch-coupling checks, independent synthetic scoring diagnostics, matured future-outcome monitoring, change-detection evaluation, and role-specific review packets. These layers answer different questions. A synthetic AUC pass is not evidence that a monitor detects every operational deterioration, and incomplete follow-up is not a passing future-outcome test.\n\n## Malnutrition: an open hospital and a shared assessment queue\n\n`MalnutritionPrioritizationScenario` models admissions, discharge, present-on-admission and later-onset malnutrition, severity progression, assessment, diagnosis, and coding. Default planning values include a 300-patient census, 40 admissions per day, and 30 daily dietitian assessments. The fixed-size state arrays include people before admission and after discharge, so array length is not the current inpatient census.\n\nConsults and screening policy compete within the assessment pathway; ML proposes tomorrow’s ordering. Frozen subgroup scores depend on current truth, severity, and persistent synthetic noise. Scenario-specific Stage A/B verification and run-linked review packets expose more evidence than a single outcome plot. Private model-target calibration remains distinct from the public illustrative demo. Chapter 12 develops the mechanisms and estimands in detail.\n\n## Seven paper-inspired families\n\nThe following links identify actual research designs. The corresponding class implements a simplified synthetic mechanism, not the original dataset or predictor.\n\n| Family and class | Research context | What the local class actually represents |\n|---|---|---|\n| `paper01_epic_esm`: `EpicESMScenario` | [Wong et al., external ESM validation](https://pubmed.ncbi.nlm.nih.gov/34152373/) | Ward progression, percentile alerts, response fatigue, and capacity. An external-validation study is not itself evidence for the synthetic treatment effect. |\n| `paper03_kaiser_aam`: `KaiserAAMScenario` | [Escobar et al., remote review and clinical deterioration response](https://pubmed.ncbi.nlm.nih.gov/33176085/) | Hospital identifiers, review and action probabilities, and progression. The class assigns hospital IDs but does not enforce hospital-specific rollout in `intervene`; identifiers alone do not reproduce a staggered study. |\n| `paper04_insight_rct`: `InSightRCTScenario` | [Shimabukuro et al., ICU randomized trial](https://pubmed.ncbi.nlm.nih.gov/29435343/) | ICU stages, a randomized arm field, intervention-arm score masking, and alert response. An additional paired simulation branch is not equivalent to the trial’s independent randomized samples. |\n| `paper05_composer`: `COMPOSERScenario` | [Boussina et al., COMPOSER deployment study](https://pubmed.ncbi.nlm.nih.gov/38263386/) | Sepsis progression, nurse alerts, bundle compliance, and mortality. The class does not recreate the trained deep network or certify reproduction of the study’s causal analysis. |\n| `paper06_shield_rt`: `ShieldRTScenario` | [SHIELD-RT randomized evaluation](https://pubmed.ncbi.nlm.nih.gov/32886536/) | Synthetic acute-care risk and extra evaluations. Events are redrawn without an absorbing event update; repeated interventions can compound risk reductions. The caller supplies the horizon; no radiation biophysics is modeled. |\n| `paper07_manz_nudges`: `ManzNudgeScenario` | [Manz et al., stepped-wedge oncology nudges trial](https://pubmed.ncbi.nlm.nih.gov/33057696/) | Weekly oncologist activation changes conversation probabilities. A deterministic ramp begins at week 13 by default and reaches all oncologists 13 weeks later; it is not the original randomized clinic-wedge assignment. |\n| `paper09_masai`: `MASAIScenario` | [MASAI randomized screening analysis](https://pubmed.ncbi.nlm.nih.gov/37541274/) | Synthetic cancer risk, single/double-reading pathways, detection, and reading workload. It does not process mammograms or reproduce the original imaging model. |\n\nFor Manz, the modeled outcome is serious-illness conversation documentation, not avoided mortality. For MASAI, report cancer detections per screened person separately from reads per screen and relative reading workload. These distinctions illustrate why names and headline paper effects are insufficient replication specifications.\n\n## Worked example: the clock changes the question\n\nSuppose 100 people have annual event probability 0.22. Under a constant hazard, the corresponding weekly probability is:\n\n```math\np_w=1-(1-0.22)^{1/52}\\approx0.00477\n```\n\n`pw` is the conditional event probability during one week for someone still at risk. With absorbing departures and no other changes, the expected number who depart within 52 weeks is 22. Repeating weekly Bernoulli draws for all 100 people, including those who already departed, instead gives about `100 × 52 × 0.00477 = 24.8` event occurrences. Neither calculation describes 22% weekly risk. This is why retention’s absorbing state and stroke’s repeat-event mechanism support different estimands.\n\n## Assess maturity claim by claim\n\nThe template’s biased coin is useful for learning the five-method contract, not domain validation. Primary families have differing unit, integration, invariant, and scenario checks. Retention and malnutrition now additionally produce scoped review evidence; that does not confer blanket certification on every parameter combination. Paper-prefixed families remain mechanisms requiring explicit study-specific verification.\n\nBefore calling an experiment a replication, match eligibility, timing, baseline care, outcome, denominator, assignment unit, and estimator to the source study. Then separate parameters fitted to published outcomes from outcomes independently predicted. Agreement with a value used to tune the simulator is calibration evidence; reproducing it cannot independently validate the same assumption.",
+  "references": [
+    {
+      "id": "wong-2021",
+      "title": "Wong et al. (2021): External Validation of a Widely Implemented Proprietary Sepsis Prediction Model in Hospitalized Patients",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/34152373/",
+      "note": "Primary external-validation study; does not identify a treatment effect for the local synthetic policy."
+    },
+    {
+      "id": "escobar-2020",
+      "title": "Escobar et al. (2020): Automated Identification of Adults at Risk for In-Hospital Clinical Deterioration",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33176085/",
+      "note": "Primary staggered implementation study involving remote review and clinical response."
+    },
+    {
+      "id": "shimabukuro-2017",
+      "title": "Shimabukuro et al. (2017): Effect of a machine learning-based severe sepsis prediction algorithm on patient survival and hospital length of stay: a randomised clinical trial",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/29435343/",
+      "note": "Primary ICU randomized trial; local simulator assumptions and estimators require their own checks."
+    },
+    {
+      "id": "boussina-2024",
+      "title": "Boussina et al. (2024): Impact of a deep learning sepsis prediction model on quality of care and survival",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/38263386/",
+      "note": "Primary COMPOSER deployment evaluation."
+    },
+    {
+      "id": "shield-2020",
+      "title": "Hong et al. (2020): System for High-Intensity Evaluation During Radiation Therapy (SHIELD-RT): A Prospective Randomized Study of Machine Learning-Directed Clinical Evaluations During Radiation and Chemoradiation",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32886536/",
+      "note": "Primary trial of additional clinical evaluations for patients classified as high risk."
+    },
+    {
+      "id": "manz-2020",
+      "title": "Manz et al. (2020): Effect of Integrating Machine Learning Mortality Estimates With Behavioral Nudges to Clinicians on Serious Illness Conversations Among Patients With Cancer",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33057696/",
+      "note": "Primary stepped-wedge cluster randomized trial; conversation documentation is the primary endpoint."
+    },
+    {
+      "id": "masai-2023",
+      "title": "Lång et al. (2023): Artificial intelligence-supported screen reading versus standard double reading in the Mammography Screening with Artificial Intelligence trial (MASAI)",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37541274/",
+      "note": "Primary randomized mammography screening safety analysis; a reading-workload and detection context, not a model artifact."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/scenarios/stroke_prevention/scenario.py",
+      "symbol": "StrokePreventionScenario",
+      "claim": "Weekly repeated-event risk and persistent intervention model."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/noshow_overbooking/scenario.py",
+      "symbol": "NoShowOverbookingScenario",
+      "claim": "Appointment-resolution and overbooking mechanism."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/noshow_overbooking/realistic_scenario.py",
+      "symbol": "RealisticNoShowScenario",
+      "claim": "Second overbooking class with persistent waitlist and unmet demand."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/noshow_targeted_reminders/scenario.py",
+      "symbol": "NoShowTargetedReminderScenario",
+      "claim": "Capacity-limited calls, contact success, and attendance effects."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/sepsis_early_alert/scenario.py",
+      "symbol": "SepsisEarlyAlertScenario",
+      "claim": "Four-hour stages, baseline care, response capacity, and occupancy outcome semantics."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/nurse_retention/scenario.py",
+      "symbol": "NurseRetentionScenario",
+      "claim": "Weekly closed-cohort departures and separate SOC/AI outreach budgets."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/malnutrition_prioritization/scenario.py",
+      "symbol": "MalnutritionPrioritizationScenario",
+      "claim": "Open inpatient care pathway and dietitian-capacity prioritization."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/paper01_epic_esm/scenario.py",
+      "symbol": "EpicESMScenario",
+      "claim": "Synthetic ESM-inspired ward mechanism."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/paper03_kaiser_aam/scenario.py",
+      "symbol": "KaiserAAMScenario",
+      "claim": "Review/action mechanism with hospital identifiers but no hospital-specific rollout gate in intervene."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/paper04_insight_rct/scenario.py",
+      "symbol": "InSightRCTScenario",
+      "claim": "Randomized arm field and intervention-arm score masking."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/paper05_composer/scenario.py",
+      "symbol": "COMPOSERScenario",
+      "claim": "Synthetic nurse-alert and sepsis-bundle mechanism."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/paper06_shield_rt/scenario.py",
+      "symbol": "ShieldRTScenario",
+      "claim": "Extra evaluation and acute-care event model."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/paper07_manz_nudges/scenario.py",
+      "symbol": "ManzNudgeScenario",
+      "claim": "Weekly clinician activation ramp and conversation-probability outcome."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/paper09_masai/scenario.py",
+      "symbol": "MASAIScenario",
+      "claim": "Synthetic screen-reading triage, cancer detection, and workload."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/_template/scenario.py",
+      "symbol": "CoinFlipScenario",
+      "claim": "Runnable teaching template, excluded from the 14 domain-class count."
+    }
+  ],
+  "review_questions": [
+    "Why does sepsis occupancy summed over time differ from the count of new sepsis cases?",
+    "What is missing when a simulator has hospital IDs but claims to reproduce a staggered hospital rollout?",
+    "Why does matching a published result used for parameter tuning not independently validate a replication?"
+  ],
+  "exercises": [
+    {
+      "question": "An analyst adds the sepsis primary events vector across twelve four-hour steps and calls the result “patients with sepsis.” Repair the interpretation.",
+      "answer": "The total counts septic person-steps, because the vector indicates current septic occupancy. Unique patients require an ever-septic indicator; incident cases require a transition-based definition. Twelve steps are 48 hours, so the resulting person-time unit must also be explicit."
+    },
+    {
+      "question": "Design a fair test of whether retention AI improves targeting rather than merely adding outreach.",
+      "answer": "Compare AI ranking with random or SOC ranking using the same additional per-manager budget, prediction schedule, eligibility, adoption, cooldown, contact effectiveness, and follow-up. Pair exogenous randomness where valid and repeat independent seeds. The present AI-versus-SOC contrast alone combines added resources with targeting."
+    }
+  ]
+}

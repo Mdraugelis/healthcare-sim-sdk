@@ -1,0 +1,99 @@
+{
+  "id": "14-software",
+  "number": 14,
+  "part": "Implementation and Assurance",
+  "title": "Software architecture as a scientific contract",
+  "subtitle": "Understand the five scenario methods, state ownership, random streams and analysis exports before extending the SDK.",
+  "objectives": [
+    "Explain what the engine controls and what each scenario must specify.",
+    "Recognize branch contamination, random-stream misalignment and incorrect entity joins.",
+    "Plan reproducible configurations and compute costs without weakening scientific meaning."
+  ],
+  "prerequisites": [
+    "04-counterfactuals",
+    "09-analysis-data"
+  ],
+  "body": "## A small interface carries a large scientific responsibility\n\nThe engine resembles a laboratory technician following a fixed protocol. It creates a population, advances time, requests predictions when scheduled, applies a policy, and records measurements. It does not know whether an entity is a patient, nurse or appointment. That separation lets different use cases share execution machinery while making their scientific assumptions explicit in scenario code.\n\nThe interface is intentionally small: `BaseScenario` requires five methods. Small does not mean trivial. Each method identifies a different responsibility, including which random stream should supply its uncertainty. Reviewers can therefore ask whether a mechanism sits in the appropriate part of the experiment instead of reconstructing one large script.\n\n| Method | Scientific responsibility | Named random stream |\n| --- | --- | --- |\n| `create_population` | Initial entities, attributes and state | `population` |\n| `step` | Domain evolution and ordinary workflow | `temporal` |\n| `predict` | Synthetic scores and prediction metadata | `prediction` |\n| `intervene` | Policy assignment and its state changes | `intervention` |\n| `measure` | Outcomes and analysis-facing records | `outcomes` |\n\nOptional hooks validate populations/results and customize cloning. They are not a sixth required scenario operation. Architectural requirements are recorded in `.claude/invariants.yaml` and checked by the invariant script.\n\n<figure class=\"chapter-diagram\"><svg viewBox=\"0 0 780 175\" role=\"img\" aria-label=\"A shared initial population feeds factual and counterfactual paths; only factual receives prediction and intervention.\"><g fill=\"none\" stroke=\"#557080\" stroke-width=\"2\"><rect x=\"8\" y=\"55\" width=\"155\" height=\"60\" rx=\"10\"/><path d=\"M163 85H200V40H240M200 85V135H240\"/><rect x=\"240\" y=\"13\" width=\"525\" height=\"55\" rx=\"10\"/><rect x=\"240\" y=\"108\" width=\"525\" height=\"55\" rx=\"10\"/></g><g fill=\"#263c49\" font-size=\"17\" font-family=\"system-ui,sans-serif\"><text x=\"85\" y=\"80\" text-anchor=\"middle\">Shared initial</text><text x=\"85\" y=\"101\" text-anchor=\"middle\">population</text><text x=\"260\" y=\"47\">Factual: step → predict → intervene → measure</text><text x=\"260\" y=\"142\">Counterfactual: step → measure</text></g></svg><figcaption>Prediction and intervention occur only at scheduled factual timesteps. Both branches retain the scenario’s baseline workflow.</figcaption></figure>\n\n## State opacity and ownership\n\nThe engine treats state as opaque: it passes the object to scenario methods and stores their standardized outputs. A scenario may use a NumPy array, dataclass or another representation. The engine should not inspect a patient's diagnosis field or know which array row contains a manager identifier.\n\nOpacity helps prevent domain assumptions from leaking into shared infrastructure. It does not guarantee that a scenario is correct. An array row can be misinterpreted while every engine call remains valid. That error belongs in scenario-specific tests and explicit state documentation.\n\nA useful mathematical description of a timestep is:\n\n```math\nS_{t+1}=F(S_t,t,\\theta,U_t)\n```\n\nS is scenario state, θ is fixed configuration, U is the relevant random input, and F is the transition implemented by `step`. Once these inputs are fixed, the transition should be reproducible. A mutable module-level counter or cached value changed by the other branch is an undeclared input.\n\nThe SDK's step-purity rule is pragmatic rather than a ban on all mutation: a method may update its supplied state, but must keep its evolving domain information there and use the assigned temporal generator. Fixed scenario configuration can define the transition. Mutable attributes changed by factual prediction must not secretly influence counterfactual evolution.\n\n## Copying isolates histories, not every possible dependency\n\n`clone_state` defaults to `copy.deepcopy`. A shallow copy creates another outer container while potentially retaining shared nested objects; a deep copy recursively copies supported contents. Custom objects can define their own copying behavior, and some resources are not copied like ordinary data. These distinctions are documented in [Python's copying reference](https://docs.python.org/3/library/copy.html).\n\nConsider a state dataclass containing a list of appointment objects. Copying just the list is insufficient if both branches still refer to the same appointment objects. Marking one appointment treated could then treat it in both worlds. A small test should mutate the clone and verify that the original's relevant nested state remains unchanged.\n\nDeep-copying state does not clone the scenario object. The branched engine uses the same scenario instance while switching its `rng` reference. Model-fitting caches are therefore shared scenario attributes. This can be appropriate for a factual-only scorer, provided the counterfactual's `step` and `measure` do not consult mutable scoring state. The distinction between state ownership and scenario ownership matters more than the presence of a copy call.\n\n## Partition randomness by purpose\n\n`RNGPartitioner` uses `SeedSequence.spawn` to construct five generators. Spawning separates streams reproducibly; NumPy describes the resulting streams as independent with very high probability, rather than offering a mathematical guarantee for every finite pseudorandom sequence. See [NumPy's parallel random-generation documentation](https://numpy.org/doc/1.25/reference/random/parallel.html).\n\nSeparate streams prevent additional prediction draws from advancing outcome randomness. They do not assign random numbers to named patients automatically. If one branch draws only for active patients while the other contains a different active set, the same generator position can refer to different people.\n\nA robust pattern, when computationally reasonable, is to draw for the full fixed entity population and mask afterward. Nurse retention uses full-population priorities before selecting eligible staff. Another possible architecture would key draws by entity, process and time; that is a design alternative, not the current engine's general mechanism.\n\nFresh scenario construction is the safest starting point for a replication. Calling `create_streams` again on an existing partitioner spawns additional children; it does not rewind its first streams. Saving only a seed also cannot establish bitwise reproducibility across every future dependency or platform change. [NumPy's compatibility policy](https://numpy.org/doc/stable/reference/random/compatibility.html) explains the conditions and limits of stream reproduction. Record code, configuration and dependency versions alongside seeds.\n\n## Worked example: two appointments and a delayed outcome\n\nSuppose an initial clinic schedule contains appointment IDs 101 and 909. Their score-array positions are zero and one. The policy calls position one on day zero. `treated_indices=[1]` therefore refers to appointment 909, not an entity whose identifier happens to be 1.\n\nNo-show scenarios now preserve the initial schedule for day-zero prediction and action. Day one resolves those appointments. The day-zero outcome arrays are empty and explicitly unobserved. This avoids counting unresolved appointments as no-shows and avoids generating the initial day-zero IDs twice.\n\nAn export must join intervention positions through prediction identity metadata, then align the correct measured entities. Today’s scores may belong to tomorrow’s resolved appointments, so matching arrays merely because they have equal length is insufficient. `AnalysisDataset` accepts prediction `entity_ids` or the appointment scenarios' `slot_ids`; otherwise it uses same-step factual outcome IDs and checks lengths. The fallback requires a scenario to maintain that positional correspondence.\n\nIf tomorrow's new predictions refer to different slots, a same-timestep snapshot gives unmatched outcome entities NaN scores. That is an honest unavailable value, not a reason to attach unrelated scores. Stable identifiers are part of the scientific data contract.\n\n## Exports specify meaning, not just shape\n\n`outcome_key=\"events\"` selects the primary array; other keys select aligned secondary outcomes. Unknown keys fail. Time-series exports distinguish a measured zero from a missing measurement using `observed` and NaN. A deliberately empty unobserved outcome needs its metadata flag; an ordinary measured empty array otherwise sums to zero.\n\nFor panels, `ever_treated` marks assignment from each entity's own first assignment onward. `current_step` marks assignment only at that timestep. Neither reconstructs biological effect duration, completion of a referred service, or routine care. Counterfactual treatment columns represent zero AI assignments, even though a snapshot may inherit earlier factual effects.\n\nThe appointment unit is also distinct from the patient unit: repeated appointments for the same person are different observations. Their statistical dependence remains an analysis concern. Exporting a rectangular panel does not establish independence or validate a difference-in-differences estimator.\n\n## Complexity should follow the scientific question\n\nFor a fixed population of N entities and T timesteps, a vectorized transition with constant work per entity typically costs on the order of NT. Ranking every entity at every timestep introduces a sorting cost:\n\n```math\nC(N,T)=O(TN\\log N)\n```\n\nThis is an illustrative upper-order description for repeated full sorting, not a measured benchmark of every scenario. Model fitting, nested object copies and queue operations can dominate. Saving per-entity outcomes over all timesteps can require order-NT storage; branched execution and detailed traces add further copies.\n\nOptimize after identifying the decision-relevant mechanisms. Aggregating away queue order to save memory is scientifically consequential if displacement is the question. Reducing stored narrative facts while retaining essential outcomes may be a safer optimization.\n\n`TracingScenario` projects selected facts from defensive state copies during the actual engine run. It preserves the five-method interface, records immutable JSON facts and fails explicitly when its record cap is exceeded. Projection code must avoid extra random draws and external side effects. The wrapper helps inspect execution; it does not make arbitrary observation code trustworthy automatically.\n\n## Reproducible experiments and failure cases\n\nA configuration should identify population generation, model parameters, policy, resources, horizon, prediction schedule, branch mode and expected seed set. `run_identity` fingerprints relevant source contents, resolved configuration, a supplied model and environment information. A resolved value is preferable to a configuration name whose meaning may later change.\n\nTypical failures now become easier to locate: shallow-copy aliasing affects branch isolation; a global counter violates state ownership; a variable-length draw changes coupling; reused slot IDs corrupt joins; a stale model file undermines reproducibility; and a NaN silently coerced to zero changes the estimand. Review the scientific consequence of each failure, then select a focused test that can reveal it. The architecture supplies boundaries for that reasoning, not a substitute for it.",
+  "references": [
+    {
+      "id": "python-copy",
+      "title": "Python documentation: shallow and deep copy operations",
+      "url": "https://docs.python.org/3/library/copy.html",
+      "note": "Official copying semantics and customization limits."
+    },
+    {
+      "id": "numpy-parallel",
+      "title": "NumPy documentation: parallel random number generation",
+      "url": "https://numpy.org/doc/1.25/reference/random/parallel.html",
+      "note": "SeedSequence spawning and probabilistic independence of streams."
+    },
+    {
+      "id": "numpy-compatibility",
+      "title": "NumPy random-generation compatibility policy",
+      "url": "https://numpy.org/doc/stable/reference/random/compatibility.html",
+      "note": "Conditions and limits of reproducible random-number streams."
+    }
+  ],
+  "code_refs": [
+    {
+      "path": "healthcare_sim_sdk/core/scenario.py",
+      "symbol": "BaseScenario",
+      "claim": "Defines the five abstract methods, optional hooks and state-ownership contract."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/scenario.py",
+      "symbol": "BaseScenario.clone_state",
+      "claim": "Defaults to deep-copying scenario state."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/rng.py",
+      "symbol": "RNGPartitioner.create_streams",
+      "claim": "Spawns generators for five named processes."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/results.py",
+      "symbol": "AnalysisDataset._prediction_ids",
+      "claim": "Maps positional predictions through explicit IDs or checked same-step fallback."
+    },
+    {
+      "path": "healthcare_sim_sdk/core/results.py",
+      "symbol": "AnalysisDataset.to_panel",
+      "claim": "Implements own-entity treatment timing and explicit assignment semantics."
+    },
+    {
+      "path": "healthcare_sim_sdk/scenarios/noshow_targeted_reminders/scenario.py",
+      "symbol": "NoShowTargetedReminderScenario.step",
+      "claim": "Keeps initial day-zero appointments unresolved until the next timestep."
+    },
+    {
+      "path": "healthcare_sim_sdk/experiments/trace.py",
+      "symbol": "TracingScenario",
+      "claim": "Observes actual calls with defensive projection and immutable records."
+    },
+    {
+      "path": "healthcare_sim_sdk/experiments/review.py",
+      "symbol": "run_identity",
+      "claim": "Hashes source/config/model and environment for run provenance."
+    }
+  ],
+  "review_questions": [
+    "Which state can be modified by both branches, including state outside the object passed to step?",
+    "Does every intervention position map unambiguously to a stable entity ID?",
+    "Which output fields describe assignment, actual service receipt and observed outcome?",
+    "What information must be retained to reproduce this configuration six months later?"
+  ],
+  "exercises": [
+    {
+      "question": "A prediction array has IDs [909,101], while an outcome array has IDs [101,909]. Position zero is treated. Which outcome entity should be marked assigned?",
+      "answer": "Entity 909, the second outcome row. Joining by raw position would incorrectly mark 101."
+    },
+    {
+      "question": "Two branches start at the same RNG seed. One draws for 99 active entities, the other for 100. Are future entity draws guaranteed to remain aligned?",
+      "answer": "No. Sequential stream positions no longer correspond automatically; use a tested fixed-consumption or explicitly keyed design."
+    },
+    {
+      "question": "A scenario stores a mutable alert count on self, then reads it in step. Why might deepcopy(state) fail to protect the counterfactual?",
+      "answer": "The engine clones state, not the shared scenario instance. The factual branch can change self.alert_count and thereby alter the counterfactual transition."
+    }
+  ]
+}

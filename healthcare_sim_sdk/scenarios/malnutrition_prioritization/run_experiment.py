@@ -24,12 +24,11 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from ...experiments.lifecycle import finalize_experiment
+from .review import create_packet, run_reviewed_cell
 from .runner_common import (
     SUBGROUP_KEYS,
-    always_on_verification,
     config_from_dict,
     format_verification,
-    run_cell,
     summarize,
 )
 
@@ -81,11 +80,19 @@ def _equity_table(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             fk, ck = f"missed_{key}_{g}_f", f"missed_{key}_{g}_c"
             deltas = [100 * (r[ck] - r[fk]) for r in rows
                       if fk in r and ck in r]
-            if len(deltas) < max(3, len(rows) // 2):
-                continue          # group too rare to estimate
+            if len(deltas) != len(rows) or len(deltas) < 3:
+                entries[g] = {"status": "INCONCLUSIVE",
+                              "n_available": len(deltas), "n_expected": len(rows),
+                              "detail": (
+                                  "Subgroup evidence incomplete or fewer than "
+                                  "three repetitions."
+                              )}
+                continue
             entries[g] = {
                 "delta_missed_pp_mean": float(np.mean(deltas)),
-                "delta_missed_pp_ci": [
+                "status": "PASS",
+                "n_available": len(deltas), "n_expected": len(rows),
+                "delta_missed_pp_seed_interval": [
                     float(np.percentile(deltas, 2.5)),
                     float(np.percentile(deltas, 97.5))],
                 "missed_f_mean": float(np.mean(
@@ -95,10 +102,12 @@ def _equity_table(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             }
         if entries:
             means = [float(e["delta_missed_pp_mean"])
-                     for e in entries.values()]
+                     for e in entries.values() if e["status"] == "PASS"]
             table[key] = {
                 "groups": entries,
-                "max_gap_pp": float(max(means) - min(means)),
+                "max_gap_pp": float(max(means) - min(means)) if means else None,
+                "max_gap_scope": "Only complete groups; not an equity certification",
+                "status": "PASS" if len(means) == len(entries) else "INCONCLUSIVE",
             }
     return table
 
@@ -159,14 +168,15 @@ def _results_md(name, campus, cells, cell_summaries, extra,
         "",
         "All findings are what **the simulation suggests, under "
         "these assumptions** -- not real-world evidence. The model "
-        "is frozen at its published operating characteristics; "
+        "uses the configured frozen score generator; "
         "[O]-tagged workflow inputs (RDN capacity, baseline "
         "time-to-consult, worklist order, true prevalence) are "
-        "placeholders pending local data.",
+        "placeholders pending local data. Model fidelity is established only "
+        "where the run-specific packet includes a matching certificate.",
         "",
         format_verification(verification),
         "",
-        f"## Results ({n_seeds} seeds per cell, mean [95% CI])",
+        f"## Results ({n_seeds} seeds per cell, mean [95% seed distribution interval])",
         "",
         "| cell | missed F | missed C | delta missed (pp) "
         "| delta TTA (d) | delta harm | coded F | coded C |",
@@ -179,8 +189,8 @@ def _results_md(name, campus, cells, cell_summaries, extra,
             m = s[k]
             unit = "%" if pct else ""
             return (f"{m['mean']*scale:.1f}{unit} "
-                    f"[{m['ci_lo']*scale:.1f}, "
-                    f"{m['ci_hi']*scale:.1f}]")
+                    f"[{m['seed_p025']*scale:.1f}, "
+                    f"{m['seed_p975']*scale:.1f}]")
         lines.append(
             f"| {c['label']} "
             f"| {fmt('missed_rate_f', 100, True)} "
@@ -213,27 +223,25 @@ def main(cfg: DictConfig) -> None:
     print(f"[{name} / {campus}] {len(cells)} cell(s) x "
           f"{len(seeds)} seeds x {horizon} days")
 
-    # Always-On Verification on the center cell, first seed.
-    center = cells[len(cells) // 2]
-    v = always_on_verification(
-        config_from_dict(center["config"]), horizon, seeds[0])
-    print(format_verification(v))
-    if not v["all_pass"]:
-        print("VERIFICATION FAILED -- aborting before results.")
-        raise SystemExit(1)
+    packet = create_packet(
+        out_root / "review", OmegaConf.to_container(cfg, resolve=True), cells, seeds,
+    )
+    v: Dict[str, Any] = {"checks": [], "all_pass": True}
 
     cell_rows, cell_summaries = [], []
     for i, cell in enumerate(cells):
         scen_cfg = config_from_dict(cell["config"])
-        rows = run_cell(scen_cfg, horizon, seeds)
+        rows = run_reviewed_cell(packet, f"cell_{i:02d}", scen_cfg, horizon, seeds)
+        for seed in seeds:
+            v["checks"].extend(packet.runs[(f"cell_{i:02d}", seed)]["checks"])
         cell_rows.append(rows)
         summary = summarize(rows, SUMMARY_KEYS)
         cell_summaries.append(summary)
         print(f"  cell {cell['label']}: "
               f"delta missed "
               f"{summary['delta_missed_pp']['mean']:+.2f} pp "
-              f"[{summary['delta_missed_pp']['ci_lo']:+.2f}, "
-              f"{summary['delta_missed_pp']['ci_hi']:+.2f}]")
+              f"[{summary['delta_missed_pp']['seed_p025']:+.2f}, "
+              f"{summary['delta_missed_pp']['seed_p975']:+.2f}]")
         cell_dir = out_root / f"cell_{i:02d}"
         cell_dir.mkdir(parents=True, exist_ok=True)
         metrics = {k: v_["mean"] for k, v_ in summary.items()}
@@ -242,25 +250,40 @@ def main(cfg: DictConfig) -> None:
             cell_dir,
             {"scenario": "malnutrition_prioritization",
              "experiment_name": f"{name}/{campus}/{cell['label']}",
-             "seed": seeds[0],
+             "seed": seeds[0], "seeds": seeds,
              **cell["config"]},
             metrics)
 
+    v["all_pass"] = all(c["status"] == "PASS" for c in v["checks"] if c["required"])
+    packet.write()
     extra = _experiment_analysis(
         name, cells, cell_rows, cell_summaries, cfg)
 
+    print(f"Review packet: {out_root / 'review/review_packet.md'}")
     md = _results_md(name, campus, cells, cell_summaries, extra,
                      v, len(seeds))
+    md = "[Run-specific review packet](review/review_packet.md)\n\n" + md
+    md += (
+        "\nIntervals shown above are empirical seed distribution intervals, "
+        "not confidence intervals for the mean.\n"
+    )
     (out_root / "results.md").write_text(md)
-    (out_root / "summary.json").write_text(json.dumps({
+    summary_data = {
         "experiment": name,
         "campus": campus,
         "n_seeds": len(seeds),
+        "seeds": seeds,
+        "horizon_days": horizon,
         "cells": [c["label"] for c in cells],
         "summaries": cell_summaries,
         "analysis": extra,
         "verification": v,
-    }, indent=2, default=float))
+    }
+    serialized = json.dumps(summary_data, indent=2, default=float, allow_nan=False)
+    (out_root / "summary.json").write_text(serialized)
+    (packet.output_dir / "analysis.json").write_text(serialized)
+    packet.add_artifact("analysis.json")
+    packet.write()
     print(f"\nwrote {out_root / 'results.md'}")
 
 

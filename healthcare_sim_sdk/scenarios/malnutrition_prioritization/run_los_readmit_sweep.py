@@ -19,20 +19,19 @@ Usage (from repo root):
 
 import json
 from pathlib import Path
+import shutil
+from typing import Any, Dict
 
 import hydra
 import numpy as np
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from ...experiments.lifecycle import finalize_experiment
 from .run_experiment import _build_cells
+from .review import create_packet, run_reviewed_cell
 from .runner_common import (
-    always_on_verification,
     config_from_dict,
-    format_verification,
     reduce_patient_arrays,
-    reduce_results,
-    run_once,
     summarize,
 )
 
@@ -59,13 +58,9 @@ def main(cfg: DictConfig) -> None:
     print(f"[{name} / {campus}] queue stage: {len(cells)} cell(s) x "
           f"{len(seeds)} seeds x {horizon} days")
 
-    # Always-On Verification on the center cell, first seed.
-    center = config_from_dict(cells[len(cells) // 2]["config"])
-    v = always_on_verification(center, horizon, seeds[0])
-    print(format_verification(v))
-    if not v["all_pass"]:
-        print("VERIFICATION FAILED -- aborting before results.")
-        raise SystemExit(1)
+    packet = create_packet(out_root / "review",
+                           OmegaConf.to_container(cfg, resolve=True), cells, seeds)
+    v: Dict[str, Any] = {"checks": [], "all_pass": True}
 
     cell_summaries = []
     for i, cell in enumerate(cells):
@@ -79,16 +74,18 @@ def main(cfg: DictConfig) -> None:
             "efficacy is applied by outcome_overlay.py")
         cell_dir = out_root / f"cell_{i:02d}"
         cell_dir.mkdir(parents=True, exist_ok=True)
-        rows = []
+
+        def write_arrays(seed, res):
+            relative = f"cell_{i:02d}_seed_{seed:04d}.npz"
+            destination = packet.output_dir / relative
+            np.savez_compressed(destination, **reduce_patient_arrays(res))
+            shutil.copyfile(destination, cell_dir / f"seed_{seed:04d}.npz")
+            return [relative]
+
+        rows = run_reviewed_cell(packet, f"cell_{i:02d}", scen, horizon,
+                                 seeds, result_writer=write_arrays)
         for seed in seeds:
-            _, res = run_once(scen, horizon, seed)
-            arrays = reduce_patient_arrays(res)
-            np.savez_compressed(
-                cell_dir / f"seed_{seed:04d}.npz",
-                **arrays)  # type: ignore[arg-type]
-            row = reduce_results(res)   # release res immediately
-            row["seed"] = seed
-            rows.append(row)
+            v["checks"].extend(packet.runs[(f"cell_{i:02d}", seed)]["checks"])
         summary = summarize(rows, QUEUE_SUMMARY_KEYS)
         cell_summaries.append(summary)
         print(f"  cell {cell['label']}: queue saved "
@@ -105,16 +102,25 @@ def main(cfg: DictConfig) -> None:
              **cell["config"]},
             metrics)
 
-    (out_root / "summary.json").write_text(json.dumps({
+    summary_data = {
         "experiment": name,
         "campus": campus,
         "n_seeds": len(seeds),
+        "seeds": seeds,
         "horizon_days": horizon,
         "cells": [c["label"] for c in cells],
         "cell_overrides": [c["overrides"] for c in cells],
         "summaries": cell_summaries,
         "verification": v,
-    }, indent=2))
+    }
+    (out_root / "summary.json").write_text(json.dumps(
+        summary_data, indent=2, allow_nan=False,
+    ))
+    (packet.output_dir / "queue_summary.json").write_text(json.dumps(
+        summary_data, indent=2, allow_nan=False,
+    ))
+    packet.add_artifact("queue_summary.json")
+    packet.write()
     print(f"wrote {out_root / 'summary.json'}")
 
 

@@ -48,6 +48,13 @@ Either way, the verification protocol is the same (Bayes constraint, monotonicit
 - **Governance teams** producing equity audits and risk assessments before deployment
 - **Procurement teams** stress-testing vendor claims against operational reality
 
+## Illustrated Project Textbook
+
+Open the [project textbook](docs/textbook/index.html) for sixteen chapters on
+probability, dynamics, machine learning, causal evaluation, scenario behavior
+and verification, with interactive labs and peer-review questions. See its
+[build and review guide](docs/textbook/README.md) for reproduction and scope.
+
 ## Agent-Assisted Workflow
 
 This SDK is designed for use with an AI assistant (Claude Code, Claude Cowork, or similar) that works *with* the human throughout the simulation process. The agent guides scenario development, runs verification after every simulation — including case-level walkthroughs and conservation law checks — and helps translate findings into language appropriate for clinical leaders, governance committees, or procurement conversations.
@@ -55,6 +62,17 @@ This SDK is designed for use with an AI assistant (Claude Code, Claude Cowork, o
 The agent protocol lives in [`.claude/agents/sim-guide.md`](.claude/agents/sim-guide.md). It covers use-case fitness screening, the always-on verification checklist, and stakeholder communication guidance. Any Claude Code or Cowork session that opens this repo picks it up automatically.
 
 ## Install
+
+For an auditable example with separate clinical, operations, statistics,
+governance and engineering review pages, see
+[review packets](docs/review_packets.md). The public synthetic demo includes
+actual-run case stories, per-seed checks, provenance, uncertainty and explicit
+missing evidence. Automated checks never provide human sign-off.
+
+For frozen inputs, isolated simulation, withheld reference outcomes and a
+separate evaluator, see the [SHIELD-RT benchmark](docs/blinded_benchmark.md).
+Its outcome-exposed development pilot distinguishes numerical agreement from
+independent validation and preserves the first submitted evaluation.
 
 ```bash
 pip install git+https://github.com/Mdraugelis/healthcare-sim-sdk.git

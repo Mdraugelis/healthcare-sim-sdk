@@ -9,3 +9,13 @@ model:
       - [20, 0.80]
       - [40, 0.60]
     interpolation: linear
+
+# Windows are inclusive; the runner sets horizon to n_weeks - 1.
+# Change week is the first discrete week whose parameter differs from baseline.
+monitoring_claims:
+  - claim_id: auc_loss_after_drift
+    tier: 4
+    metric: realized_auc
+    direction: down
+    change_week: 21
+    eligibility_start: 21

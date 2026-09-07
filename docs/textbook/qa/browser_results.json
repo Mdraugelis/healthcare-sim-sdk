@@ -1,0 +1,153 @@
+{
+  "status": "PASS",
+  "html_sha256": "ec23afc806913546c6d191145cc982d882102d1038e950d06ddeef0083e5c901",
+  "browser": "152.0.7977.76",
+  "checks": [
+    {
+      "name": "All 16 chapters render",
+      "status": "PASS"
+    },
+    {
+      "name": "Eight initialized labs",
+      "status": "PASS"
+    },
+    {
+      "name": "Forty-seven equations render with accessible labels",
+      "status": "PASS"
+    },
+    {
+      "name": "No external asset requests",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "name": "Every slider responds at both domain boundaries",
+      "status": "PASS",
+      "details": {
+        "slider_count": 22
+      }
+    },
+    {
+      "name": "No NaN or Infinity in lab results",
+      "status": "PASS"
+    },
+    {
+      "name": "Search exposes matching chapters",
+      "status": "PASS"
+    },
+    {
+      "name": "Search navigates to exact chapter",
+      "status": "PASS"
+    },
+    {
+      "name": "Reviewers are bound separately to chapter notes",
+      "status": "PASS"
+    },
+    {
+      "name": "Notes survive reload as text",
+      "status": "PASS"
+    },
+    {
+      "name": "Unnamed reviewed status is rejected",
+      "status": "PASS"
+    },
+    {
+      "name": "Older manuscript notes trigger an applicability notice",
+      "status": "PASS"
+    },
+    {
+      "name": "Export preserves old identity and named reviewer without renewing",
+      "status": "PASS"
+    },
+    {
+      "name": "Explicit Save renews identity and retains prior identity",
+      "status": "PASS"
+    },
+    {
+      "name": "Review closes with focus restored",
+      "status": "PASS"
+    },
+    {
+      "name": "Print opens every disclosure",
+      "status": "PASS"
+    },
+    {
+      "name": "Print hides navigation and interactive controls",
+      "status": "PASS"
+    },
+    {
+      "name": "Print restores disclosure state",
+      "status": "PASS"
+    },
+    {
+      "name": "No page overflow at 1440px",
+      "status": "PASS",
+      "details": {
+        "scroll": 1440,
+        "client": 1440
+      }
+    },
+    {
+      "name": "No page overflow at 1024px",
+      "status": "PASS",
+      "details": {
+        "scroll": 1024,
+        "client": 1024
+      }
+    },
+    {
+      "name": "No page overflow at 768px",
+      "status": "PASS",
+      "details": {
+        "scroll": 768,
+        "client": 768
+      }
+    },
+    {
+      "name": "No page overflow at 390px",
+      "status": "PASS",
+      "details": {
+        "scroll": 390,
+        "client": 390
+      }
+    },
+    {
+      "name": "No page overflow at 320px",
+      "status": "PASS",
+      "details": {
+        "scroll": 320,
+        "client": 320
+      }
+    },
+    {
+      "name": "Closed mobile navigation is keyboard-inert",
+      "status": "PASS"
+    },
+    {
+      "name": "Mobile contents opens",
+      "status": "PASS"
+    },
+    {
+      "name": "Mobile chapter selection closes navigation",
+      "status": "PASS"
+    },
+    {
+      "name": "All form controls have associated labels",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "name": "No browser runtime errors",
+      "status": "PASS",
+      "details": []
+    },
+    {
+      "name": "Book remains readable without JavaScript",
+      "status": "PASS"
+    },
+    {
+      "name": "Native disclosures work without JavaScript",
+      "status": "PASS"
+    }
+  ]
+}

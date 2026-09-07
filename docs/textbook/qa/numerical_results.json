@@ -1,0 +1,1740 @@
+{
+  "status": "PASS",
+  "check_count": 137,
+  "node_calls": 66,
+  "app_sha256": "34dd1a92226a2c23ae44ad2a43381561f4472411a14388c7adf85809cd098b26",
+  "checker_sha256": "0e50951f335d57748b6e693241215af283f2a8ad477df25e5a728a0d8b9a2026",
+  "python": "3.13.7",
+  "node": "v24.19.0",
+  "scope": "Pure JavaScript teaching functions, declared slider domains and selected mathematical boundaries.",
+  "limitations": [
+    "No browser layout, controls, persistence or accessibility execution.",
+    "No clinical validity, stochastic calibration, estimator coverage or monitoring-performance certification.",
+    "The ITS and monitoring fixtures are deterministic; the checks do not turn them into random samples.",
+    "These functions are teaching helpers, not a validated public API for arbitrary invalid input."
+  ],
+  "checks": [
+    {
+      "id": "bayes_counts",
+      "actual": [
+        400,
+        99.99999999999997,
+        949.9999999999998,
+        8550
+      ],
+      "expected": [
+        400,
+        100,
+        950,
+        8550
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "bayes_ppv_independent",
+      "actual": 0.29629629629629634,
+      "expected": 0.2962962962962963,
+      "status": "PASS"
+    },
+    {
+      "id": "bayes_ppv_sdk",
+      "actual": 0.29629629629629634,
+      "expected": 0.2962962962962964,
+      "status": "PASS"
+    },
+    {
+      "id": "bayes_no_flags",
+      "actual": null,
+      "expected": null,
+      "status": "PASS"
+    },
+    {
+      "id": "bayes_empty",
+      "actual": null,
+      "expected": null,
+      "status": "PASS"
+    },
+    {
+      "id": "bayes_zero_ppv",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS"
+    },
+    {
+      "id": "bayes_unit_ppv",
+      "actual": 1,
+      "expected": 1.0,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_reference_0",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_0",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_reference_1",
+      "actual": 0.0009859231655186115,
+      "expected": 0.0009859231655186115,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_1",
+      "actual": 0.0009859231655186115,
+      "expected": 0.0009859231655185985,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_reference_2",
+      "actual": 0.003937864227644454,
+      "expected": 0.003937864227644454,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_2",
+      "actual": 0.003937864227644454,
+      "expected": 0.0039378642276444165,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_reference_3",
+      "actual": 0.19999999999999998,
+      "expected": 0.2,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_3",
+      "actual": 0.19999999999999998,
+      "expected": 0.19999999999999996,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_reference_4",
+      "actual": 0.9,
+      "expected": 0.9,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_4",
+      "actual": 0.9,
+      "expected": 0.9,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_reference_5",
+      "actual": 0.04331441378194217,
+      "expected": 0.04331441378194217,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_5",
+      "actual": 0.04331441378194217,
+      "expected": 0.04331441378194212,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_reference_6",
+      "actual": 1.9230769230778662e-14,
+      "expected": 1.9230769230778662e-14,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_6",
+      "actual": 1.9230769230778662e-14,
+      "expected": 1.9206858326015208e-14,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_reference_7",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS"
+    },
+    {
+      "id": "risk_sdk_7",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS",
+      "note": "Absolute tolerance allows cancellation in the SDK's 1-exp form."
+    },
+    {
+      "id": "risk_hand_half_year",
+      "actual": 0.19999999999999998,
+      "expected": 0.2,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_variance_-1",
+      "actual": 400,
+      "expected": 400,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_mcse_-1",
+      "actual": 4,
+      "expected": 4.0,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_variance_-0.5",
+      "actual": 300,
+      "expected": 300.0,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_mcse_-0.5",
+      "actual": 3.4641016151377544,
+      "expected": 3.4641016151377544,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_variance_0",
+      "actual": 200,
+      "expected": 200,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_mcse_0",
+      "actual": 2.8284271247461903,
+      "expected": 2.8284271247461903,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_variance_0.8",
+      "actual": 40,
+      "expected": 40.0,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_mcse_0.8",
+      "actual": 1.2649110640673518,
+      "expected": 1.2649110640673518,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_variance_1",
+      "actual": 0,
+      "expected": 0,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_mcse_1",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS"
+    },
+    {
+      "id": "coupling_unequal_perfect",
+      "actual": 1,
+      "expected": 1.0,
+      "status": "PASS"
+    },
+    {
+      "id": "mcse_4_25",
+      "actual": 0.8,
+      "expected": 0.8,
+      "status": "PASS"
+    },
+    {
+      "id": "normal_halfwidth_4_25",
+      "actual": 1.5679711876320432,
+      "expected": 1.5679711876320432,
+      "status": "PASS"
+    },
+    {
+      "id": "mcse_4_100",
+      "actual": 0.4,
+      "expected": 0.4,
+      "status": "PASS"
+    },
+    {
+      "id": "normal_halfwidth_4_100",
+      "actual": 0.7839855938160216,
+      "expected": 0.7839855938160216,
+      "status": "PASS"
+    },
+    {
+      "id": "mcse_10_5",
+      "actual": 4.47213595499958,
+      "expected": 4.47213595499958,
+      "status": "PASS"
+    },
+    {
+      "id": "normal_halfwidth_10_5",
+      "actual": 8.765225405765815,
+      "expected": 8.765225405765815,
+      "status": "PASS"
+    },
+    {
+      "id": "mcse_0_25",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS"
+    },
+    {
+      "id": "normal_halfwidth_0_25",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS"
+    },
+    {
+      "id": "calibration_reference_1_0",
+      "actual": [
+        0.05000000000000001,
+        0.10000000000000002,
+        0.2,
+        0.30000000000000004,
+        0.4,
+        0.55,
+        0.65,
+        0.7499999999999999,
+        0.85,
+        0.9499999999999998
+      ],
+      "expected": [
+        0.05000000000000001,
+        0.10000000000000002,
+        0.2,
+        0.3,
+        0.4,
+        0.55,
+        0.65,
+        0.75,
+        0.85,
+        0.9499999999999998
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "auc_invariance_1_0",
+      "actual": 0.84,
+      "expected": 0.84,
+      "status": "PASS"
+    },
+    {
+      "id": "brier_decomposition_1_0",
+      "actual": 0.15850000000000003,
+      "expected": 0.15850000000000003,
+      "status": "PASS"
+    },
+    {
+      "id": "calibration_reference_0.2_-2",
+      "actual": [
+        0.06985701601727361,
+        0.08021385654236499,
+        0.09302396560252824,
+        0.10252675024723323,
+        0.11094810670641247,
+        0.12348156522483617,
+        0.1328268626507079,
+        0.14426886662687863,
+        0.16069314162081796,
+        0.19605869183661345
+      ],
+      "expected": [
+        0.06985701601727361,
+        0.08021385654236499,
+        0.09302396560252824,
+        0.10252675024723323,
+        0.11094810670641247,
+        0.12348156522483617,
+        0.1328268626507079,
+        0.14426886662687866,
+        0.16069314162081796,
+        0.19605869183661345
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "auc_invariance_0.2_-2",
+      "actual": 0.84,
+      "expected": 0.84,
+      "status": "PASS"
+    },
+    {
+      "id": "brier_decomposition_0.2_-2",
+      "actual": 0.3579644022177919,
+      "expected": 0.357964402217792,
+      "status": "PASS"
+    },
+    {
+      "id": "calibration_reference_3_2",
+      "actual": [
+        0.0010761196370554442,
+        0.010034174242179353,
+        0.10350404533561741,
+        0.3677471970755294,
+        0.6864564835986605,
+        0.930990961905184,
+        0.9793083764494978,
+        0.995012581129955,
+        0.9992568009446544,
+        0.9999802693376613
+      ],
+      "expected": [
+        0.0010761196370554442,
+        0.010034174242179353,
+        0.10350404533561741,
+        0.3677471970755293,
+        0.6864564835986605,
+        0.930990961905184,
+        0.9793083764494978,
+        0.995012581129955,
+        0.9992568009446544,
+        0.9999802693376613
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "auc_invariance_3_2",
+      "actual": 0.84,
+      "expected": 0.84,
+      "status": "PASS"
+    },
+    {
+      "id": "brier_decomposition_3_2",
+      "actual": 0.20298507695644466,
+      "expected": 0.2029850769564447,
+      "status": "PASS"
+    },
+    {
+      "id": "calibration_reference_1.7_-0.8",
+      "actual": [
+        0.0030017718416393306,
+        0.010610103478993703,
+        0.040828073538674445,
+        0.09618021097910769,
+        0.18402821577062944,
+        0.3872563416200556,
+        0.5627589291924262,
+        0.7441480196589534,
+        0.8955586266630194,
+        0.9853064815182545
+      ],
+      "expected": [
+        0.0030017718416393306,
+        0.010610103478993703,
+        0.04082807353867444,
+        0.09618021097910766,
+        0.18402821577062944,
+        0.3872563416200556,
+        0.5627589291924262,
+        0.7441480196589535,
+        0.8955586266630194,
+        0.9853064815182545
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "auc_invariance_1.7_-0.8",
+      "actual": 0.84,
+      "expected": 0.84,
+      "status": "PASS"
+    },
+    {
+      "id": "brier_decomposition_1.7_-0.8",
+      "actual": 0.17461742917562817,
+      "expected": 0.17461742917562817,
+      "status": "PASS"
+    },
+    {
+      "id": "auc_hand_ties",
+      "actual": 0.875,
+      "expected": 0.875,
+      "status": "PASS"
+    },
+    {
+      "id": "auc_missing_class",
+      "actual": null,
+      "expected": null,
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_0_0_risk_ids",
+      "actual": [],
+      "expected": [],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_0_0_risk_equal_budget",
+      "actual": [
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_0_0_risk_gains",
+      "actual": [
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_0_0_benefit_ids",
+      "actual": [],
+      "expected": [],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_0_0_benefit_equal_budget",
+      "actual": [
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_0_0_benefit_gains",
+      "actual": [
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_1_0_risk_ids",
+      "actual": [
+        "B"
+      ],
+      "expected": [
+        "B"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_1_0_risk_equal_budget",
+      "actual": [
+        1,
+        1
+      ],
+      "expected": [
+        1,
+        1
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_1_0_risk_gains",
+      "actual": [
+        0.1,
+        0.020000000000000004,
+        -0.08
+      ],
+      "expected": [
+        0.1,
+        0.02,
+        -0.08
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_1_0_benefit_ids",
+      "actual": [
+        "D"
+      ],
+      "expected": [
+        "D"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_1_0_benefit_equal_budget",
+      "actual": [
+        1,
+        1
+      ],
+      "expected": [
+        1,
+        1
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_1_0_benefit_gains",
+      "actual": [
+        0.1,
+        0.18000000000000002,
+        0.08000000000000002
+      ],
+      "expected": [
+        0.1,
+        0.18,
+        0.07999999999999999
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_3_1_risk_ids",
+      "actual": [
+        "B",
+        "D"
+      ],
+      "expected": [
+        "B",
+        "D"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_3_1_risk_equal_budget",
+      "actual": [
+        2,
+        2
+      ],
+      "expected": [
+        2,
+        2
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_3_1_risk_gains",
+      "actual": [
+        0.12000000000000001,
+        0.2,
+        0.08
+      ],
+      "expected": [
+        0.12000000000000001,
+        0.19999999999999998,
+        0.07999999999999997
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_3_1_benefit_ids",
+      "actual": [
+        "D",
+        "E"
+      ],
+      "expected": [
+        "D",
+        "E"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_3_1_benefit_equal_budget",
+      "actual": [
+        2,
+        2
+      ],
+      "expected": [
+        2,
+        2
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_3_1_benefit_gains",
+      "actual": [
+        0.12000000000000001,
+        0.324,
+        0.20400000000000001
+      ],
+      "expected": [
+        0.12000000000000001,
+        0.32399999999999995,
+        0.20399999999999996
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_2_6_risk_ids",
+      "actual": [],
+      "expected": [],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_2_6_risk_equal_budget",
+      "actual": [
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_2_6_risk_gains",
+      "actual": [
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_2_6_benefit_ids",
+      "actual": [],
+      "expected": [],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_2_6_benefit_equal_budget",
+      "actual": [
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_2_6_benefit_gains",
+      "actual": [
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_0_risk_ids",
+      "actual": [
+        "B",
+        "D",
+        "E",
+        "A",
+        "F",
+        "C"
+      ],
+      "expected": [
+        "B",
+        "D",
+        "E",
+        "A",
+        "F",
+        "C"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_0_risk_equal_budget",
+      "actual": [
+        6,
+        6
+      ],
+      "expected": [
+        6,
+        6
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_0_risk_gains",
+      "actual": [
+        0.554,
+        0.554,
+        0
+      ],
+      "expected": [
+        0.5539999999999999,
+        0.5539999999999999,
+        0.0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_0_benefit_ids",
+      "actual": [
+        "D",
+        "E",
+        "A",
+        "F",
+        "C",
+        "B"
+      ],
+      "expected": [
+        "D",
+        "E",
+        "A",
+        "F",
+        "C",
+        "B"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_0_benefit_equal_budget",
+      "actual": [
+        6,
+        6
+      ],
+      "expected": [
+        6,
+        6
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_0_benefit_gains",
+      "actual": [
+        0.554,
+        0.554,
+        0
+      ],
+      "expected": [
+        0.5539999999999999,
+        0.5539999999999999,
+        0.0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_6_risk_ids",
+      "actual": [],
+      "expected": [],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_6_risk_equal_budget",
+      "actual": [
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_6_risk_gains",
+      "actual": [
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_6_benefit_ids",
+      "actual": [],
+      "expected": [],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_6_benefit_equal_budget",
+      "actual": [
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "capacity_6_6_benefit_gains",
+      "actual": [
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fixture_0",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31,
+          31.2,
+          31.4
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.0,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31.0,
+          31.2,
+          31.4
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_lstsq_0",
+      "actual": [
+        30.000000000000014,
+        0.19999999999999857,
+        -2.9999999999999725,
+        -0.09999999999999888
+      ],
+      "expected": [
+        30.00000000000003,
+        0.19999999999999868,
+        -3.0000000000000124,
+        -0.09999999999999795
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fit_0",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30.000000000000014,
+          30.200000000000014,
+          30.400000000000013,
+          30.60000000000001,
+          30.800000000000008,
+          31.000000000000007,
+          31.200000000000006,
+          31.400000000000006
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.00000000000003,
+          30.200000000000028,
+          30.400000000000027,
+          30.600000000000023,
+          30.800000000000022,
+          31.00000000000002,
+          31.20000000000002,
+          31.40000000000002
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_sdk_0",
+      "actual": [
+        30.000000000000014,
+        0.19999999999999857,
+        -2.9999999999999725,
+        -0.09999999999999888
+      ],
+      "expected": [
+        30.000000000000036,
+        0.1999999999999988,
+        -2.9999999999999964,
+        -0.09999999999999776
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_planted_truth_0",
+      "actual": [
+        30.000000000000014,
+        0.19999999999999857,
+        -2.9999999999999725,
+        -0.09999999999999888
+      ],
+      "expected": [
+        30,
+        0.2,
+        -3,
+        -0.1
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fixture_1",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31,
+          31.2,
+          31.4
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.0,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31.0,
+          31.2,
+          31.4
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_lstsq_1",
+      "actual": [
+        30.000000000000146,
+        0.1999999999999876,
+        2.0000000000001577,
+        -0.0999999999999882
+      ],
+      "expected": [
+        30.00000000000003,
+        0.19999999999999907,
+        1.999999999999992,
+        -0.09999999999999803
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fit_1",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30.000000000000146,
+          30.200000000000134,
+          30.40000000000012,
+          30.600000000000108,
+          30.800000000000097,
+          31.000000000000085,
+          31.20000000000007,
+          31.40000000000006
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.00000000000003,
+          30.200000000000028,
+          30.400000000000027,
+          30.600000000000026,
+          30.800000000000026,
+          31.000000000000025,
+          31.200000000000024,
+          31.400000000000023
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_sdk_1",
+      "actual": [
+        30.000000000000146,
+        0.1999999999999876,
+        2.0000000000001577,
+        -0.0999999999999882
+      ],
+      "expected": [
+        30.000000000000036,
+        0.1999999999999991,
+        1.9999999999999996,
+        -0.09999999999999754
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_planted_truth_1",
+      "actual": [
+        30.000000000000146,
+        0.1999999999999876,
+        2.0000000000001577,
+        -0.0999999999999882
+      ],
+      "expected": [
+        30,
+        0.2,
+        2,
+        -0.1
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fixture_2",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31,
+          31.2,
+          31.4
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.0,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31.0,
+          31.2,
+          31.4
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_lstsq_2",
+      "actual": [
+        29.999999999999915,
+        0.20000000000001594,
+        -8.140107934326365e-14,
+        -1.7270042679786525e-14
+      ],
+      "expected": [
+        30.00000000000002,
+        0.19999999999999668,
+        1.2022705684178171e-14,
+        3.724129268717169e-15
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fit_2",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          29.999999999999915,
+          30.199999999999932,
+          30.399999999999945,
+          30.599999999999962,
+          30.79999999999998,
+          30.999999999999993,
+          31.20000000000001,
+          31.400000000000027
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.00000000000002,
+          30.200000000000017,
+          30.400000000000016,
+          30.600000000000012,
+          30.800000000000008,
+          31.000000000000004,
+          31.200000000000003,
+          31.4
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_sdk_2",
+      "actual": [
+        29.999999999999915,
+        0.20000000000001594,
+        -8.140107934326365e-14,
+        -1.7270042679786525e-14
+      ],
+      "expected": [
+        30.00000000000005,
+        0.19999999999999263,
+        3.108624468950438e-14,
+        6.439293542825908e-15
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_planted_truth_2",
+      "actual": [
+        29.999999999999915,
+        0.20000000000001594,
+        -8.140107934326365e-14,
+        -1.7270042679786525e-14
+      ],
+      "expected": [
+        30,
+        0.2,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fixture_3",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31,
+          31.2,
+          31.4
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.0,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31.0,
+          31.2,
+          31.4
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_lstsq_3",
+      "actual": [
+        30,
+        0.1999999999999999,
+        -1.3322676295501878e-14,
+        0.400000000000003
+      ],
+      "expected": [
+        29.999999999999986,
+        0.20000000000000154,
+        3.5131907785220703e-15,
+        0.3999999999999996
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fit_3",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30,
+          30.2,
+          30.4,
+          30.6,
+          30.8,
+          31,
+          31.2,
+          31.4
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          29.999999999999986,
+          30.19999999999999,
+          30.399999999999988,
+          30.59999999999999,
+          30.799999999999994,
+          30.999999999999993,
+          31.199999999999996,
+          31.399999999999995
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_sdk_3",
+      "actual": [
+        30,
+        0.1999999999999999,
+        -1.3322676295501878e-14,
+        0.400000000000003
+      ],
+      "expected": [
+        30.000000000000046,
+        0.19999999999999873,
+        3.552713678800501e-15,
+        0.40000000000000013
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_planted_truth_3",
+      "actual": [
+        30,
+        0.1999999999999999,
+        -1.3322676295501878e-14,
+        0.400000000000003
+      ],
+      "expected": [
+        30,
+        0.2,
+        0,
+        0.4
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fixture_4",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30.25,
+          29.5,
+          30.535,
+          30.8195,
+          30.45365,
+          31.882555,
+          31.4427885,
+          32.06995195
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.25,
+          29.5,
+          30.535,
+          30.8195,
+          30.45365,
+          31.882555,
+          31.4427885,
+          32.06995195
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_lstsq_4",
+      "actual": [
+        30.06193254041761,
+        0.20553170820130917,
+        -1.0900610001199869,
+        -0.10255311726741964
+      ],
+      "expected": [
+        30.061932540417725,
+        0.20553170820130304,
+        -1.0900610001199582,
+        -0.10255311726741112
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fit_4",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30.06193254041761,
+          30.26746424861892,
+          30.47299595682023,
+          30.67852766502154,
+          30.884059373222847,
+          31.089591081424157,
+          31.295122789625466,
+          31.500654497826776
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.061932540417725,
+          30.267464248619028,
+          30.47299595682033,
+          30.678527665021633,
+          30.884059373222936,
+          31.089591081424242,
+          31.295122789625545,
+          31.500654497826847
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_sdk_4",
+      "actual": [
+        30.06193254041761,
+        0.20553170820130917,
+        -1.0900610001199869,
+        -0.10255311726741964
+      ],
+      "expected": [
+        30.061932540417715,
+        0.20553170820130368,
+        -1.0900610001199489,
+        -0.10255311726741134
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fixture_5",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30.4,
+          29.16,
+          30.464,
+          30.8576,
+          30.231840000000002,
+          32.288656,
+          31.7597904,
+          32.703811359999996
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.4,
+          29.16,
+          30.464,
+          30.8576,
+          30.231840000000002,
+          32.288656,
+          31.7597904,
+          32.703811359999996
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_lstsq_5",
+      "actual": [
+        29.902192666494418,
+        0.2706729136727751,
+        -0.26673792131227714,
+        0.33703835961777634
+      ],
+      "expected": [
+        29.9021926664944,
+        0.27067291367277974,
+        -0.2667379213122843,
+        0.33703835961777096
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fit_5",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          29.902192666494418,
+          30.172865580167194,
+          30.44353849383997,
+          30.714211407512742,
+          30.98488432118552,
+          31.255557234858294,
+          31.52623014853107,
+          31.796903062203842
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          29.9021926664944,
+          30.17286558016718,
+          30.44353849383996,
+          30.71421140751274,
+          30.98488432118552,
+          31.255557234858298,
+          31.526230148531077,
+          31.79690306220386
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_sdk_5",
+      "actual": [
+        29.902192666494418,
+        0.2706729136727751,
+        -0.26673792131227714,
+        0.33703835961777634
+      ],
+      "expected": [
+        29.902192666494418,
+        0.2706729136727757,
+        -0.26673792131226826,
+        0.33703835961777406
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fixture_6",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30.4,
+          29.16,
+          30.464,
+          30.8576,
+          30.231840000000002,
+          32.288656,
+          31.7597904,
+          32.703811359999996
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.4,
+          29.16,
+          30.464,
+          30.8576,
+          30.231840000000002,
+          32.288656,
+          31.7597904,
+          32.703811359999996
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_lstsq_6",
+      "actual": [
+        30.17585751147631,
+        0.21829621009214756,
+        -0.35767375656769484,
+        -0.38532279468807934
+      ],
+      "expected": [
+        30.17585751147631,
+        0.2182962100921481,
+        -0.3576737565676475,
+        -0.38532279468808195
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_fit_6",
+      "actual": {
+        "length": 48,
+        "first_eight": [
+          30.17585751147631,
+          30.394153721568458,
+          30.612449931660603,
+          30.83074614175275,
+          31.0490423518449,
+          31.267338561937045,
+          31.485634772029194,
+          31.703930982121342
+        ]
+      },
+      "expected": {
+        "length": 48,
+        "first_eight": [
+          30.17585751147631,
+          30.394153721568458,
+          30.612449931660606,
+          30.830746141752755,
+          31.0490423518449,
+          31.26733856193705,
+          31.485634772029197,
+          31.703930982121346
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "its_sdk_6",
+      "actual": [
+        30.17585751147631,
+        0.21829621009214756,
+        -0.35767375656769484,
+        -0.38532279468807934
+      ],
+      "expected": [
+        30.175857511476355,
+        0.21829621009214592,
+        -0.357673756567646,
+        -0.3853227946880833
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "its_singular_rejected",
+      "actual": "Singular teaching design",
+      "expected": "Singular teaching design",
+      "status": "PASS"
+    },
+    {
+      "id": "cusum_null_hand_path",
+      "actual": [
+        0,
+        0,
+        0.19999999999999996,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.4,
+        0,
+        0,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0.2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.4,
+        0,
+        0,
+        0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "cusum_abrupt_hand_path",
+      "actual": [
+        1.5,
+        2.3,
+        4.199999999999999,
+        0.5,
+        1.6,
+        2.2,
+        3.4000000000000004,
+        3.8000000000000007,
+        5.500000000000001
+      ],
+      "expected": [
+        1.5,
+        2.3,
+        4.2,
+        0.5,
+        1.6,
+        2.2,
+        3.4,
+        3.8,
+        5.5
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "cusum_first_alarm",
+      "actual": 32,
+      "expected": 32,
+      "status": "PASS"
+    },
+    {
+      "id": "point_rule_no_alarm_at_moderate_shift",
+      "actual": false,
+      "expected": false,
+      "status": "PASS"
+    },
+    {
+      "id": "cusum_strict_threshold",
+      "actual": [
+        4,
+        false,
+        true
+      ],
+      "expected": [
+        4.0,
+        false,
+        true
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "ramp_endpoints",
+      "actual": [
+        0.6,
+        2.4,
+        1
+      ],
+      "expected": [
+        0.6,
+        2.4,
+        1.0
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "repeated_false_alarm_0",
+      "actual": 0,
+      "expected": 0.0,
+      "status": "PASS"
+    },
+    {
+      "id": "repeated_false_alarm_1",
+      "actual": 0.13115443203641883,
+      "expected": 0.1311544320364188,
+      "status": "PASS"
+    },
+    {
+      "id": "repeated_false_alarm_2",
+      "actual": 0.05,
+      "expected": 0.05,
+      "status": "PASS"
+    },
+    {
+      "id": "repeated_false_alarm_3",
+      "actual": 0.6415140775914578,
+      "expected": 0.6415140775914577,
+      "status": "PASS"
+    },
+    {
+      "id": "repeated_false_alarm_4",
+      "actual": 9.999999995005e-10,
+      "expected": 9.999999995005e-10,
+      "status": "PASS"
+    }
+  ]
+}

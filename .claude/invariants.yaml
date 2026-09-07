@@ -74,6 +74,9 @@ engine_constraints:
       The counterfactual branch must never call predict().
       The causal question is: what if we had not deployed
       the AI at all?
+    state_variable_names:
+      - state_counterfactual
+      - state_snapshot
 
 fitness_criteria:
   description: >

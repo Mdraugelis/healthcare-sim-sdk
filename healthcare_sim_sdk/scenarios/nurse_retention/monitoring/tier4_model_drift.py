@@ -17,12 +17,12 @@ convention for AUC and Brier score):
   window of the last N weeks of score-outcome pairs
 - **Calibration slope**: the slope coefficient from regressing the
   observed binary outcome on the logit of the predicted probability
-- **Calibration intercept**: mean observed - mean predicted
+- **Calibration intercept**: intercept of logistic outcome-on-logit(score) regression
 - **Brier score**: mean squared error of (score - label)
 
 Detection rules (from task spec):
 
-- AUC below 0.65 for 4 consecutive weeks → critical
+- AUC below 0.65 for 4 consecutive observed prediction windows → critical
 - Calibration slope deviates by more than 20% from the initial
   fitted value → warning
 
@@ -39,6 +39,8 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 from sklearn.metrics import brier_score_loss, roc_auc_score
+from scipy.optimize import minimize
+from scipy.special import expit
 
 from healthcare_sim_sdk.scenarios.nurse_retention.monitoring.events import (
     DetectionEvent,
@@ -110,7 +112,7 @@ class Tier4Result:
 def _calibration_slope_intercept(
     predicted: np.ndarray,
     observed: np.ndarray,
-) -> (Optional[float], Optional[float]):
+) -> tuple[Optional[float], Optional[float]]:
     """Compute calibration slope and intercept via logistic regression.
 
     Cox (1958): regress the observed binary outcome on the predicted
@@ -130,14 +132,22 @@ def _calibration_slope_intercept(
     p_clipped = np.clip(predicted, eps, 1.0 - eps)
     logit_p = np.log(p_clipped / (1.0 - p_clipped))
 
-    # Simple linear regression: observed ~ intercept + slope*logit_p
-    # Use numpy polyfit for robustness
-    try:
-        slope, intercept = np.polyfit(logit_p, observed, 1)
-    except np.linalg.LinAlgError:
+    if not np.isfinite(logit_p).all() or np.ptp(logit_p) < 1e-10:
         return (None, None)
+    # Logistic regression is required: linear regression of binary outcomes
+    # on logits does not have calibration slope 1 for calibrated probabilities.
+    design = np.column_stack([np.ones(len(logit_p)), logit_p])
 
-    return (float(slope), float(intercept))
+    def objective(params):
+        eta = design @ params
+        loss = np.mean(np.logaddexp(0, eta) - observed * eta)
+        gradient = design.T @ (expit(eta) - observed) / len(observed)
+        return loss, gradient
+
+    result = minimize(objective, np.array([0.0, 1.0]), jac=True, method="BFGS")
+    if not result.success or not np.isfinite(result.x).all():
+        return (None, None)
+    return (float(result.x[1]), float(result.x[0]))
 
 
 def _safe_auc(
@@ -171,6 +181,7 @@ def analyze_tier4(
     auc_threshold: float = AUC_DETECTION_THRESHOLD,
     auc_consecutive_weeks: int = AUC_CONSECUTIVE_WEEKS,
     slope_deviation: float = CALIBRATION_SLOPE_DEVIATION,
+    auc_consecutive_observations: Optional[int] = None,
 ) -> Tier4Result:
     """Analyze a prediction log and return drift statistics + events.
 
@@ -190,8 +201,11 @@ def analyze_tier4(
         AUC below this value for several consecutive weeks
         constitutes a drift detection (default 0.65).
     auc_consecutive_weeks : int
-        Number of consecutive weeks below the AUC threshold
-        required to fire a detection (default 4).
+        Legacy parameter name: counts observed prediction windows, not elapsed
+        calendar weeks. Prefer auc_consecutive_observations.
+    auc_consecutive_observations : Optional[int]
+        Consecutive observed prediction windows below threshold (default 4).
+        Overrides the legacy auc_consecutive_weeks argument when provided.
     slope_deviation : float
         Fractional deviation of calibration slope from its initial
         value that triggers a warning (default 0.20 = 20%).
@@ -201,6 +215,12 @@ def analyze_tier4(
     Tier4Result
         Full rolling statistics and all detection events.
     """
+    required_observations = (
+        auc_consecutive_weeks if auc_consecutive_observations is None
+        else auc_consecutive_observations
+    )
+    if required_observations < 1:
+        raise ValueError("auc_consecutive_observations must be positive")
     result = Tier4Result()
     if not prediction_log:
         return result
@@ -231,8 +251,9 @@ def analyze_tier4(
         for entry in window_entries:
             s = np.asarray(entry["scores"])
             y = np.asarray(entry["true_labels"])
-            # Keep only scores with a real prediction (scored > 0)
-            mask = s > 0
+            # Zero is a valid score. Eligibility must be explicit, or the
+            # caller must already supply the scored population (as harness does).
+            mask = np.asarray(entry.get("active_mask", np.ones(len(s))), dtype=bool)
             scores_list.append(s[mask])
             labels_list.append(y[mask])
 
@@ -279,7 +300,7 @@ def analyze_tier4(
             below_event_emitted = False
 
         if (
-            consecutive_below >= auc_consecutive_weeks
+            consecutive_below >= required_observations
             and not below_event_emitted
             and auc is not None
         ):
@@ -293,7 +314,7 @@ def analyze_tier4(
                     direction="down",
                     rule=(
                         f"auc_below_{auc_threshold}_"
-                        f"{auc_consecutive_weeks}_consecutive"
+                        f"{required_observations}_consecutive_observations"
                     ),
                 )
             )

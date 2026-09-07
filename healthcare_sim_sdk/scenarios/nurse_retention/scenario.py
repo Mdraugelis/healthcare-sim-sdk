@@ -43,6 +43,9 @@ from healthcare_sim_sdk.core.scenario import (
     TimeConfig,
 )
 from healthcare_sim_sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.scenarios.nurse_retention.model_verification import (
+    score_diagnostics,
+)
 from healthcare_sim_sdk.population.risk_distributions import (
     beta_distributed_risks,
 )
@@ -91,6 +94,9 @@ class RetentionConfig:
     # Model
     # Accepts float or TimeVaryingParameter.
     model_auc: TimeVaryingFloat = 0.80
+    model_auc_tolerance: float = 0.05
+    model_validation_min_positives: int = 20
+    model_validation_min_negatives: int = 20
 
     # Intervention (manager check-in)
     # Each manager takes the top K flagged nurses by risk score.
@@ -137,6 +143,7 @@ class NurseRetentionState:
     # Standard-of-care intervention tracking (both branches)
     soc_intervention_effect: np.ndarray   # Current SOC effect [0, 1]
     soc_weeks_since_intervention: np.ndarray  # Weeks since SOC
+    soc_intervened_this_step: np.ndarray  # Exact action mask, cleared each step
 
     # Per-manager AI adoption (length n_managers). True = manager uses
     # AI-directed targeting on the factual branch; False = manager
@@ -198,6 +205,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             target_auc=initial_auc,
         )
         self._classifier_fitted = False
+        self._fit_report: Dict[str, Any] = {}
         # Track the AUC the classifier is currently fitted against.
         # Used in predict() to decide when to refit for model drift.
         self._fitted_auc: float = initial_auc
@@ -280,6 +288,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             weeks_since_intervention=np.full(n, 999.0),
             soc_intervention_effect=np.zeros(n),
             soc_weeks_since_intervention=np.full(n, 999.0),
+            soc_intervened_this_step=np.zeros(n, dtype=bool),
             manager_adopts_ai=manager_adopts_ai,
             departed=np.zeros(n, dtype=bool),
             departed_this_step=np.zeros(n, dtype=bool),
@@ -315,6 +324,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
 
         # Clear per-step departure flag
         new.departed_this_step = np.zeros(n, dtype=bool)
+        new.soc_intervened_this_step = np.zeros(n, dtype=bool)
 
         # 1. AR(1) temporal drift
         noise = rng.normal(0, c.ar1_sigma, n)
@@ -342,6 +352,10 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         # timestep. For plain floats, resolve() is a cheap no-op.
         k = int(resolve(c.max_interventions_per_manager_per_week, t))
         effectiveness = resolve(c.intervention_effectiveness, t)
+        # One random priority per nurse, including departed/ineligible nurses.
+        # Masking occurs only after drawing: differing departures, tenure and
+        # cooldowns must not shift the next branch's temporal random sequence.
+        soc_priority = rng.random(n)
         soc_count = 0
         for mgr_id in range(new.n_managers):
             team = np.where(
@@ -351,19 +365,16 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
                    >= c.cooldown_weeks)
             )[0]
             if len(team) == 0:
-                # Consume fixed RNG to keep streams aligned
-                rng.random(1)
                 continue
 
             # New hires first
             new_hires = team[new.is_new_hire[team]]
             others = team[~new.is_new_hire[team]]
 
-            # Shuffle both groups (fixed RNG consumption)
-            if len(new_hires) > 0:
-                new_hires = rng.permutation(new_hires)
-            if len(others) > 0:
-                others = rng.permutation(others)
+            # Uniform random order within each priority group. Fixed entity
+            # priorities also preserve ordering among shared eligible nurses.
+            new_hires = new_hires[np.argsort(soc_priority[new_hires])]
+            others = others[np.argsort(soc_priority[others])]
 
             # Pick up to K: new hires first, then others
             selected = np.concatenate(
@@ -371,6 +382,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             )[:k]
 
             if len(selected) > 0:
+                new.soc_intervened_this_step[selected] = True
                 new.soc_intervention_effect[selected] = effectiveness
                 new.soc_weeks_since_intervention[selected] = 0
                 soc_count += len(selected)
@@ -454,7 +466,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         # Fit model on first call (or after a drift-triggered reset)
         if not self._classifier_fitted:
             active_mask = active & (risk_signal > 0)
-            self._classifier.fit(
+            self._fit_report = self._classifier.fit(
                 true_labels[active_mask],
                 risk_signal[active_mask],
                 self.rng.prediction,
@@ -482,7 +494,29 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             labels=labels,
             metadata={
                 "true_labels": true_labels,
+                "active_mask": active.copy(),
                 "n_active": int(active.sum()),
+                "prediction_horizon_weeks": self.config.prediction_interval,
+                "label_provenance": "synthetic_prediction_window_labels",
+                "model_performance": {
+                    "fit_auc": self._fit_report.get("achieved_auc"),
+                    "fit_auc_method": "legacy_discretized_roc_grid",
+                    "configured_auc": target_auc,
+                    "fit_is_independent_validation": False,
+                    "deployed_score_path": score_diagnostics(
+                        true_labels[active], scores[active], target_auc,
+                        tolerance=self.config.model_auc_tolerance,
+                        min_positives=self.config.model_validation_min_positives,
+                        min_negatives=self.config.model_validation_min_negatives,
+                        label_provenance="synthetic_prediction_window_labels",
+                    ),
+                    "actual_future_outcomes_status": "NOT_RUN",
+                    "limitation": (
+                        "Synthetic labels enter score generation; their AUC "
+                        "does not establish discrimination for subsequent "
+                        "realized departures."
+                    ),
+                },
             },
         )
 
@@ -610,6 +644,15 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
                 ),
                 "retention_rate": retention_rate,
                 "n_active": int(active.sum()),
+                "n_nurses": n,
+                "n_managers": state.n_managers,
+                "n_managers_adopting": int(state.manager_adopts_ai.sum()),
+                "manager_adoption_rate": float(state.manager_adopts_ai.mean()),
+                "capacity_model": "separate_additive_soc_and_ai_budgets",
+                "soc_per_manager_this_week": np.bincount(
+                    state.manager_id[state.soc_intervened_this_step],
+                    minlength=state.n_managers,
+                ).tolist(),
                 "n_new_hire_active": new_hire_active,
                 "mean_risk": mean_risk,
                 "median_risk": median_risk,

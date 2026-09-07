@@ -4,3 +4,30 @@
 regime: null_program
 policy:
   effectiveness: 0.0
+
+# Windows are inclusive; the runner sets horizon to n_weeks - 1.
+monitoring_claims:
+  - claim_id: null_operational_alarms
+    tier: 1
+    metric: check_ins_done
+    direction: any
+    change_week: null
+    eligibility_start: 8
+  - claim_id: null_turnover_alarms
+    tier: 2
+    metric: unit_turnover_rate
+    direction: any
+    change_week: null
+    eligibility_start: 8
+  - claim_id: null_effect_alarms
+    tier: 3
+    metric: program_effect
+    direction: any
+    change_week: null
+    eligibility_start: 12
+  - claim_id: null_auc_alarms
+    tier: 4
+    metric: realized_auc
+    direction: any
+    change_week: null
+    eligibility_start: 0

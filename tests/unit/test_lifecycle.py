@@ -158,3 +158,26 @@ def test_catalog_list_by_scenario(tmp_path):
 
     assert len(catalog.list_by_scenario("noshow")) == 2
     assert len(catalog.list_by_scenario("stroke")) == 1
+
+
+def test_empty_validation_list_or_generator_cannot_certify(tmp_path, monkeypatch):
+    import pytest
+    monkeypatch.chdir(tmp_path)
+    for i, checks in enumerate(([], iter(()))):
+        output = tmp_path / f"empty_{i}"
+        with pytest.raises(ValueError, match="validation incomplete"):
+            finalize_experiment(output, {"seed": 1}, {"events": 1},
+                                validation_checks=checks, require_validated=True)
+        validation = json.loads((output / "validation.json").read_text())
+        assert validation["validated"] is False
+        assert {"simulation", "analysis"}.issubset(
+            {c["category"] for c in validation["checks"] if c["status"] == "NOT_RUN"})
+
+
+def test_nonfinite_metrics_never_enter_catalog(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / "invalid"
+    finalize_experiment(output, {"seed": 1}, {"events": float("nan")}, validation_checks=[])
+    validation = json.loads((output / "validation.json").read_text())
+    assert validation["validated"] is False
+    assert not (tmp_path / "catalog.json").exists()

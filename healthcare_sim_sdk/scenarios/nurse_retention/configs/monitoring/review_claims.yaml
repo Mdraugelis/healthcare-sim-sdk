@@ -1,0 +1,97 @@
+decision_question: Is the nurse retention simulation and its monitoring evidence complete enough for the intended clinical, operations and statistical review?
+claims:
+  - id: run_integrity
+    question: Do actual paired records conserve nurses and respect each configured resource budget?
+    estimand: Weekly and cumulative departures, active nurses and check-in allocations
+    population: All nurses in the initial closed cohort
+    denominator: Active nurses at start of week for weekly turnover; initial nurses for retention
+    comparison: SOC plus additional AI targeting versus SOC alone
+    horizon: Every configured simulation week
+    acceptance: Every week present; binary finite outcomes; exact event accounting; each separate SOC/AI budget respected
+    reviewers: [operations, statistics, engineering]
+    evidence: [timesteps_complete, population_event_accounting, finite_binary_outcomes, separate_budget_capacity, prediction_bounds, factual_adoption_metadata]
+  - id: model_fidelity
+    question: Does the frozen deployed scoring path achieve its target for the labels and horizon claimed?
+    estimand: AUROC of synthetic prediction-window labels and actual future factual departures, reported separately
+    population: Independent initial validation cohort and active nurses scored in the reviewed run
+    denominator: Positive and negative outcomes within each fully observed prediction window
+    comparison: Frozen scores versus configured AUC and absolute tolerance
+    horizon: The configured prediction interval, with future events available only at horizon maturity
+    acceptance: Independent synthetic-label gate and realized future-outcome gates, enough positive and negative outcomes, incomplete windows visible
+    reviewers: [clinical, statistics, governance, engineering]
+    evidence: [frozen_synthetic_score_fidelity, realized_future_score_fidelity]
+  - id: event_evaluation
+    question: Are monitoring alarms evaluated against the declared event and its actual change time?
+    estimand: Pre-change alarms, eligible post-change directional detection, delay and censored nondetection
+    population: Declared monitoring events for the actual run
+    denominator: The specified monitoring horizon and complete eligible follow-up
+    comparison: Declared change week and direction versus emitted event week and direction
+    horizon: Inclusive claim window with explicit eligibility and outcome maturation
+    acceptance: Complete evaluation records; pre-change or wrong-direction alarms cannot count as detection
+    reviewers: [operations, statistics, engineering]
+    evidence: [monitoring_event_evaluation, monitoring_mode_disclosed]
+  - id: operating_characteristics
+    question: Is monitoring accuracy and detection speed established over independent validation runs?
+    estimand: Full-horizon false-alert and detection probabilities, conditional delay and censoring
+    population: Independent held-out seeds spanning the supported regimes
+    denominator: All planned validation runs, with failures and incomplete runs disclosed
+    comparison: Pre-specified target events and null regimes
+    horizon: Full monitoring horizon including repeated looks
+    acceptance: Adequate independent validation repetitions, stated acceptance targets and Monte Carlo uncertainty
+    reviewers: [statistics, operations, governance]
+    scope: experiment
+    evidence: [monitoring_operating_characteristics]
+  - id: inspectability
+    question: Can reviewers inspect observed favorable, adverse, neutral and random individual paths?
+    estimand: Selected paired individual trajectories, without extrapolation to average effect
+    population: Initial nurse cohort and specified final-outcome categories
+    denominator: Candidate count for every requested category
+    comparison: Factual and counterfactual event histories linked to actual scored/action records
+    horizon: Every observed week in this run
+    acceptance: Source records linked, selection rules disclosed, missing categories explicit
+    reviewers: [clinical, operations, governance, engineering]
+    evidence: [observed_case_traces]
+  - id: workflow_plausibility
+    question: Do the modeled resource comparison and clinical mechanisms represent the intended deployment?
+    estimand: Locally relevant effect of adding AI targeting to current care
+    population: Intended nurse teams and managers
+    denominator: Eligible nurses and available manager time
+    comparison: Current-care workflow and staffing versus the proposed program
+    horizon: The intended operational follow-up
+    acceptance: Named human confirmation of workflow, capacity and clinical assumptions
+    reviewers: [clinical, operations, governance]
+    scope: experiment
+    evidence: [clinical_workflow_review]
+metrics:
+  - {key: departures_prevented, label: Paired departures prevented, unit: nurses}
+  - {key: factual_retention_rate, label: Factual retention, unit: proportion}
+  - {key: tier1_n_events, label: All Tier 1 alerts, unit: emitted alerts}
+assumptions:
+  - id: additive_resources
+    description: SOC and AI each have a separate K-per-manager budget; factual AI check-ins supplement SOC. This is not an equal-total-resource comparison.
+    source: NurseRetentionScenario.step and intervene
+    provenance: current model structure
+    range: Equal-total-resource alternatives require a separate scenario change and certification
+    owner: Operations reviewer (unassigned)
+    reviewers: [clinical, operations, statistics, governance]
+  - id: outcome_labels
+    description: Synthetic prediction-window labels enter score generation; subsequent departures use temporal RNG. Actual monitored labels are future factual departures after intervention.
+    source: NurseRetentionScenario.predict and MonitoringHarness
+    provenance: model construction
+    range: Synthetic AUC does not guarantee future clinical outcome discrimination
+    owner: Statistical reviewer (unassigned)
+    reviewers: [clinical, statistics, governance, engineering]
+  - id: oracle_comparison
+    description: cits_with_cf uses simulated counterfactual information. its_only measures a factual time trend with no valid untreated comparison or pre-period; it cannot identify causal program benefit.
+    source: MonitoringHarness and Tier3CITS
+    provenance: estimator design
+    range: A real-world causal evaluation needs a specified study design and supported controls
+    owner: Statistical reviewer (unassigned)
+    reviewers: [clinical, statistics, governance]
+  - id: adoption_detection
+    description: Actual manager adoption is recorded. A self-calibrating chart can remain quiet when poor adoption already exists throughout its baseline.
+    source: Tier1Shewhart baseline behavior
+    provenance: monitoring limitation
+    range: An externally specified adoption target may be needed to detect baseline shortfalls
+    owner: Operations reviewer (unassigned)
+    reviewers: [operations, statistics, governance]

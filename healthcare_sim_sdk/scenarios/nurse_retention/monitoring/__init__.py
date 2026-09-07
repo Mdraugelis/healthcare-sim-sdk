@@ -9,6 +9,9 @@ outputs, plus an offline Tier 4 model drift analyzer.
 from .aggregator import ManagerWeeklyRow, WeeklyDashboardRow, aggregate
 from .events import DetectionEvent, MonitoringRun, Tier3Estimate
 from .harness import MonitoringHarness
+from .evaluation import (
+    MonitoringClaim, evaluate_claim, evaluate_claims, summarize_claim_evaluations,
+)
 from .tier1_shewhart import ShewhartChart, Tier1Shewhart
 from .tier2_cusum import Tier2CUSUM
 from .tier3_cits import Tier3CITS
@@ -21,6 +24,10 @@ from .tier4_model_drift import (
 __all__ = [
     "DetectionEvent",
     "MonitoringHarness",
+    "MonitoringClaim",
+    "evaluate_claim",
+    "evaluate_claims",
+    "summarize_claim_evaluations",
     "MonitoringRun",
     "ManagerWeeklyRow",
     "ShewhartChart",

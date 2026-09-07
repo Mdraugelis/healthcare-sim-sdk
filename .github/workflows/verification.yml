@@ -1,0 +1,33 @@
+name: Simulation verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install SDK and test dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Enforce YAML architectural contracts
+        run: python scripts/check_invariants.py
+      - name: Run public verification suite with explicit skip reporting
+        run: python -m pytest tests -ra --junitxml=verification-results.xml
+      - name: Preserve executed checks and skips
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-verification-results
+          path: verification-results.xml
+          if-no-files-found: warn
