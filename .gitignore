@@ -9,6 +9,8 @@ build/
 .mypy_cache/
 .ipynb_checkpoints/
 .DS_Store
+# Local textbook and Kindle publication assets
+/docs/textbook/
 # Claude Code settings (private), but keep shared files
 .claude/*
 !.claude/agents/

@@ -48,13 +48,6 @@ Either way, the verification protocol is the same (Bayes constraint, monotonicit
 - **Governance teams** producing equity audits and risk assessments before deployment
 - **Procurement teams** stress-testing vendor claims against operational reality
 
-## Illustrated Project Textbook
-
-Open the [project textbook](docs/textbook/index.html) for sixteen chapters on
-probability, dynamics, machine learning, causal evaluation, scenario behavior
-and verification, with interactive labs and peer-review questions. See its
-[build and review guide](docs/textbook/README.md) for reproduction and scope.
-
 ## Agent-Assisted Workflow
 
 This SDK is designed for use with an AI assistant (Claude Code, Claude Cowork, or similar) that works *with* the human throughout the simulation process. The agent guides scenario development, runs verification after every simulation — including case-level walkthroughs and conservation law checks — and helps translate findings into language appropriate for clinical leaders, governance committees, or procurement conversations.
