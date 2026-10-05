@@ -310,3 +310,19 @@ Contributions are welcome — bug reports, new scenarios, documentation, tests. 
 Licensed under the [Apache License, Version 2.0](LICENSE). See [`NOTICE`](NOTICE) for attribution.
 
 Copyright 2026 Michael Draugelis.
+
+## Local Simulation Workbench
+
+The [Simulation Workbench](workbench/README.md) wraps the SDK with an interactive
+Codex or Claude Code session, an editable study brief, and experiment inspection
+and comparison. The agent runs in the project folder with its native tools and
+reasoning workflow; custom simulations remain ordinary SDK code.
+
+```bash
+cd workbench
+npm install
+npm start
+```
+
+Open the complete local URL printed by the server. Study context and experiment
+outputs stay under the private `local/` directory.
