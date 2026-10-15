@@ -17,8 +17,9 @@ import pytest
 
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from healthcare_sim_sdk.core.scenario import TimeConfig
-from healthcare_sim_sdk.ml.model import ControlledMLModel
+from healthcare_sim_sdk.ml.model import ControlledMLModel, OperatingPointError
 from healthcare_sim_sdk.ml.performance import (
+    auc_exact,
     auc_score,
     confusion_matrix_metrics,
     theoretical_ppv,
@@ -350,9 +351,11 @@ class TestSimulationEventRates:
 class TestMLModelStatistics:
     """Verify ML model produces metrics in expected range."""
 
-    @pytest.mark.parametrize("target_auc", [0.65, 0.75, 0.85, 0.90])
+    @pytest.mark.parametrize("target_auc", [0.65, 0.75, 0.80])
     def test_fitted_auc_near_target(self, target_auc):
-        """After fitting, achieved AUC should be within 0.08 of target."""
+        """Delivered AUC -- predict() on the population, no labels --
+        lands within 0.03 of target. The fit report alone is not proof:
+        it used to describe a label-aware model predict() never ran."""
         rng = np.random.default_rng(42)
         n = 5000
         risks = rng.beta(0.5, 0.5 * (1 / 0.13 - 1), n)
@@ -363,9 +366,23 @@ class TestMLModelStatistics:
             mode="discrimination", target_auc=target_auc
         )
         report = model.fit(labels, risks, rng, n_iterations=5)
-        assert abs(report["achieved_auc"] - target_auc) < 0.08, (
-            f"AUC target={target_auc}, achieved={report['achieved_auc']:.3f}"
+        delivered = auc_exact(labels, model.predict(risks, rng))
+        assert abs(delivered - target_auc) < 0.03, (
+            f"AUC target={target_auc}, delivered={delivered:.3f}"
         )
+        assert "achieved_auc" in report
+
+    def test_target_above_population_ceiling_is_refused(self):
+        """This population's Bayes ceiling is ~0.84. A 0.90 target used
+        to 'pass' (within 0.08) only because fitting saw the outcomes."""
+        rng = np.random.default_rng(42)
+        n = 5000
+        risks = rng.beta(0.5, 0.5 * (1 / 0.13 - 1), n)
+        risks = np.clip(risks, 0.01, 0.99)
+        labels = (rng.random(n) < risks).astype(int)
+        model = ControlledMLModel(mode="discrimination", target_auc=0.90)
+        with pytest.raises(OperatingPointError, match="Bayes ceiling"):
+            model.fit(labels, risks, rng, n_iterations=2)
 
     def test_prediction_scores_sum_to_reasonable_range(self):
         """Mean prediction score should be in a reasonable range."""

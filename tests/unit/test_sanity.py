@@ -221,7 +221,11 @@ class TestMLModelBoundaryConditions:
         )
         model_low = ControlledMLModel(mode="classification",
                                       target_ppv=0.30,
-                                      target_sensitivity=0.70)
+                                      target_sensitivity=0.70,
+                                      # 0.30/0.70 at 5% prevalence needs
+                                      # AUC ~0.90, above this population's
+                                      # ceiling; fit the best curve.
+                                      allow_infeasible=True)
         r_low = model_low.fit(labels_low, risks_low, rng1,
                               n_iterations=3)
 
@@ -231,7 +235,8 @@ class TestMLModelBoundaryConditions:
         )
         model_high = ControlledMLModel(mode="classification",
                                        target_ppv=0.30,
-                                       target_sensitivity=0.70)
+                                       target_sensitivity=0.70,
+                                       allow_infeasible=True)
         r_high = model_high.fit(labels_high, risks_high, rng2,
                                 n_iterations=3)
 

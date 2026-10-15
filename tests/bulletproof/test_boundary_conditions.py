@@ -349,7 +349,11 @@ class TestMLModelBoundaries:
         risks = rng.random(n)
         labels = np.zeros(n, dtype=int)
         labels[:50] = 1  # 1% positive
-        model = ControlledMLModel(mode="discrimination", target_auc=0.75)
+        # Labels are unrelated to these risks (ceiling ~0.5), so 0.75 is
+        # unreachable; this test is about numerical stability, so fit
+        # anyway and let the gap be recorded.
+        model = ControlledMLModel(mode="discrimination", target_auc=0.75,
+                                  allow_infeasible=True)
         report = model.fit(labels, risks, rng, n_iterations=3)
         assert np.isfinite(report["achieved_auc"])
 
