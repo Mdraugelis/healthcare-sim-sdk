@@ -143,6 +143,7 @@ class ControlledMLModel:
         self._last_scale_grid: Optional[np.ndarray] = None
         self._population_auc_ceiling: Optional[float] = None
         self._n_positives: Optional[int] = None
+        self._n_entities: Optional[int] = None
         self._gate_underpowered = False
 
         # Platt scaling parameters (set by fit())
@@ -381,6 +382,7 @@ class ControlledMLModel:
             auc_exact(true_labels, risk_scores)
         )
         self._n_positives = int(np.sum(true_labels))
+        self._n_entities = int(len(true_labels))
 
         # With only one outcome class present, AUC (and the ceiling) is
         # undefined, so there is nothing to search or calibrate against.
@@ -696,11 +698,12 @@ class ControlledMLModel:
             return
         # The ceiling is ESTIMATED from finite data, so it carries
         # sampling noise -- with few positives its standard error can
-        # reach several points of AUC. Bail out early only when the
-        # requirement clears it by more than the tolerance, and leave
-        # borderline cases to the post-fit gate, which judges empirically
-        # achieved metrics rather than an estimate.
-        if required_auc <= ceiling + self.tolerance_abs:
+        # reach several points of AUC. Refuse only when the requirement
+        # clears it by more than the tolerance AND by two standard errors
+        # (Hanley-McNeil), so the verdict does not flip from seed to seed.
+        se = self._ceiling_standard_error()
+        margin = max(self.tolerance_abs, 2.0 * se)
+        if required_auc <= ceiling + margin:
             return
         if self.allow_infeasible:
             return          # the gate will record it after fitting
@@ -731,7 +734,8 @@ class ControlledMLModel:
         )
         raise OperatingPointError(
             f"Mode '{self.mode}' requires AUC {required_auc:.4f}, which "
-            f"exceeds this population's Bayes ceiling of {ceiling:.4f}."
+            f"exceeds this population's Bayes ceiling of {ceiling:.4f} "
+            f"(standard error {se:.4f})."
             f"{noise_note}\n"
             f"That ceiling is the AUC of an oracle knowing every entity's "
             f"true risk; outcomes are stochastic draws from those risks, "
@@ -747,6 +751,19 @@ class ControlledMLModel:
                 "population_auc_ceiling": ceiling,
             },
         )
+
+    def _ceiling_standard_error(self) -> float:
+        """Hanley-McNeil standard error of the estimated ceiling AUC."""
+        a = self._population_auc_ceiling
+        n1 = int(self._n_positives or 0)
+        n0 = int(self._n_entities or 0) - n1
+        if a is None or not np.isfinite(a) or n1 < 1 or n0 < 1:
+            return 0.0
+        q1 = a / (2 - a)
+        q2 = 2 * a * a / (1 + a)
+        var = (a * (1 - a) + (n1 - 1) * (q1 - a * a)
+               + (n0 - 1) * (q2 - a * a)) / (n1 * n0)
+        return float(np.sqrt(max(var, 0.0)))
 
     def _operating_point_report(
         self, op_plan: Dict, report: Dict,
@@ -1024,6 +1041,8 @@ class ControlledMLModel:
             "flag_rate": m["flag_rate"],
             "prevalence": self.prevalence,
             "population_auc_ceiling": self._population_auc_ceiling,
+            "population_auc_ceiling_se": self._ceiling_standard_error(),
+            "n_positives": self._n_positives,
         }
 
         if feasibility:
