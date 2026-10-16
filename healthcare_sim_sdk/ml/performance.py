@@ -68,6 +68,26 @@ def auc_score(y_true: np.ndarray, y_scores: np.ndarray) -> float:
     return float(trapz(tprs[order], fprs[order]))
 
 
+def auc_exact(y_true: np.ndarray, y_scores: np.ndarray) -> float:
+    """Exact AUC via the Mann-Whitney rank statistic, crediting ties 1/2.
+
+    Unlike `auc_score`, which integrates a 200-point fixed threshold
+    grid, this is exact for any score range -- including the narrow
+    low-probability bands typical of rare outcomes -- and costs one
+    sort. Returns nan when either class is empty.
+    """
+    from scipy.stats import rankdata
+
+    y = np.asarray(y_true).astype(bool)
+    n_pos = int(y.sum())
+    n_neg = int(y.size - n_pos)
+    if n_pos == 0 or n_neg == 0:
+        return float("nan")
+    ranks = rankdata(np.asarray(y_scores, dtype=float))
+    u = ranks[y].sum() - n_pos * (n_pos + 1) / 2.0
+    return float(u / (n_pos * n_neg))
+
+
 def hosmer_lemeshow_test(
     y_true: np.ndarray,
     y_pred: np.ndarray,

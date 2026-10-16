@@ -66,7 +66,11 @@ class TestStrokeDomainInvariants:
             n_patients=3000, n_weeks=26,
             prediction_interval=4,
             intervention_effectiveness=0.50,
-            treatment_threshold=0.3,  # aggressive treatment
+            # Aggressive on the calibrated score scale: scores are
+            # 4-week event probabilities (median ~0.002), so 0.005 treats
+            # roughly the top seventh. The old 0.3 treated ~nobody once
+            # scores stopped peeking at outcomes.
+            treatment_threshold=0.005,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
         engine = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED)

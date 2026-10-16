@@ -119,7 +119,7 @@ The SDK gives you levers across four dimensions:
 - **5-Method Contract** -- Scenarios implement `create_population`, `step`, `predict`, `intervene`, `measure`. The SDK handles everything else.
 - **Branched Counterfactual Engine** -- Parallel factual + counterfactual trajectories. Both branches share the same temporal physics; they diverge only where intervention changes state.
 - **RNG Stream Partitioning** -- 5 independent streams (population, temporal, prediction, intervention, outcomes) via `SeedSequence.spawn()`. Ensures branches don't desynchronize.
-- **ControlledMLModel** -- Simulates ML models with target AUC, PPV, and sensitivity. 4-component noise injection with prevalence-aware feasibility checking.
+- **ControlledMLModel** -- Simulates ML models from a target AUC or an operating point (PPV or sensitivity). Scores are label-free noise on true risk, Platt-calibrated, and gated against the population's Bayes ceiling. See `docs/design_principles.md`, "ML Model Simulation".
 - **Experiment Infrastructure** -- Catalog, structured outputs (config/results/report/validation), markdown report generation.
 
 ## Validated Replications

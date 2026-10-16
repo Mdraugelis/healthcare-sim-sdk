@@ -114,13 +114,17 @@ class TestProbabilityModel:
         assert preds.max() <= 1
 
     def test_fit_adjusts_noise(self):
+        # beta(2, 20) risks host a Bayes ceiling near 0.68, so the
+        # target must sit below it (0.75 used to be accepted silently
+        # and the model returned the ceiling instead).
         rng = np.random.default_rng(42)
         true_probs = rng.beta(2, 20, 2000)
-        model = ControlledProbabilityModel(target_auc=0.75)
+        model = ControlledProbabilityModel(target_auc=0.62)
         result = model.fit(true_probs, rng, n_iterations=3)
         assert "achieved_auc" in result
         assert "noise_scale" in result
         assert model._fitted
+        assert abs(result["achieved_auc"] - 0.62) < 0.04
 
     def test_calibration_report(self):
         rng = np.random.default_rng(42)

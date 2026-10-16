@@ -49,6 +49,12 @@ class StrokeConfig:
     seasonal_amplitude: float = 0.1
     target_sensitivity: float = 0.80
     target_ppv: float = 0.15
+    # At the 4-week-window event rate the model is fit on, sensitivity
+    # 0.80 at PPV 0.15 needs an AUC (~0.98) far above what the risk
+    # distribution can host (~0.83 Bayes ceiling). Until the targets are
+    # revisited, fit the best attainable curve and record the gap
+    # (the model warns) instead of stopping the scenario.
+    allow_infeasible_model: bool = True
     intervention_effectiveness: float = 0.50
     # Who gets treated. None (default) = the model's own operating point,
     # i.e. the threshold fit() chose to hit target_sensitivity/target_ppv.
@@ -96,6 +102,7 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
             mode="classification",
             target_sensitivity=c.target_sensitivity,
             target_ppv=c.target_ppv,
+            allow_infeasible=c.allow_infeasible_model,
         )
         self._classifier_fitted = False
 
