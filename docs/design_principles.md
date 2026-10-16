@@ -259,22 +259,61 @@ Optional seasonal effects can be added via `step_with_season()`, which superimpo
 
 ### ML Model Simulation (Not Emulation)
 
-The SDK does **not** train ML models. It simulates model *performance characteristics* — AUC, PPV, sensitivity, calibration — by injecting controlled noise into the true risk signal.
+The SDK does **not** train ML models. It simulates model *performance characteristics* — AUC, PPV, sensitivity, calibration — by adding controlled noise to the true risk signal.
 
 This is the right abstraction for pre-deployment questions. When evaluating a vendor tool, the question is never "what model will we build?" It is "what if the model achieves AUC 0.82 in our setting?" Training a real model would answer a different question: what *does* the model achieve, after you've invested in feature engineering and training data. The SDK exists to ask the first question without paying for the second.
 
-The `ControlledMLModel` provides three modes:
+#### How a model is simulated
 
-- **`discrimination`** — target AUC only, useful for ranking-based interventions
-- **`classification`** — target PPV + sensitivity at an optimized threshold, useful for binary alert systems
-- **`threshold_ppv`** — target AUC + PPV at a fixed operating threshold
+`ControlledMLModel.fit()` turns a performance target into noise parameters; `predict()` then generates scores with them.
 
-Implementation details:
+1. **Label-free scores.** Each score is a blend of the entity's true risk and Gaussian noise (a correlation weight and a noise scale), squashed to [0, 1]. The generator never sees outcomes. `predict()` accepts `true_labels` only for backward compatibility and ignores it, so a scenario gets identical scores whether or not it passes them. A model that could read the outcome would be simulating information no real model has.
+2. **Search.** A grid over (correlation, scale), followed by a bisection on scale, finds the curve whose AUC matches the requirement. Every candidate is scored on the same set of noise draws (common random numbers), so the search compares signal rather than draw-to-draw noise. AUC is the exact rank (Mann–Whitney) statistic, `auc_exact()`.
+3. **Calibration.** Platt scaling maps the label-free scores to probabilities, so scores read as event probabilities over the label window. Thresholds are placed on this calibrated scale, the scale `predict()` and `predict_binary()` return. A fixed score cut such as 0.70 therefore means a 70% predicted probability, not a rank.
+4. **Honest report.** The fit report is measured on a fresh noise draw, so it describes what `predict()` will deliver rather than the draw the search tuned on.
 
-1. The model requires `fit()` before `predict()` to optimize a 4-component noise injection (correlation, scale, label-noise strength, calibration offset) via 2D grid search against the target metric.
-2. Platt scaling (`_platt_a`, `_platt_b`) achieves calibration so that scores can be interpreted as probabilities.
-3. Feasibility is checked via Bayes bounds: given a population prevalence, the maximum achievable PPV at a given sensitivity has an analytic upper bound. If the target is infeasible, the model warns rather than silently failing.
-4. `auc_score()` uses `np.lexsort` for stable ROC curve integration under tied values (a fix from the 30-paper audit after a boundary-condition test failed under perfect/inverted models).
+Earlier versions added a label-dependent shift during fitting that `predict()` dropped when called without outcomes, so delivered AUC drifted from the fit report, and kept when called with them, which let a simulated model beat the population's Bayes ceiling. `tests/unit/test_label_free_fidelity.py` guards against both.
+
+#### What you can specify: pick two
+
+At a fixed prevalence p, AUC, PPV and sensitivity are linked:
+
+- **Bayes' theorem:** PPV = sens·p / (sens·p + FPR·(1 − p)).
+- **The ROC curve:** the SDK uses an equal-variance binormal curve, sens = Φ(Φ⁻¹(FPR) + d′) with d′ = √2·Φ⁻¹(AUC).
+- **A PPV target is a line in ROC space:** FPR = k·sens with k = p(1 − PPV) / (PPV(1 − p)). The curve crosses it once.
+
+So any two of the three determine the third. PPV plus sensitivity implies a required AUC in closed form: FPR = k·sens, then AUC = Φ((Φ⁻¹(sens) − Φ⁻¹(FPR)) / √2) (`required_auc_for_operating_point()`). Setting all three overdetermines the model. A PPV at or below prevalence describes a worse-than-random model and is rejected (`validate_operating_point()`).
+
+`check_target_feasibility()` is weaker than it sounds: it asks only whether *some* specificity makes the arithmetic work, and never consults AUC. It reports "feasible" for operating points no model can reach. Use `required_auc_for_operating_point()` instead.
+
+#### The Bayes ceiling
+
+Outcomes are random draws from each entity's risk, so even an oracle that knows every true risk cannot rank outcomes perfectly. The AUC of that oracle — true risk scored against realized outcomes — is the population's **Bayes ceiling**. No label-free model can exceed it, because true risk is all there is to know before the draw.
+
+The ceiling is set almost entirely by how spread out risk is. In `beta_distributed_risks()`, lower `concentration` means more spread and a higher ceiling (the function's docstring tabulates it). A configured AUC above the ceiling is internally inconsistent: if a published model's AUC exceeds your synthetic population's ceiling, the population is too uniform, so widen its risk spread rather than lowering the AUC.
+
+The ceiling is estimated from finite data, so it carries sampling error (reported as a Hanley–McNeil standard error in the fit report).
+
+#### Modes
+
+| Mode | You set | Derived | Notes |
+|---|---|---|---|
+| `discrimination` | `target_auc` | Nothing about the threshold; the scenario chooses its own cut (percentile, top-k). | Most scenarios. |
+| `operating_point` | `binding` (`"ppv"` or `"sensitivity"`) + `binding_value`, and **either** `target_auc` **or** `goal_value` for the other metric | Threshold placed exactly on the binding metric; the other metric follows from the AUC. | Recommended when an alert threshold matters. Over- and under-determined configurations raise `ValueError`. |
+| `classification` (legacy) | `target_ppv` + `target_sensitivity` | The AUC they imply; threshold placed on the PPV. | Equivalent to `operating_point` with a PPV binding and a sensitivity goal. |
+| `threshold_ppv` (legacy) | `target_auc` + `target_ppv` + `operating_threshold` | — | Overdetermined: with a calibrated model a fixed threshold is itself a constraint. AUC is enforced; PPV is reported, not enforced. |
+
+#### Gates
+
+- **Ceiling gate, every mode.** A required AUC (configured, or implied by a PPV/sensitivity pair) above the population ceiling raises `OperatingPointError` before fitting. The margin is max(`tolerance_abs`, 2 standard errors of the ceiling), so the verdict does not flip from seed to seed.
+- **Too few events.** With fewer than `min_positives_for_gate` (default 30) positives in the fit population, the ceiling and any fitted AUC are too noisy to judge. The gate warns instead of raising, and the report sets `gate_underpowered`. Many scenarios fit at their first timestep on a handful of events, so their AUC targets cannot be verified at fit time.
+- **Delivered-metric gate.** `operating_point` raises when delivered AUC or the binding/goal metric misses tolerance (two-sided: overshoot is a miss too). Other modes warn and record `auc_within_tolerance`.
+- **Override.** `allow_infeasible=True` fits the best attainable curve and records the gap instead of raising.
+- **Single-class populations.** With no positives (or no negatives), AUC is undefined; fit warns, keeps default parameters and leaves calibration at identity.
+
+Not yet enforced: arguments a mode does not use (for example `target_sensitivity` in `discrimination` mode) are silently ignored.
+
+`ControlledProbabilityModel` follows the same principles in log-odds space: bisection on AUC alone, Platt calibration afterwards, and a ceiling gate with a flat `tolerance_abs` margin.
 
 When an audit paper doesn't report calibration metrics (0 out of 11 deployment papers did), the SDK can't validate against them, but it can at least report that the scenario's calibration assumption is now visible in the config.
 
@@ -531,7 +570,6 @@ A candid list of items we know we should add, drawn from the reference document 
 
 ### Model Simulation Extensions
 
-- **Adversarial noise mode for `ControlledMLModel`** — enable AUC targets below 0.70 at low prevalence. Required to correctly model the Epic ESM's real-world AUC of 0.63. The current noise model converges to AUC ≥ 0.75 at prevalence < 7%, regardless of target.
 - **Detection-timing correlation mode** — make model scores correlate with proximity to disease onset, not just current risk level. Would enable full reproduction of TREWS's "detect before clinical suspicion" mechanism.
 
 ### Fairness and Governance
