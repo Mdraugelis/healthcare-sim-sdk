@@ -2,6 +2,8 @@
 
 **Re-run: 16 October 2026. This report replaces the pre-fix report.**
 
+**Source:** [`88be0ae`](https://github.com/Mdraugelis/healthcare-sim-sdk/commit/88be0aee41df8edf93ef647b5883f93be475484b) on a clean checkout, after all algorithm fixes. See the [rerun provenance](../../docs/issue_register_rerun_provenance.json).
+
 The simulation suggests, under these assumptions, the operating characteristics below. The previous claims of zero Tier 3 false positives, universal early model drift, and linear power growth are withdrawn.
 
 The primary design has 1,000 nurses, 104 weekly steps, and predictions every two weeks. Each alternative regime uses seeds 1000–1029 (30 runs); the null row uses fresh holdouts 2000–2029. A separate control site uses seed + 1,000,000, SOC and no AI adoption. Its realized observations, rather than the oracle counterfactual, enter Tier 3. Model AUC is 0.75 on the fixed initial training reference; drift falls to 0.60. Deployed discrimination may change as the cohort and intervention change outcomes.
@@ -63,4 +65,4 @@ On the identical scores and common active risk set, the final-window oracle-minu
 
 ## Reproduction and limits
 
-See [the validation protocol](../../docs/issue_register_validation.md). Raw artifacts are ephemeral under `outputs/issue_register_*_verified/`; this report contains reviewed aggregates. These are simulated populations, not clinical or workforce evidence. The cohort is closed; the control-site exchangeability, risk forecasts, effect sizes, calendar horizon, and operating thresholds all require local validation. The chart limits are calibrated at 1,000 nurses; the separate 6,800-nurse runs evaluate Tier 3 rather than claiming those limits transfer.
+See [the validation protocol](../../docs/issue_register_validation.md). Raw artifacts are ephemeral under `outputs/postfix_88be0ae_complete/`; this report contains reviewed aggregates. These are simulated populations, not clinical or workforce evidence. The cohort is closed; the control-site exchangeability, risk forecasts, effect sizes, calendar horizon, and operating thresholds all require local validation. The chart limits are calibrated at 1,000 nurses; the separate 6,800-nurse runs evaluate Tier 3 rather than claiming those limits transfer.

@@ -2,6 +2,8 @@
 
 **Re-run: 16 October 2026. Replaces the pre-label-free report.**
 
+**Source:** [`88be0ae`](https://github.com/Mdraugelis/healthcare-sim-sdk/commit/88be0aee41df8edf93ef647b5883f93be475484b) on a clean checkout, after all algorithm fixes. See the [rerun provenance](../docs/issue_register_rerun_provenance.json).
+
 The simulation suggests, under these assumptions, the following cumulative departure contrasts. Each cell has 30 seeds (1000–1029), 1,000 nurses, and 52 weekly steps. All model fits use a larger independent bootstrap reference from the initial risk population, with two-week labels. Subsequent refits keep that reference; survivor selection does not redefine the configured training quality.
 
 | Reference AUC target | Capacity per manager | Mean departures prevented, C−F (95% CI of mean) | Mean delivered reference AUC | Mean fit positives |
@@ -19,8 +21,10 @@ The simulation suggests, under these assumptions, the following cumulative depar
 | 0.75 | 6 | 30.83 (29.23, 32.44) | 0.747 | 197 |
 | 0.75 | 8 | 28.73 (26.83, 30.64) | 0.747 | 197 |
 
+**Fit-quality check:** 25/90 distinct AUC–seed reference fits miss the 0.02 delivered-AUC tolerance; the largest absolute gap is 0.052. Each fit is reused across four capacity cells. These misses emit warnings; the aggregate means above do not certify that every fitted model delivers its nominal AUC.
+
 The old AUC 0.80 and 0.85 cells are withdrawn: this risk distribution does not support those targets reliably. They are replaced by attainable reference targets rather than described as delivered model quality. Configured quality refers to the training reference, not guaranteed discrimination in a selected post-intervention cohort.
 
 **Estimand limit:** both branches receive SOC; the factual branch also allocates AI check-ins. The current scenario does not enforce a single shared SOC-plus-AI time budget. These contrasts therefore measure the configured AI augmentation, not pure targeting benefit at equal total manager hours. The earlier equal-time interpretation is withdrawn. Confidence intervals describe the mean across synthetic sites; they are not prediction intervals for an individual real deployment.
 
-See [reproduction commands](../docs/issue_register_validation.md). Raw cells are under `outputs/issue_register_retention_verified/`.
+See [reproduction commands](../docs/issue_register_validation.md). Raw cells are under `outputs/postfix_88be0ae_complete/issue_register_retention_verified/`.

@@ -4,8 +4,9 @@ Raw outputs stay in gitignored outputs/. Refuse partial sweeps. Commands and
 fixed seed grids are documented in docs/issue_register_validation.md.
 """
 
-from collections import defaultdict
+import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -20,13 +21,14 @@ from healthcare_sim_sdk.scenarios.nurse_retention.monitoring.tier2_cusum import 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "outputs"
 REPORTS = ROOT / "reports"
+SOURCE_REVISIONS = set()
 
 
 def cells(name, expected):
     paths = sorted((OUT / name).glob("*/metrics.json"))
     if len(paths) != expected:
         raise ValueError(f"{name}: expected {expected} cells, found {len(paths)}")
-    return [
+    rows = [
         (
             json.loads((p.parent / "config.json").read_text()),
             json.loads(p.read_text()),
@@ -34,6 +36,31 @@ def cells(name, expected):
         )
         for p in paths
     ]
+    SOURCE_REVISIONS.update(config.get("source_revision") for config, _, _ in rows)
+    if len(SOURCE_REVISIONS) > 1:
+        raise ValueError("Report inputs mix source revisions or lack provenance")
+    if SOURCE_REVISIONS != {None} and not all(
+        config.get("source_clean") is True for config, _, _ in rows
+    ):
+        raise ValueError("Report inputs must come from a clean source checkout")
+    return rows
+
+
+def source_note(prefix="../docs/"):
+    revision = next(iter(SOURCE_REVISIONS), None)
+    if revision is None:
+        return ""
+    return (
+        f"**Source:** [`{revision[:7]}`]"
+        f"(https://github.com/Mdraugelis/healthcare-sim-sdk/commit/{revision}) "
+        "on a clean checkout, after all algorithm fixes. "
+        f"See the [rerun provenance]({prefix}issue_register_rerun_provenance.json)."
+    )
+
+
+def output_label(name=""):
+    path = OUT / name
+    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
 def mean_ci(values):
@@ -96,6 +123,8 @@ def monitoring_report():
         "# Monitoring validation after the algorithm-review fixes",
         "",
         "**Re-run: 16 October 2026. This report replaces the pre-fix report.**",
+        "",
+        source_note("../../docs/"),
         "",
         "The simulation suggests, under these assumptions, the operating characteristics below. "
         "The previous claims of zero Tier 3 false positives, universal early model drift, and linear power growth are withdrawn.",
@@ -243,7 +272,7 @@ def monitoring_report():
         "## Reproduction and limits",
         "",
         "See [the validation protocol](../../docs/issue_register_validation.md). Raw artifacts are ephemeral under "
-        "`outputs/issue_register_*_verified/`; this report contains reviewed aggregates. These are simulated populations, "
+        f"`{output_label()}/`; this report contains reviewed aggregates. These are simulated populations, "
         "not clinical or workforce evidence. The cohort is closed; the control-site exchangeability, risk forecasts, "
         "effect sizes, calendar horizon, and operating thresholds all require local validation. The chart limits are "
         "calibrated at 1,000 nurses; the separate 6,800-nurse runs evaluate Tier 3 rather than claiming those limits transfer.",
@@ -264,6 +293,8 @@ def retention_report():
         "",
         "**Re-run: 16 October 2026. Replaces the pre-label-free report.**",
         "",
+        source_note(),
+        "",
         "The simulation suggests, under these assumptions, the following cumulative departure contrasts. Each cell has "
         "30 seeds (1000–1029), 1,000 nurses, and 52 weekly steps. All model fits use a larger independent bootstrap "
         "reference from the initial risk population, with two-week labels. Subsequent refits keep that reference; "
@@ -276,7 +307,14 @@ def retention_report():
         lines.append(
             f"| {auc:.2f} | {cap} | {mean_ci([m['prevented'] for m in rows])} | {np.mean([m['achieved_auc'] for m in rows]):.3f} | {np.mean([m['fit_events'] for m in rows]):.0f} |"
         )
+    distinct_fits = {(c["auc"], c["seed"]): m for c, m, _ in data}
+    gaps = [abs(m["achieved_auc"] - auc) for (auc, _), m in distinct_fits.items()]
     lines += [
+        "",
+        f"**Fit-quality check:** {sum(gap > 0.02 for gap in gaps)}/{len(gaps)} distinct AUC–seed reference fits "
+        f"miss the 0.02 delivered-AUC tolerance; the largest absolute gap is {max(gaps):.3f}. "
+        "Each fit is reused across four capacity cells. These misses emit warnings; the aggregate means above "
+        "do not certify that every fitted model delivers its nominal AUC.",
         "",
         "The old AUC 0.80 and 0.85 cells are withdrawn: this risk distribution does not support those targets "
         "reliably. They are replaced by attainable reference targets rather than described as delivered model quality. "
@@ -289,7 +327,7 @@ def retention_report():
         "prediction intervals for an individual real deployment.",
         "",
         "See [reproduction commands](../docs/issue_register_validation.md). Raw cells are under "
-        "`outputs/issue_register_retention_verified/`.",
+        f"`{output_label('issue_register_retention_verified')}/`.",
     ]
     (REPORTS / "nurse_retention_sweep.md").write_text("\n".join(lines) + "\n")
 
@@ -303,6 +341,8 @@ def reminder_report():
         "# Targeted reminders: revised proof-point checks",
         "",
         "**Re-run: 16 October 2026. Replaces the pre-label-free report.**",
+        "",
+        source_note(),
         "",
         "The original configured study parameters are retained, including their previously calibrated intervention "
         "effect sizes. Models now fit on an independent reference sampled from the patient-risk distribution instead "
@@ -327,7 +367,8 @@ def reminder_report():
         "",
         "Chong runs 3,000 patients over 90 days; Rosen runs 5,000 over 180 days, using the tracked replication YAMLs. "
         "Rates pool resolved appointment slots, including the initial untreated schedule. See "
-        "[reproduction commands](../docs/issue_register_validation.md). Raw cells: `outputs/issue_register_reminder/`.",
+        "[reproduction commands](../docs/issue_register_validation.md). "
+        f"Raw cells: `{output_label('issue_register_reminder')}/`.",
     ]
     (REPORTS / "noshow_targeted_reminders_proof_points.md").write_text(
         "\n".join(lines) + "\n"
@@ -341,6 +382,8 @@ def trews_report():
         "# TREWS-style baseline detection and capacity sweep — revised",
         "",
         "**Re-run: 16 October 2026. Replaces the pre-label-free report.**",
+        "",
+        source_note(),
         "",
         "This reproduces the original 28-cell grid with label-free scoring and an independent reference fit. "
         "Each cell uses seed 42, 5,000 admissions, 42 four-hour steps, model AUC target 0.82, top-7% alerts, "
@@ -374,12 +417,15 @@ def trews_report():
         "for case counts.",
         "",
         "See [reproduction commands](../docs/issue_register_validation.md). "
-        "Raw cells: `outputs/issue_register_trews/`.",
+        f"Raw cells: `{output_label('issue_register_trews')}/`.",
     ]
     (REPORTS / "trews_baseline_detection_sweep.md").write_text("\n".join(lines) + "\n")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-root", type=Path, default=OUT)
+    OUT = parser.parse_args().output_root.resolve()
     h = monitoring_report()
     retention_report()
     reminder_report()

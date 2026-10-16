@@ -1088,6 +1088,13 @@ A monitoring tier that fires in every null seed must be explained before anythin
 
 Reproduction, test coverage and report commands: [validation protocol](issue_register_validation.md).
 
+All 818 report-sweep cells were rerun after the fixes on the clean revision
+[`88be0ae`](https://github.com/Mdraugelis/healthcare-sim-sdk/commit/88be0aee41df8edf93ef647b5883f93be475484b).
+The [rerun provenance](issue_register_rerun_provenance.json) records
+the exact grids, environment, completion checks and artifact hashes. The four
+report tables reproduce the revised aggregates; individual model-fit tolerance
+misses and remaining monitoring design limits are disclosed in the reports.
+
 Severity: **High** means a reported result or conclusion is affected. **Medium** means results are weaker or a likely future error is unguarded. **Low** means a documentation or interface problem.
 
 | ID | Area | Finding | Evidence | Severity | Proposed fix | Resolution (version 0.3) |
