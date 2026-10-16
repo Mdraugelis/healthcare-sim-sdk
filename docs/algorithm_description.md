@@ -5,11 +5,16 @@
 | | |
 |---|---|
 | Document | Algorithm Description Document (ADD) |
-| Version | 0.1, draft for review |
+| Version | 0.2, draft for review |
 | Date | 15 October 2026 |
-| Code baseline | Branch `fix/label-free-model-scores` (PR #5) at commit `6db58a6`. Where `main` differs, the text says so. |
-| Companion notebooks | Planned, not yet written. Section 15 specifies them. |
-| Status of numbers | Every number in this document was produced by running the SDK at the baseline above. The notebooks in Section 15 will reproduce each one. |
+| Code baseline | `main` at commit `3b94187`, which includes PR #5 (label-free model scores). "Before PR #5" means `main` at `648c56c`. |
+| Companion notebooks | Planned, not yet written. Section 15 specifies them. Most existing notebooks fail at their first import (I-26). |
+| Status of numbers | Numbers in worked examples were produced by running the SDK at the baseline above. Numbers quoted from a docstring or a report say so. The notebooks in Section 15 will reproduce each measured number. |
+
+| Version | Change |
+|---|---|
+| 0.1 | First draft. |
+| 0.2 | Corrections after an independent re-run of every check. Main changes: the silent classification-mode path and the stroke default (I-25); Tier 2's null-regime alarms reinterpreted as a real trend (§12.4, I-04); the ITS example re-run with matched estimands (§11.5); the closed-form ceiling for Beta populations (§8.4); broken notebooks (I-26); hook and test-coverage gaps (§6.5). |
 
 ---
 
@@ -63,9 +68,11 @@ Analysts who configure scenarios and interpret results, developers who write sce
 
 This document was written alongside a critical read of the code. Problems found are recorded in Section 14, with the evidence and a proposed fix for each. Several of them affect reported results. The most important are:
 
+- The stroke scenario's default model flags almost nobody, and nothing says so. In classification mode with `allow_infeasible`, an unreachable AUC target is silently replaced by the population ceiling (I-25).
 - Two scenarios break the coupling between the factual and counterfactual branches partway through a run (I-01).
-- The monitoring validation's null-regime claims do not hold (I-04, I-05, I-06).
+- The monitoring validation's null-regime claims do not hold (I-04, I-05, I-06). Tier 2's null alarms detect a real decline in turnover, caused by the closed cohort, not chance.
 - Re-running a scenario object silently decouples its branches (I-03).
+- Most existing notebooks fail at their first import (I-26).
 
 ### 1.4 Related documents
 
@@ -147,6 +154,8 @@ The counterfactual branch never calls `predict()` or `intervene()`. It answers o
 | A10 | Monitoring design: control charts | `scenarios/nurse_retention/monitoring/` | none |
 | A11 | Verification pillars | `tests/`, scenario verification runners | `sanity_checks` (partial) |
 
+Twelve of the fourteen notebooks in `examples/` fail at their first import. They use the package's old layout (`sdk.*`, `scenarios.*`, `experiments.*`). Only `02_state_and_clone` and `its_estimator_demonstration` import cleanly (I-26). Where this document says a notebook "demonstrates" something, it means once the imports are repaired.
+
 ---
 
 ## 3. A1. Random number stream partitioning
@@ -195,7 +204,7 @@ Scenario code must therefore read `self.rng.<stream>` inside each method call. C
 
 ### 3.7 Verification
 
-Notebook 01 demonstrates reproducibility, stream independence, cross-stream correlation near zero, and fork equivalence. Synchronization across a real run is not tested anywhere. Section 5.6 proposes a stream-position audit that would test it.
+Notebook 01 demonstrates reproducibility, stream independence, cross-stream correlation near zero, and fork equivalence. It fails at its first import today (I-26), so none of this is checked until it is repaired. Synchronization across a real run is not tested anywhere. Section 5.6 proposes a stream-position audit that would test it.
 
 ### 3.8 Worked example: re-running a scenario object
 
@@ -243,11 +252,13 @@ Cloning happens:
 
 The sepsis family keeps a system-wide alert-fatigue counter on `self._cumulative_false_alerts`. Only `intervene()` reads and writes it, and that runs on the factual branch only, so a single run is correct. The counter is never reset and is not part of the state. A second run on the same object starts with the first run's fatigue (I-14). Fitted-model caches (`self._model_fitted`) behave the same way.
 
+No-show overbooking breaks rule 2. Its `step()` and `intervene()` modify the incoming state in place (`state.day = t`, `state.schedule = ...`). In BRANCHED mode each branch owns its own state object, so no current result is affected. Any caller that keeps a reference to an earlier state, such as a test comparing before and after, sees it change underneath it (I-28).
+
 `AR1Process` in `population/temporal_dynamics.py` stores its current values in `self.current`. A scenario that kept one on `self` and stepped it inside `step()` would share it across both branches. Both branches would advance the same process, which is a purity violation (I-12). No scenario uses the class today. Stroke and sepsis store their AR(1) modifiers in the state array, which is correct.
 
 ### 4.5 Verification
 
-Notebook 02 shows mutation isolation for several state types and the speed difference between `deepcopy` and `np.copy`.
+Notebook 02 shows mutation isolation for several state types and the speed difference between `deepcopy` and `np.copy`. It is one of the two notebooks that import cleanly.
 
 ### 4.6 Implementation
 
@@ -255,7 +266,7 @@ Notebook 02 shows mutation isolation for several state types and the speed diffe
 
 ### 4.7 Open issues
 
-I-12, I-14.
+I-12, I-14, I-28.
 
 ---
 
@@ -302,6 +313,8 @@ This holds per entity-step while the two state paths agree except for the treatm
 | SNAPSHOT | One trajectory; clone before each `intervene`, measure the clone | Prediction timesteps only | **No.** Both `measure` calls draw from the same outcomes stream in sequence, so the clone and the real state use different uniforms. | Legacy. Same-step effects only, no downstream propagation. |
 | NONE | One trajectory | Never | Not applicable | Purity testing, and runs where no comparison is needed |
 
+Nurse retention cannot run in NONE or SNAPSHOT mode. The engine calls `validate_results()` at the end of every run, and nurse retention's version reads the counterfactual outcome at the final week, which those modes do not record. The run fails with `KeyError`, which also rules out a purity test (I-27).
+
 ### 5.5 Definition of the counterfactual
 
 The counterfactual is "no AI, standard care continues". Standard care must be modeled inside `step()` so that it runs on both branches. The sepsis scenario's baseline clinical detection and nurse retention's standard-of-care check-ins are examples. A counterfactual with no standard care inflates the AI's benefit; `design_principles.md` §6 documents how that happened in the first sepsis scenario.
@@ -310,7 +323,7 @@ The counterfactual is "no AI, standard care continues". Standard care must be mo
 
 | Test | Proves | Does not prove | Status |
 |---|---|---|---|
-| BRANCHED factual = NONE trajectory (`assert_purity`) | The counterfactual branch does not disturb the factual branch | That the branches stay coupled | Exists for stroke, sepsis, both no-show scenarios, malnutrition. None of the seven paper replications. |
+| BRANCHED factual = NONE trajectory (`assert_purity`) | The counterfactual branch does not disturb the factual branch | That the branches stay coupled | Exists for stroke, sepsis, both no-show scenarios, malnutrition. None for the seven paper replications or nurse retention. |
 | Zero-effect identity: effectiveness = 0 ⇒ factual ≡ counterfactual | The intervention is the only source of difference **when it changes nothing** | Coupling once the intervention does change state | Partial: some scenarios, as tests or in notebooks |
 | **Stream-position audit** (proposed) | After every step, both branches have consumed the same number of draws from the shared streams | — | Not implemented. Proposed in I-01. |
 | **Untreated-entity identity** (proposed) | In scenarios without interaction between entities, never-treated entities have identical outcomes on both branches | — | Not implemented |
@@ -320,13 +333,13 @@ The audit was run for this document by replaying the engine loop and comparing t
 | Scenario | Temporal stream | Outcomes stream |
 |---|---|---|
 | Stroke prevention | Coupled for all 52 steps | Coupled |
-| Sepsis early alert | Coupled for all 42 steps | Coupled |
-| Epic ESM (paper 01) | Coupled for all 84 steps | Coupled |
-| No-show targeted reminders | Coupled for all 30 steps | Coupled |
-| **Nurse retention** | **Decouples at week 4** | Coupled |
-| **No-show overbooking** | **Decouples at day 1** | Coupled |
+| Sepsis early alert | Coupled for all 42 steps | Not drawn |
+| Epic ESM (paper 01) | Coupled for all 84 steps | Not drawn |
+| No-show targeted reminders | Coupled for all 30 steps | Not drawn |
+| **Nurse retention** | **Decouples between week 2 and week 5**, depending on seed (week 2 at seed 1000, week 4 at seeds 1 and 42, week 5 at seed 7) | Not drawn |
+| **No-show overbooking** | **Decouples at day 1** | Not drawn |
 
-Section 6 explains the cause.
+"Not drawn" means the scenario's `measure()` takes no random draws, so the outcomes column is a real test only for stroke. Nurse retention's module docstring says `measure()` uses the outcomes stream; the code does not. Section 6 explains the two decouplings.
 
 ### 5.7 Worked example: coupling and ground truth
 
@@ -359,7 +372,7 @@ The coupled mean matches the expected 84.9. Its standard deviation is close to t
 
 ### 5.9 Open issues
 
-I-01, I-02, I-03, I-13.
+I-01, I-02, I-03, I-13, I-27.
 
 ---
 
@@ -400,9 +413,9 @@ The last pattern is the strongest. A coin drawn once at creation and stored in s
 
 ### 6.4 The two violations found
 
-**Nurse retention.** Standard-of-care allocation runs in `step()`, on both branches. For each manager, it shuffles eligible nurses with `rng.permutation(new_hires)` and `rng.permutation(others)`, and draws `rng.random(1)` when a team is empty. Team sizes depend on who has departed and who is in cooldown, which differs between branches once AI check-ins take effect. The code comment says "fixed RNG consumption"; that is not true. The audit shows the temporal stream decoupling at week 4. All later departures are drawn independently on the two branches.
+**Nurse retention.** Standard-of-care allocation runs in `step()`, on both branches. For each manager, it shuffles eligible nurses with `rng.permutation(new_hires)` and `rng.permutation(others)`, and draws `rng.random(1)` when a team is empty. Team sizes depend on who has departed and who is in cooldown, which differs between branches once AI check-ins take effect. The code comment says "fixed RNG consumption"; that is not true. The audit shows the temporal stream decoupling between week 2 and week 5, depending on the seed. All later departures are drawn independently on the two branches.
 
-**No-show overbooking.** `step()` draws two extra variates (`rng.normal` and `rng.random`) for each overbooked slot. Only the factual branch has overbooked slots. The temporal stream decouples at day 1. From then on, whether a given patient shows up is drawn independently on each branch, including in the per-patient burden and equity analyses.
+**No-show overbooking.** `step()` draws two extra variates (`rng.normal` and `rng.random`) for each overbooked slot. Only the factual branch has overbooked slots, so the temporal stream decouples at day 1. The problem is larger than independent show-up draws, because `step()` also draws the next day's schedule from the temporal stream. From day 2 on, the two branches book different patients into the same slots. With seed 42 and 1,000 patients, slot-to-patient agreement between the branches is 100% on days 0 and 1 and 0% from day 2. Any per-slot or per-patient contrast, including the burden and equity analyses, compares different appointments. Aggregate effects stay unbiased, because each branch is still a valid sample path.
 
 ### 6.5 What is enforced today
 
@@ -410,16 +423,16 @@ The last pattern is the strongest. A coin drawn once at creation and stored in s
 |---|---|---|
 | Five abstract methods | `scripts/check_invariants.py` (AST) | None |
 | Five stream names | `check_invariants.py` | None |
-| No bare `np.random` | `check_no_bare_random.py` | None |
+| No bare `np.random` | `check_no_bare_random.py` | The patterns need a dot after `random`, so `from numpy.random import default_rng` and `import numpy.random as npr` both pass. The hook also exempts `scripts/validate_its_estimator.py`, which `invariants.yaml` does not list. |
 | No stdlib `import random` | Nothing | Banned in `invariants.yaml`; the hook's patterns cover NumPy only |
 | Engine does not inspect state | `check_invariants.py`: catches `getattr`, `isinstance`, `hasattr` on state variables | `invariants.yaml` also forbids subscript and attribute access; those are not checked |
 | Counterfactual branch never calls `predict` | Code structure only | No automated check |
-| Step purity | Per-scenario identity tests | Seven paper scenarios have no tests. `design_principles.md` calls purity "machine-enforced"; it is test-enforced where tests exist. |
+| Step purity | Per-scenario identity tests | Eight scenarios have no test: the seven paper replications and nurse retention. `design_principles.md` calls purity "machine-enforced"; it is test-enforced where tests exist. |
 | Draw-count invariance | Nothing | Not stated in any document before this one |
 
 ### 6.6 Verification
 
-Notebook 04 demonstrates the purity test and what happens when purity or stream discipline is violated. It does not cover draw-count invariance. Section 15 adds that.
+Notebook 04 demonstrates the purity test and what happens when purity or stream discipline is violated, once its imports are repaired (I-26). It does not cover draw-count invariance. Section 15 adds that.
 
 ### 6.7 Open issues
 
@@ -460,7 +473,7 @@ Annual risk $p = 0.05$, 200,000 patients, seed 2026. The Bayes ceiling (Section 
 | 0.5 | 0.066 | 0.0009 | 0.024 | 0.136 | 0.303 | 42% | 0.828 |
 | 0.3 | 0.082 | 0.00006 | 0.013 | 0.153 | 0.388 | 51% | 0.874 |
 
-Reading the table: at concentration 4.0, risk is fairly uniform. The riskiest tenth of patients carry only 20% of events, and no model can exceed AUC 0.64. At concentration 0.3, the riskiest tenth carry half of all events and the ceiling is 0.87.
+Reading the table: at concentration 4.0, patients' risks are similar. The riskiest tenth of patients carry only 20% of events, and no model can exceed AUC 0.64. At concentration 0.3, the riskiest tenth carry half of all events and the ceiling is 0.87.
 
 **Concentration must be chosen to match the AUC the scenario claims.** SHIELD-RT configures the published AUC of 0.81 on a Beta(2, 7) population. That population's ceiling is about 0.70, so the configuration asks for more than the population can support.
 
@@ -573,9 +586,11 @@ A PPV at or below prevalence describes a model worse than random and is rejected
 | 5% | AUC 0.80, sensitivity 0.50 | PPV 0.184 |
 | 13% | PPV 0.25, sensitivity 0.80 | AUC needed 0.803 |
 | 5% | PPV 0.30, sensitivity 0.70 | AUC needed 0.909 |
-| 0.55% (stroke, 4-week window) | PPV 0.15, sensitivity 0.80 | AUC needed **0.976** |
+| 0.41% (stroke, expected 4-week rate) | PPV 0.15, sensitivity 0.80 | AUC needed **0.981** |
 
-The binormal model is an approximation. The code documents its error on the SDK's beta populations: sensitivity error 0.004–0.011 at AUC ≥ 0.83, rising to about 0.09 near AUC 0.68. That is accurate enough to judge feasibility. The fitted model is always judged on its actual output.
+Stroke's realized fit populations vary around the expected rate: 0.37% to 0.49% across six seeds at 20,000 patients, needing AUC 0.978 to 0.982. Version 0.1 quoted 0.55% from one sample, which needs 0.976. The ceiling on those six populations is 0.78 to 0.84.
+
+The binormal model is an approximation. The docstrings in `ml/performance.py` document its error on the SDK's beta populations (quoted here, not re-measured): sensitivity error 0.004–0.011 at AUC ≥ 0.83, rising to about 0.09 near AUC 0.68. That is accurate enough to judge feasibility. The fitted model is always judged on its actual output.
 
 ### 8.4 The Bayes ceiling
 
@@ -587,7 +602,28 @@ $$\text{SE}^2 = \frac{A(1-A) + (n_1 - 1)(Q_1 - A^2) + (n_0 - 1)(Q_2 - A^2)}{n_1 
 
 where $A$ is the estimated ceiling and $n_1$, $n_0$ are the numbers of positives and negatives.
 
-The ceiling depends mainly on risk spread (Section 7.3) and only weakly on event rate.
+**What sets the ceiling: risk spread.** The ceiling depends mainly on how much true risk varies between entities, and only weakly on the event rate. "Spread" means the spread of the risk distribution in Section 7.2, controlled by the Beta's first shape parameter $\alpha$ (the `concentration` argument). Lower $\alpha$ means more spread. If every entity had the same risk, no ranking could separate outcomes and the ceiling would be 0.5.
+
+**Closed form for Beta populations.** Let $r \sim \text{Beta}(\alpha, \beta)$ and $Y \mid r \sim \text{Bernoulli}(r)$. Conditioning on the outcome multiplies the density by $r$ or by $1-r$, so the risks of entities with and without the event are again Beta:
+
+$$r \mid Y{=}1 \;\sim\; \text{Beta}(\alpha+1,\ \beta), \qquad r \mid Y{=}0 \;\sim\; \text{Beta}(\alpha,\ \beta+1)$$
+
+The ceiling is the probability that a random entity with the event has a higher true risk than a random entity without it:
+
+$$\text{AUC}^{*} = P(X > Z) = \int_0^1 f_X(x)\, F_Z(x)\, dx, \qquad X \sim \text{Beta}(\alpha+1,\beta),\ \ Z \sim \text{Beta}(\alpha,\beta+1)$$
+
+The less those two distributions overlap, the higher the ceiling. At $p = 0.05$:
+
+| $\alpha$ | Median risk, entities with the event | Median risk, entities without | Ceiling, closed form | Ceiling, simulated (§7.3) |
+|---|---|---|---|---|
+| 4.0 | 5.8% | 4.6% | 0.640 | 0.643 |
+| 1.0 | 8.3% | 3.4% | 0.756 | 0.752 |
+| 0.5 | 11.4% | 2.2% | 0.826 | 0.828 |
+| 0.3 | 15.5% | 1.1% | 0.875 | 0.874 |
+
+The closed form agrees with simulation within 0.004 here, and also at $\alpha$ = 5, 2, 0.15 and 0.06 at the same event rate. It gives a fast feasibility check before any population is drawn. It assumes one outcome drawn from a fixed risk. When labels cover a window shorter than the risk's horizon, the label probability is close to proportional to $r$ for small risks, and the same result holds approximately. With time-varying risk (AR(1) modifiers), use the empirical ceiling.
+
+It also works in reverse. A model that really reaches AUC 0.85 at a 5% event rate implies, under this family, a population with $\alpha \le 0.39$.
 
 ### 8.5 Score generator
 
@@ -597,7 +633,7 @@ $$x_i = c\cdot r_i + (1-c)\,k\,z_{1i} + 0.1\,k\,z_{2i}, \qquad s_i^{\text{raw}} 
 
 The generator sees only $r_i$. It never sees the outcome. `predict()` accepts `true_labels` for backward compatibility and ignores them, so scores are identical with or without labels.
 
-On `main`, the generator added a label-dependent shift during fitting. `predict()` dropped it when called without outcomes, which is how 10 of 12 scenarios call it, and kept it when called with them. PR #5 removed the shift; Section 8.10 gives the before/after numbers.
+Before PR #5, the generator added a label-dependent shift during fitting. `predict()` dropped it when called without outcomes, which is how 10 of 12 scenarios call it, and kept it when called with them. PR #5 removed the shift; Section 8.10 gives the before/after numbers.
 
 ### 8.6 Fitting procedure
 
@@ -610,8 +646,11 @@ fit(labels, risks, rng):
              ← AUC implied by (PPV, sens)        (classification)
   4. ceiling gate:
        if AUC_req > ceiling + max(tol, 2·SE):
-         if n₁ < 30: warn (estimate too noisy to judge)
-         elif not allow_infeasible: raise OperatingPointError
+         if allow_infeasible: do nothing here
+         elif n₁ < 30: warn (estimate too noisy to judge)
+         else: raise OperatingPointError
+     classification with allow_infeasible only:
+       if AUC_req > ceiling: AUC_req ← ceiling      (no warning; see I-25)
   5. draws ← max(n_iterations, 5) sets of (z₁, z₂), reused for every candidate
   6. grid search over c ∈ [0.30, 0.99] × k ∈ [0.01, 0.70] (15 × 15):
        minimize |mean AUC over draws − AUC_req|
@@ -621,8 +660,13 @@ fit(labels, risks, rng):
                  classification  → exact cut on PPV (calibrated scale)
                  otherwise       → operating_threshold or 0.5
  10. report all metrics on another fresh draw (what predict() will deliver)
- 11. gates: operating_point raises on a delivered miss; other modes warn
+ 11. gates: operating_point checks binding metric, goal and AUC;
+              raises on a miss, or warns if allow_infeasible
+            other modes check AUC only, against AUC_req as set in step 4;
+              warn on a miss; skipped below 30 positives
 ```
+
+Step 4 is where classification mode goes wrong. With `allow_infeasible`, an unreachable requirement is replaced by the ceiling before fitting, and the report's `required_auc` shows the ceiling. Step 11 then compares the delivered AUC with the ceiling, which it meets. Nothing records that the configured PPV and sensitivity needed AUC 0.98, and nothing checks the delivered sensitivity. Stroke runs this way by default (I-25).
 
 Using the same draws for every candidate in step 5 (common random numbers, again) means candidates differ only through their parameters, so the search compares signal rather than noise.
 
@@ -632,22 +676,24 @@ Using the same draws for every candidate in step 5 (common random numbers, again
 |---|---|---|---|
 | `discrimination` | AUC | Nothing about the threshold. The scenario picks its own cut (percentile, top-K). | Ranking and capacity-limited targeting. Most scenarios. |
 | `operating_point` | One binding metric (PPV or sensitivity) and either AUC or a goal for the other metric | Threshold placed exactly on the binding metric | Alert systems where a threshold matters. Recommended. |
-| `classification` (legacy) | PPV and sensitivity | The AUC they imply; threshold placed on PPV | Equivalent to operating_point with a PPV binding |
+| `classification` (legacy) | PPV and sensitivity | The AUC they imply; threshold placed on PPV | Stroke. Not equivalent to operating_point with a PPV binding: it never checks delivered sensitivity, and with `allow_infeasible` it silently replaces an unreachable AUC with the ceiling (I-25). |
 | `threshold_ppv` (legacy) | AUC, PPV and a fixed threshold | Nothing | Overdetermined. AUC is enforced; PPV is reported, not enforced. |
 
 ### 8.8 Gates
 
 | Gate | Condition | Action |
 |---|---|---|
-| Ceiling | Required AUC > ceiling + max(0.02, 2·SE) | Raise; warn instead if fewer than 30 positives, or if `allow_infeasible` |
-| Delivered metrics | Delivered AUC or binding/goal metric misses tolerance (both directions) | operating_point raises; other modes warn |
+| Ceiling | Required AUC > ceiling + max(0.02, 2·SE) | Raise; warn instead if fewer than 30 positives. With `allow_infeasible`, nothing happens at fit time. Classification then replaces the requirement with the ceiling, so nothing is reported at all (I-25). |
+| Delivered metrics, operating_point | Delivered binding metric, goal or AUC misses tolerance (both directions) | Raise; warn with `allow_infeasible` |
+| Delivered metrics, other modes | Delivered AUC misses the required AUC (as set at fit time) | Warn. PPV and sensitivity are never checked. Skipped below 30 positives. |
 | Degenerate PPV | PPV ≤ prevalence | Raise |
 | Single-class population | No positives or no negatives | Warn, keep defaults, calibration at identity |
 
 ### 8.9 Assumptions and limits
 
 - **Scores depend on current risk only.** They have no feature-level structure, no subgroup-specific accuracy, and no knowledge of time to onset. The malnutrition scenario carries its own subgroup-differential scorer. TREWS-style "detects before clinical suspicion" timing is not representable.
-- **Models are fit on the population at the first prediction call.** In the sepsis family that population has 9–42 positive patients, because labels mark who is septic at $t = 0$. A configured AUC cannot be verified on so few events. The gate warns instead of refusing (I-21).
+- **Models are fit on the population at the first prediction call.** In the sepsis family that population has 9–42 positive patients, because labels mark who is septic at $t = 0$. Nurse retention's has about 18 departures (mean over 30 seeds), and its estimated ceiling ranges from 0.67 to 0.90 across those seeds. A configured AUC cannot be verified on so few events. The gate warns instead of refusing (I-21).
+- **A model can satisfy its gates and flag almost nobody.** Stroke's default (classification, PPV 0.15, sensitivity 0.80, `allow_infeasible`) delivered sensitivity 0.00 in five of six seeds at 20,000 patients, with no warning (I-25).
 - **Calibration targets the fit population.** If prevalence drifts during a run, the scores stay calibrated to the original population.
 - **Arguments a mode does not use are silently ignored** (I-18).
 - **A refit on the same model object reuses the first fit's prevalence** (I-18).
@@ -656,7 +702,7 @@ Using the same draws for every candidate in step 5 (common random numbers, again
 
 5,000 patients, 5% prevalence, Bayes ceiling 0.91. The model is fit on one population, then scored on an independent one through `predict()` with no labels. Mean of three seeds.
 
-| Configured AUC | `main`, delivered | `main`, outcomes passed in | Branch, delivered | Calibration slope, `main` → branch |
+| Configured AUC | Before PR #5, delivered | Before PR #5, outcomes passed in | After PR #5, delivered | Calibration slope, before → after |
 |---|---|---|---|---|
 | 0.630 | 0.670 | 0.693 | 0.611 | 0.82 → 0.90 |
 | 0.720 | 0.685 | 0.705 | 0.702 | 0.84 → 0.94 |
@@ -666,11 +712,13 @@ Using the same draws for every candidate in step 5 (common random numbers, again
 | 0.830 | 0.771 | 0.823 | 0.826 | 0.82 → 0.99 |
 | 0.845 | 0.757 | 0.835 | 0.847 | 0.77 → 1.00 |
 
-The branch's largest miss is 0.019. On `main`, the fit report agreed with the target to within 0.01 in six of seven rows. (At 0.63 the old search could not reach the target at all.) That agreement is why nobody noticed: the report described a model `predict()` never ran.
+After PR #5 the largest miss is 0.019. Before it, the fit report agreed with the target to within 0.01 in six of seven rows. (At 0.63 the old search could not reach the target at all.) That agreement is why nobody noticed: the report described a model `predict()` never ran.
 
 ### 8.11 Verification
 
-`tests/unit/test_label_free_fidelity.py` (27 tests) scores fresh populations through `predict()` and never relies on the fit report. 21 of the 27 fail on `main`. `tests/unit/test_operating_point.py` covers the over- and under-determined configurations and the gate messages.
+`tests/unit/test_label_free_fidelity.py` (27 tests) scores fresh populations through `predict()` and never relies on the fit report. Run against the code before PR #5, the module does not import, because it uses `auc_exact`, which PR #5 added. With that one function back-ported, 21 of the 27 tests fail. `tests/unit/test_operating_point.py` covers the over- and under-determined configurations and the gate messages.
+
+The one test that runs classification mode with `allow_infeasible` (`test_sanity.py`, PPV ordering across prevalence) checks a different property. No test checks that a replaced requirement is reported, or that classification mode delivers its sensitivity (I-25).
 
 ### 8.12 Implementation
 
@@ -678,7 +726,7 @@ The branch's largest miss is 0.019. On `main`, the fit report agreed with the ta
 
 ### 8.13 Open issues
 
-I-18, I-21.
+I-18, I-21, I-25.
 
 ---
 
@@ -726,6 +774,7 @@ Overbooking changes the schedule, not any patient's risk. Its outcomes are opera
 - Effect size $e$ is an input, usually from literature. The simulation propagates it; it does not validate it.
 - Threshold semantics must match the score scale. Scores from `ControlledMLModel` are calibrated probabilities. MASAI uses a fixed cut of 0.70, written to mean "AI score above 7 of 10", but its calibrated scores peak near 0.63, so nobody is routed (I-23).
 - A scenario whose outcomes do not depend on the model's scores cannot test the model. Manz decides outcomes from true risk (I-23).
+- **Check that anyone is treated.** Stroke's default configuration recorded 2 to 73 treatments among 20,000 patients over a year (six seeds), because its model flags almost nobody (I-25). With `treatment_threshold=0.005` it treats about 900 of 5,000 (§5.7). Every stroke example in this document sets that threshold. In the §11.5 design (20,000 patients, effectiveness 0.5, switch-on at week 26, seed 11), the default prevents about 0.24 expected events per week after switch-on, against 6.6 with the threshold.
 
 ### 9.7 Verification
 
@@ -737,7 +786,7 @@ Each scenario's `intervene()` and `step()`. Generic pieces worth extracting are 
 
 ### 9.9 Open issues
 
-I-01, I-14, I-23.
+I-01, I-14, I-23, I-25.
 
 ---
 
@@ -784,7 +833,7 @@ Most of the uncertainty about one site's result comes from which patients it has
 | Export | Shape | Caveat |
 |---|---|---|
 | `to_time_series()` | Per-step totals of `events` | `treatment_indicator` is 1 at every step with an `intervene()` call, not a post-period indicator. Build the post indicator yourself. |
-| `to_panel()` | Entity × step long format | `treated` = ever treated **and** $t \ge$ the first intervention time anywhere in the run. An entity first treated in week 30 is marked treated from the run's first intervention time (week 0 in stroke), not from week 30 (I-09). |
+| `to_panel()` | Entity × step long format | `treated` = ever treated **and** $t \ge$ the first intervention time anywhere in the run. An entity first treated in week 30 is marked treated from the run's first intervention time (week 0 in stroke), not from week 30. It also matches `treated_indices` against entity IDs, which is wrong wherever IDs are not positions: no-show slot IDs are day·10000 + i, while treated indices are schedule positions (I-09). |
 | `to_entity_snapshots(t)` | Cross-section at $t$ with scores | For RDD around a threshold |
 | `to_subgroup_panel()` | Panel with group labels | Labels from `secondary` or `metadata` |
 
@@ -836,38 +885,43 @@ Sweeps use Hydra YAML grids and `--multirun`, and runners call `finalize_experim
 |---|---|---|
 | Segmented regression ITS: $Y_t = \beta_0 + \beta_1 t + \beta_2\,\text{post}_t + \beta_3 (t - T^*)\,\text{post}_t + \varepsilon_t$ | `experiments/analysis/its.py` `segmented_regression` | Plain OLS by default; empirical type I 0.0505 at nominal 0.05 on 60-point iid series. Newey–West HAC is anti-conservative in small samples (type I ≈ 0.095 at lag 1, 0.163 at lag 4). |
 | Power across seeds | `power_across_seeds` | Counts $p < \alpha$ **and** the expected sign |
-| Controlled ITS, stacked groups: $Y = b_0 + b_1 t + b_2 g + b_3 g t$ | `cits_with_control` | With a real control series: deployable. With the counterfactual branch as control: oracle only. Its OLS standard error treats the two series as independent. Coupled branches are positively correlated, so the standard error is conservative in that configuration (I-15). |
+| Controlled ITS, stacked groups: $Y = b_0 + b_1 t + b_2 g + b_3 g t$ | `cits_with_control` | With a real control series: deployable. With the counterfactual branch as control: oracle only. Its OLS standard error treats the two series as independent. While the branches are coupled they are positively correlated, so the standard error is conservative. Nurse retention, the only scenario that uses this configuration, decouples by week 2–5 (I-01), so that argument does not apply there (I-15). |
 | Slope only | `its_slope_only` | Floor estimator when there is no pre-period or control |
 | Difference-in-differences, RDD | Use `to_panel()`, `to_entity_snapshots()` with your own model | Mind the `to_panel` treated definition (I-09) and interference (Section 9.4) |
 | Stepped wedge (closed form, Hussey and Hughes 2007) | malnutrition `power_map.py` | A single site cannot identify a stepped wedge; it reduces to ITS |
 
 ### 11.5 Worked example: is a one-site, one-year ITS adequate?
 
-Stroke scenario. 52 weekly steps. The AI switches on at week 26 (prediction schedule 26, 30, …, 50). Segmented regression on the factual weekly event counts, break at week 26. 40 seeds per cell. The truth is the mean post-period weekly events prevented, $C - F$, from the counterfactual branch. The ITS estimate of the same quantity is $-\beta_2$, the drop in level at the break.
+Stroke scenario, 52 weekly steps, effectiveness 0.5, treatment threshold 0.005 on the calibrated score (the default flags almost nobody; §9.6). The AI switches on at week 26 (prediction schedule 26, 30, …, 50). Segmented regression on the factual weekly event counts, break at week 26. 40 seeds per cell, the same seeds in every cell.
 
-| Population | Effectiveness | True events prevented per week | ITS estimate, mean $-\beta_2$ | Share with $p < 0.05$ for $\beta_2$ and $\beta_2 < 0$ |
-|---|---|---|---|---|
-| 5,000 | 0.5 | 1.66 | 1.43 | **22.5%** (power) |
-| 5,000 | 0 | 0 | −0.17 | 2.5% (type I, one-sided) |
-| 20,000 | 0.5 | 6.39 | 7.04 | **80.0%** (power) |
-| 20,000 | 0 | 0 | 1.19 | 0.0% (type I, one-sided) |
+**Match the estimand first.** In the segmented model, $-\beta_2$ is the drop in level at the break: the effect at switch-on. The mean effect over the post period is $-(\beta_2 + \bar\tau\,\beta_3)$, where $\bar\tau = 12.5$ is the mean of $t - T^*$ over the 26 post weeks. The two are equal only if the effect is a constant step. Here it is not. Treated patients accumulate, so at 20,000 patients the expected effect grows from 5.9 events prevented per week at week 26 to 7.1 at week 38. Each estimate must be graded against its own truth. Both truths are computed from the two branches' event probabilities (§5.7). Version 0.1 compared $-\beta_2$ with the post-period mean and reported part of the difference as bias.
+
+| Population | Effectiveness | True effect at switch-on | True post-period mean | Mean $-\beta_2$ | Share with $p < 0.05$ for $\beta_2$ and $\beta_2 < 0$ |
+|---|---|---|---|---|---|
+| 5,000 | 0.5 | 1.41 | 1.55 | 1.43 | **22.5%** (power) |
+| 5,000 | 0 | 0 | 0 | −0.17 | 2.5% (type I, one-sided) |
+| 20,000 | 0.5 | 5.87 | 6.37 | 7.04 | **80.0%** (power) |
+| 20,000 | 0 | 0 | 0 | 1.19 | 0.0% (type I, one-sided) |
+
+Effects are expected events prevented per week, $C - F$.
 
 Reading it: at 5,000 patients this design would miss a real effect about four times in five. Reaching 80% power takes about 20,000 patients over one year. Type I error is in range. With 40 seeds, a rate near 80% carries a standard error of about 6 percentage points, so these are design-level answers, not precise ones.
 
 **Bias check against the oracle.** Power and type I error are not enough. The same 40 seeds were run with the scenario's seasonality switched off. Because the seeds are paired, the difference between the two rows of each population isolates the effect of seasonality.
 
-| Population | Seasonality | Bias under the null (SE) | Bias under the alternative (SE) |
-|---|---|---|---|
-| 5,000 | On ($A = 0.1$) | −0.17 (0.22) | −0.23 (0.20) |
-| 5,000 | Off | −0.41 (0.22) | −0.45 (0.20) |
-| 20,000 | On ($A = 0.1$) | **+1.19 (0.29)** | +0.65 (0.31) |
-| 20,000 | Off | +0.28 (0.30) | −0.11 (0.30) |
+| Population | Seasonality | $-\beta_2$ minus true jump: null (SE) | Alternative (SE) | Post-period estimate minus true mean: null (SE) | Alternative (SE) |
+|---|---|---|---|---|---|
+| 5,000 | On ($A = 0.1$) | −0.17 (0.22) | +0.02 (0.19) | −0.11 (0.30) | +0.00 (0.29) |
+| 5,000 | Off | −0.41 (0.22) | −0.18 (0.20) | −0.18 (0.30) | −0.06 (0.29) |
+| 20,000 | On ($A = 0.1$) | **+1.19 (0.29)** | **+1.17 (0.31)** | +1.26 (0.42) | +1.28 (0.41) |
+| 20,000 | Off | +0.28 (0.30) | +0.45 (0.31) | +1.08 (0.43) | +1.07 (0.42) |
 
-Bias is the ITS estimate of events prevented per week minus the oracle truth.
+Reading it:
 
-Seasonality adds about +0.24 events per week of spurious benefit at 5,000 patients and +0.91 at 20,000; it grows in proportion to population. At 20,000 the null-run bias is 4.1 standard errors from zero, about a fifth of the true effect in the alternative. At 5,000 it is hidden by noise. The −0.41 offsets at 5,000 are shared seed noise, since they appear with and without seasonality.
+- **The level change is biased by seasonality.** Seasonality adds about +0.2 spurious events prevented per week at 5,000 patients. At 20,000 it adds +0.9 under the null and +0.7 under the alternative, so it grows roughly in proportion to population. With seasonality on, the bias at 20,000 is about four standard errors from zero in both regimes, and about a fifth of the true jump. At 5,000 it is hidden by noise. The −0.41 at 5,000 is shared seed noise; it appears with and without seasonality.
+- **The post-period estimate trades bias for noise.** Seasonality moves it by only about +0.2. But its standard deviation across seeds is 2.7 events per week at 20,000, against 1.9 to 2.1 for $-\beta_2$. Its 20,000-patient rows sit 2.5 to 3 standard errors above zero, with and without seasonality. Forty seeds cannot tell whether that offset is systematic. A study that relies on this estimate needs more seeds.
 
-This happens even though the realized seasonal swing is only ±3.9% (Section 7.6). Type I error stayed near zero because the OLS standard error absorbs the seasonal misfit. A design study that checked only power and type I error would have approved a biased estimator. Checking bias against the oracle caught it. In a real evaluation the remedies are a seasonal term in the model, a pre-period covering a full cycle, or a concurrent control series.
+This happens even though the realized seasonal swing is only ±3.9% (Section 7.6). Type I error stayed near zero because the OLS standard error absorbs the seasonal misfit. A design study that checked only power and type I error would have approved a biased estimator. Checking bias against the oracle caught it, once the estimate and the truth measured the same thing. In a real evaluation the remedies are a seasonal term in the model, a pre-period covering a full cycle, or a concurrent control series.
 
 ### 11.6 Relationship to the analytical-first pass
 
@@ -888,11 +942,11 @@ After deployment, a monitoring plan should detect when the program stops working
 | 1 | Shewhart individuals and moving range (XmR) | $\hat\sigma = \overline{MR}/1.128$; limits $\bar{x} \pm 3\hat\sigma$; WE1 = one point outside the limits; WE2 = 8 consecutive points on one side of the centre line |
 | 2 | Two-sided CUSUM (Page 1954) | $C^+_t = \max(0,\ C^+_{t-1} + x_t - \mu_0 - K)$; $C^-_t = \max(0,\ C^-_{t-1} - x_t + \mu_0 - K)$; alarm when either exceeds $H$. $K = 0.5\hat\sigma$, $H = 4\hat\sigma$; $\mu_0$, $\hat\sigma$ from the first 8 weeks. The arm that fires is reset. |
 | 3 | Rolling controlled ITS | `cits_with_control` refit quarterly; oracle mode uses the counterfactual branch |
-| 4 | Model drift | Rolling 12-week AUC, calibration slope, Brier score; alarm on AUC < 0.65 for 4 weeks or a calibration slope 20% off its initial value |
+| 4 | Model drift | Rolling 12-week AUC, calibration slope and Brier score, evaluated at each prediction (every 2 weeks). Alarm when AUC < 0.65 at 4 consecutive evaluations (8 weeks, although the code calls them weeks), or when the calibration slope moves more than 20% from its first computable value. The "calibration slope" is an ordinary least-squares fit of 0/1 outcomes on logit(p), not the logistic recalibration slope its docstring describes (I-29). |
 
 ### 12.3 The key property: in-control run length
 
-A chart's false alarm behavior is summarized by ARL₀, the average number of steps until a false alarm when nothing has changed. Textbook values assume the in-control mean and standard deviation are known and observations are independent. Neither holds here: limits come from 8 baseline weeks, and weekly turnover inherits autocorrelation from the AR(1) risk modifiers.
+A chart's false alarm behavior is summarized by ARL₀, the average number of steps until a false alarm when nothing has changed. Textbook values assume the in-control mean and standard deviation are known, observations are independent, and the in-control mean is constant. In nurse retention the limits come from 8 baseline weeks, and the in-control mean is not constant (§12.4). Autocorrelation is not the issue there: after removing the trend, lag-1 autocorrelation of weekly turnover is about zero. The table shows how much each assumption matters in general.
 
 Simulated two-sided CUSUM, $k = 0.5$, $h = 4$, 2,000 replicates:
 
@@ -906,11 +960,24 @@ The first row matches the textbook ARL₀ of about 168 for this design (Montgome
 
 ### 12.4 What this means for the monitoring validation report
 
-`reports/monitoring_validation/monitoring_validation.md` reports Tier 2 firing in **30 of 30 null-regime seeds, at a median of week 20**. That is consistent with the table above. In the null regime the AI has no effect, so these are false alarms. The report attributes Tier 2's firing to "the beneficial effect of the AI", which cannot apply there (I-04).
+`reports/monitoring_validation/monitoring_validation.md` reports Tier 2 firing in **30 of 30 null-regime seeds, at a median of week 20**. It attributes the firing to "the beneficial effect of the AI", which cannot apply in a regime where the AI has no effect (I-04).
+
+Version 0.1 of this document called these false alarms, caused by estimated limits and autocorrelation. That was wrong. A re-run of the null configuration (seeds 1000–1007) shows what the chart detects:
+
+- Every Tier 2 alarm is on the lower arm: turnover below baseline. First alarms fall between week 10 and week 33.
+- The cohort is closed, so departures are not replaced. High-risk nurses leave first. At seed 1000, the mean annual risk of active nurses falls from 0.34 at week 0 to 0.21 at week 103, and about half the nurses have left by then.
+- Weekly turnover falls from about 0.011 in the 8 baseline weeks to about 0.0064 afterwards.
+- After removing the trend, lag-1 autocorrelation of weekly turnover is about 0.00 (6 seeds).
+
+The alarms are real. The process is not in control: turnover falls without any AI, and the chart detects it. The regime is "null" for the AI, but not for the statistic being charted. A calibrated $h$ or residual charting will not remove these alarms. The remedy is to chart observed minus expected departures, with expected departures computed from the active cohort's predicted risk (a risk-adjusted CUSUM), or to simulate an open cohort that replaces leavers.
 
 The report's headline "0% false positive rate in the null regime" refers to Tier 3 only. In the null regime the factual and counterfactual series are bit-identical, so an estimator that compares them cannot fire. That silence is guaranteed by construction and says nothing about specificity in practice (I-05).
 
-Tier 4 scores the model against labels drawn at prediction time from the prediction stream. Those draws are independent of the departures that later happen. A deployed monitor can only score against realized outcomes. Realized outcomes are suppressed among the high-scoring nurses the program treated, so a deployed AUC drifts downward when the program works, even if the model has not changed. The validation used a label production cannot see and did not model this effect (I-06). The report also predates PR #5: nurse retention passed outcomes into `predict()`, and its configured AUC of 0.80 sits above the population ceiling of about 0.71 (I-07).
+Tier 4 scores the model against labels drawn at prediction time from the prediction stream. Those draws are independent of the departures that later happen. A deployed monitor can only score against realized outcomes. Realized outcomes are suppressed among the high-scoring nurses the program treated, so a deployed AUC drifts downward when the program works, even if the model has not changed. The validation used a label production cannot see and did not model this effect (I-06).
+
+Tier 4 also fires in every regime at weeks 4–6, as the report itself notes. The report blames noise in the model's grid search. The code points to two other causes. The reference is the first computable slope, from a single two-week snapshot with about 20 departures, so the reference itself is noisy. And the slope is a least-squares fit of 0/1 outcomes on logit(p), which moves when the mix of risks moves, as it does in a closed cohort losing its high-risk members (I-29). Which of these dominates has not been measured.
+
+The report also predates PR #5: nurse retention passed outcomes into `predict()`. Its configured AUC of 0.80 is slightly above the population's large-sample ceiling of about 0.775 (three populations of 200,000 nurses). The model is fit on about 18 departures, where the ceiling estimate ranges from 0.67 to 0.90 across 30 seeds, so the gate cannot judge it (I-07, I-21).
 
 ### 12.5 Procedure for choosing chart parameters
 
@@ -919,10 +986,11 @@ Tier 4 scores the model against labels drawn at prediction time from the predict
 3. Compute in-control run length on the null regime and detection delay on each failure regime, **using observable data only**.
 4. Pick $h$ to meet a target in-control run length (for example, one false alarm per two years), then compare detection delay.
 5. For autocorrelated data, chart residuals from a fitted AR model or use a longer baseline. Do not rely on textbook constants.
+6. Before calling a regime null, run the chart on the counterfactual branch. If it alarms there, the statistic drifts without the AI. For a closed cohort, chart observed minus expected events, with expected events from the active population's predicted risk.
 
 ### 12.6 Open issues
 
-I-04, I-05, I-06, I-07, I-20.
+I-04, I-05, I-06, I-07, I-20, I-29.
 
 ---
 
@@ -937,7 +1005,7 @@ A misconfigured simulation that looks plausible is worse than none, because it p
 | Level | Checks | Catches | Automated today |
 |---|---|---|---|
 | 1. Structural integrity | No NaN/Inf; population conserved; scores in [0,1]; TP+FP+TN+FN = N; entity IDs set | Indexing and bookkeeping bugs | Stroke, sepsis, malnutrition, reminders tests |
-| 2. Statistical sanity | Event rates within 4σ of configuration; **delivered** model metrics within tolerance on an independent population; AR(1) moments; demographic shares | Mis-parameterization; models that do not deliver what they claim | Partial. The model check on `main` was circular (Case 1). |
+| 2. Statistical sanity | Event rates within 4σ of configuration; **delivered** model metrics within tolerance on an independent population; AR(1) moments; demographic shares | Mis-parameterization; models that do not deliver what they claim | Partial. The model check before PR #5 was circular (Case 1). Classification mode still skips sensitivity (I-25). |
 | 3. Conservation and monotonicity | Zero effect ⇒ factual ≡ counterfactual; higher effectiveness ⇒ fewer events; higher threshold ⇒ fewer flags; delivered PPV within Bayes bounds; **delivered AUC ≤ population ceiling**; **branch coupling holds** | Wiring errors; impossible results | Partial; the last two are new |
 | 4. Case walkthroughs | 3–5 entities traced in narrative form: a treated high-risk entity, an untreated low-risk one, its counterfactual twin, one near the threshold | Errors that aggregates hide | Malnutrition only |
 | 5. Boundary conditions | Threshold 0 and 1; AUC ≈ 0.5; effectiveness 0 and 1 | Edge-case logic | Malnutrition stage B; some bulletproof tests |
@@ -952,22 +1020,22 @@ A misconfigured simulation that looks plausible is worse than none, because it p
 
 ### 13.4 Case 1: the label leak
 
-**What happened.** On `main`, the statistical-sanity test fit the model, then compared the fit report's AUC with the target at a tolerance of 0.08. The fit report was computed on scores that included the outcome shift, so it always agreed. The test passed while the deployed model missed its target by up to 0.09 AUC.
+**What happened.** Before PR #5, the statistical-sanity test fit the model, then compared the fit report's AUC with the target at a tolerance of 0.08. The fit report was computed on scores that included the outcome shift, so it always agreed. The test passed while the deployed model missed its target by up to 0.09 AUC.
 
 **What would have caught it:**
 
-- **Level 2, done right.** Score an independent population through `predict()` without labels. The new tests do this; 21 of 27 fail on `main`.
-- **Level 3, the ceiling.** In stroke and nurse retention, delivered AUC exceeded the population's Bayes ceiling (0.87 against 0.78 in a controlled test). That is impossible for a model without the outcome, so a conservation check fails immediately.
+- **Level 2, done right.** Score an independent population through `predict()` without labels. The new tests do this; 21 of 27 fail against the code before PR #5 (§8.11).
+- **Level 3, the ceiling.** The old generator could exceed the population's Bayes ceiling. In `test_never_beats_the_oracle` (a synthetic population with prevalence 0.30 and concentration 4), it reached about 0.87 against a ceiling of 0.78. In the PR #5 re-runs, stroke and nurse retention, which passed outcomes into `predict()`, delivered AUC above their fit populations' ceilings in all six runs (three seeds each), by 0.02 to 0.09. That is impossible for a model without the outcome, so a conservation check fails immediately.
 
 ### 13.5 Case 2: the coupling audit
 
-**What happened.** The BRANCHED-versus-NONE identity test passed for nurse retention and no-show overbooking, and both looked healthy. The stream-position audit (Section 5.6) shows their branches decoupling at week 4 and day 1. The identity test checks a different property (Section 5.6). Effects stay unbiased, but they are noisier than reported, and per-entity comparisons in those scenarios are not paired.
+**What happened.** The BRANCHED-versus-NONE identity test passed for no-show overbooking, and the scenario looked healthy. Nurse retention has no such test, and cannot run in NONE mode at all (I-27). The stream-position audit (Section 5.6) shows both scenarios' branches decoupling: overbooking at day 1, nurse retention between week 2 and week 5. The identity test checks a different property (Section 5.6). Effects stay unbiased, but they are noisier than reported, and per-entity comparisons in those scenarios are not paired.
 
 **The new check.** After each step, assert that both branches' temporal and outcomes generators are at the same position. This takes a few lines in a test helper and runs in seconds.
 
 ### 13.6 Case 3: the null regime
 
-A monitoring tier that fires in every null seed is a false-alarm generator (Section 12.4). A tier that cannot fire in the null regime, because it compares two identical series, has not been tested. Null regimes must be run on observable data with realistic noise.
+A monitoring tier that fires in every null seed must be explained before anything else is concluded. In nurse retention the explanation was not chance: the closed cohort makes turnover fall, and the chart detected it (Section 12.4). A regime is only null for a chart if the charted statistic is stable without the AI, and the counterfactual branch is where to check that. A tier that cannot fire in the null regime, because it compares two identical series, has not been tested. Null regimes must be run on observable data with realistic noise.
 
 ---
 
@@ -977,36 +1045,41 @@ Severity: **High** means a reported result or conclusion is affected. **Medium**
 
 | ID | Area | Finding | Evidence | Severity | Proposed fix |
 |---|---|---|---|---|---|
-| I-01 | Coupling | Nurse retention and no-show overbooking violate draw-count invariance; their branches decouple at week 4 and day 1 | Stream-position audit (§5.6). Nurse retention: `rng.permutation` on state-dependent team sizes in SOC allocation. Overbooking: extra draws for overbooked slots in `step()` | High | Draw fixed-size vectors and select by mask; order by `argsort` of $n$ uniforms; per-entity coins drawn at creation |
+| I-01 | Coupling | Nurse retention and no-show overbooking violate draw-count invariance. Nurse retention decouples between week 2 and week 5, depending on seed; overbooking at day 1, after which the branches book different patients into the same slots | Stream-position audit (§5.6); slot-to-patient agreement 0% from day 2 (§6.4). Nurse retention: `rng.permutation` on state-dependent team sizes in SOC allocation. Overbooking: extra draws for overbooked slots in `step()` | High | Draw fixed-size vectors and select by mask; order by `argsort` of $n$ uniforms; per-entity coins drawn at creation |
 | I-02 | Testing | The purity identity test proves non-interference, not coupling | §5.6 | Medium | Add the stream-position audit and an untreated-entity identity test to the scenario test template |
 | I-03 | Engine | Re-running a scenario object decouples its branches and changes its factual results | 118 discrepancies at zero effect on the second run (§3.8) | Medium | Reset `self.rng` from the partitioner at the start of `run()`, or make scenarios single-use and raise on reuse |
-| I-04 | Monitoring | Tier 2 CUSUM alarms in 30/30 null seeds (median week 20); limits estimated from 8 weeks of autocorrelated data | Validation report table; §12.3 simulation | High | Calibrate $h$ by simulation for a target in-control run length; longer baseline; residual charting |
+| I-04 | Monitoring | Tier 2 CUSUM alarms in 30/30 null seeds (median week 20). The alarms are real: in the closed cohort, high-risk nurses leave first and weekly turnover falls from about 0.011 to about 0.0064. Every alarm is on the lower arm. The report attributes them to the AI, which has no effect in that regime | Validation report table; re-run of the null configuration (§12.4) | High | Risk-adjusted CUSUM on observed minus expected departures, or an open cohort; run every chart on the counterfactual branch before calling a regime null; then calibrate $h$ by simulation |
 | I-05 | Monitoring | Tier 3's null-regime "zero false positives" is guaranteed by construction (identical series) | Null regime ⇒ factual ≡ counterfactual | High | Validate Tier 3 with a real control series and observable noise; label oracle mode as a benchmark |
 | I-06 | Monitoring | Tier 4 scores against labels a deployment cannot observe; post-deployment AUC drop from the program's own effect is not modeled | `nurse_retention/scenario.py` `predict()` draws labels from the prediction stream | High | Score against realized factual outcomes; quantify the performative drop using the counterfactual branch |
-| I-07 | Reports | Monitoring validation and other pre-fix reports were produced with the outcome leak; nurse retention's AUC 0.80 exceeds its ~0.71 ceiling | PR #5 reruns | High | Re-run and revise all reports after PR #5 merges |
+| I-07 | Reports | Monitoring validation and other pre-fix reports were produced with the outcome leak. Nurse retention's configured AUC of 0.80 is slightly above its large-sample ceiling of about 0.775 | PR #5 reruns; ceiling on three populations of 200,000 nurses (§12.4) | High | Re-run and revise all reports now that PR #5 has merged |
 | I-08 | Analysis API | `outcome_key` is accepted and ignored by every export; requests for other outcomes silently return `events` | `core/results.py` | Medium | Implement lookup in `secondary`, or raise when a key other than `"events"` is passed |
-| I-09 | Analysis API | `to_panel()` marks ever-treated entities as treated from the first intervention anywhere, not from their own first treatment | `core/results.py` lines 205–211 | Medium | Use each entity's first treatment time; document both variants |
+| I-09 | Analysis API | `to_panel()` marks ever-treated entities as treated from the first intervention anywhere, not from their own first treatment. It also compares treated indices (positions) with entity IDs, which is wrong where IDs are not positions, as in no-show | `core/results.py` lines 183–213 | Medium | Map treated positions to entity IDs per step; use each entity's first treatment time; document both variants |
 | I-10 | Outcomes | Sepsis-family `events` are state occupancy; summed effects are patient-time, not cases | `sepsis_early_alert/scenario.py` `measure()` | Medium | Document per scenario; add an incident-onset outcome in `secondary` |
 | I-11 | Population | `seasonal_amplitude` sets the AR(1) target, not risk; stroke's 0.1 gives ±3.9% with a 9-week lag | §7.6, analytic and simulated | Medium | Document the transfer; or apply seasonality multiplicatively to risk |
 | I-12 | Purity | `AR1Process` keeps state on the object; using it from `self` inside `step()` would break purity | `temporal_dynamics.py` | Low | Make it functional (state in, state out) or deprecate |
 | I-13 | Engine | SNAPSHOT mode's counterfactual outcomes are not coupled and cover prediction steps only | `engine.py` `_run_snapshot` | Low | Document; or retire SNAPSHOT |
 | I-14 | State | Sepsis-family fatigue counter and model caches live on `self` and persist across runs | `self._cumulative_false_alerts` | Low | Move into state, or reset at run start |
-| I-15 | Estimators | `cits_with_control` treats coupled branches as independent (conservative SE) and is oracle-only in that use | `its.py` | Medium | Paired difference-series estimator for oracle use; documentation |
-| I-16 | Verification | Epic ESM runner's checks cannot fail (`total_accounted = n` then `== n`; `abs(x) >= 0`); boundary checks print and assert nothing | `paper01_epic_esm/run_evaluation.py` lines 136–173 | Medium | Replace with real assertions; fail the run on violation |
-| I-17 | Invariants | Purity and draw-count invariance are test-only; seven paper scenarios have no tests; the hooks cover less than `invariants.yaml` states (no subscript/attribute check on state, no `import random` check) | §6.5 | Medium | Add the identity and audit tests to every scenario; extend the hooks |
+| I-15 | Estimators | `cits_with_control` treats the two series as independent and is oracle-only when the counterfactual branch is the control. The standard error is conservative only while the branches are coupled; nurse retention, its only oracle user, decouples by week 2–5 | `its.py`; I-01 | Medium | Paired difference-series estimator for oracle use; documentation |
+| I-16 | Verification | Epic ESM runner's checks cannot fail (`total_accounted = n` then `== n`; `abs(x) >= 0`); boundary checks print and assert nothing | `paper01_epic_esm/run_evaluation.py` lines 131–173 | Medium | Replace with real assertions; fail the run on violation |
+| I-17 | Invariants | Purity and draw-count invariance are test-only. Eight scenarios have no purity test (the seven paper replications and nurse retention). The hooks cover less than `invariants.yaml` states: no subscript or attribute check on state, no `import random` check, and `from numpy.random import ...` passes the bare-random check | §6.5 | Medium | Add the identity and audit tests to every scenario; fix the hook patterns; list hook exemptions in `invariants.yaml` |
 | I-18 | Model | Unused arguments are silently ignored in every mode; a refit on the same object reuses the first fit's prevalence | `ml/model.py` | Low | Raise on unused arguments; recompute prevalence on each fit |
 | I-19 | RNG | `seed=None` means 42, not a fresh seed | `core/scenario.py` | Low | Document, or draw a seed and record it |
 | I-20 | Monitoring | CUSUM docstring says both arms reset; the code resets only the arm that fired | `tier2_cusum.py` | Low | Align the docstring |
-| I-21 | Model | Sepsis-family and no-show models fit at the first prediction on 9–42 events; configured AUC is unverifiable | PR #5 reruns | High | Fit on a larger reference cohort drawn from the same population |
+| I-21 | Model | Sepsis-family, no-show and nurse-retention models fit at the first prediction on few events (9–42 in the sepsis family, about 18 in nurse retention); configured AUC is unverifiable | PR #5 reruns; 30 nurse-retention seeds | High | Fit on a larger reference cohort drawn from the same population |
 | I-22 | Docs | `design_principles.md` presents stream-per-method plus purity as sufficient for synchronization, and purity as machine-enforced | §6.3, §6.5 | Low | Update the text after review of this document |
 | I-23 | Scenarios | MASAI's 0.70 cut on calibrated scores flags nobody; Manz outcomes ignore model scores | PR #5 reruns | Medium | Percentile cut for MASAI; decide whether Manz should route outcomes through scores |
 | I-24 | Reports | Monitoring report says Tier 3 power "would be ~7x higher" at 6,800 nurses; power cannot scale that way (the standard error shrinks by about √6.8 ≈ 2.6) | Report §2 | Low | Re-estimate by simulation at 6,800 |
+| I-25 | Model | Classification mode with `allow_infeasible` silently replaces an unreachable required AUC with the ceiling. The report shows the ceiling as `required_auc`, the delivered-AUC check passes, and no warning is raised. Modes other than operating_point never check delivered sensitivity or PPV. Stroke runs this way by default and flags almost nobody: sensitivity 0.00 in five of six seeds at 20,000 patients, and 2 to 73 treatments per year. PR #5's description says this case "runs with a warning"; it does not | `ml/model.py` `_plan_classification` (lines 541–546), `_check_population_ceiling` (lines 708–709), `_check_auc_delivered`; stroke runs (§8.9, §9.6) | High | Keep the configured requirement in the report and warn whenever it is replaced; check delivered sensitivity and PPV in classification mode; make stroke raise by default, or move it to operating_point with a PPV binding and a realistic AUC |
+| I-26 | Notebooks | 12 of 14 notebooks fail at their first import: they use the old package layout (`sdk.*`, `scenarios.*`, `experiments.*`) | Import check of every notebook (§2.3) | Medium | Repair the imports; execute the notebooks in CI so they cannot rot again |
+| I-27 | Engine | Nurse retention cannot run in NONE or SNAPSHOT mode: its `validate_results()` reads the counterfactual outcome at the final week and raises `KeyError`. This blocks a purity test. Its module docstring also says `measure()` draws from the outcomes stream, which it does not | `nurse_retention/scenario.py` `validate_results` | Low | Guard `validate_results` for modes without a counterfactual; fix the docstring |
+| I-28 | State | No-show overbooking's `step()` and `intervene()` modify the incoming state in place | `noshow_overbooking/scenario.py` | Low | Copy the state first (§4.3 rule 2) |
+| I-29 | Monitoring | Tier 4's "calibration slope" is a least-squares fit of 0/1 outcomes on logit(p), not a logistic recalibration slope. Its reference is the first computable value, from one two-week snapshot with about 20 departures. "4 consecutive weeks" below AUC 0.65 is 4 two-weekly evaluations, or 8 weeks. Tier 4 fires in every regime at weeks 4–6 | `tier4_model_drift.py` (line 136 and the detection loop); validation report §6 | Medium | Logistic recalibration slope; a reference from a baseline period with enough events; state the cadence in weeks |
 
 ---
 
 ## 15. Companion notebooks
 
-Each notebook demonstrates one chapter, reproduces the chapter's worked-example numbers, and ends with checks that fail loudly if the numbers do not reproduce. Existing notebooks 01–04 and 07 are kept and extended. Notebooks 05 and 06 demonstrate legacy classes and are superseded by 12.
+Each notebook demonstrates one chapter, reproduces the chapter's worked-example numbers, and ends with checks that fail loudly if the numbers do not reproduce. The first step is repairing the imports of the existing notebooks (I-26); only 02 runs as it stands. Notebooks 01, 03, 04 and 07 are then kept and extended. Notebooks 05 and 06 demonstrate legacy classes and are superseded by 12. All notebooks should run in CI, so a broken import fails a build instead of going unnoticed.
 
 | Notebook | Chapter | Demonstrates | Acceptance checks |
 |---|---|---|---|
@@ -1015,11 +1088,11 @@ Each notebook demonstrates one chapter, reproduces the chapter's worked-example 
 | 03 (extend) | A3 | Mode comparison, plus SNAPSHOT's uncoupled outcomes | SNAPSHOT counterfactual draws differ from factual draws for untouched entities |
 | 04 (extend) | A4 | Existing purity content, plus draw-count invariance: an unsafe and a safe version of the same scenario; the stream-position audit | Unsafe version desyncs; safe version stays coupled for all steps |
 | 11 (new) | A5 | Beta populations (§7.3 table); hazard conversion (§7.4); AR(1) moments (§7.5); seasonal transfer (§7.6) | Table values within Monte Carlo error; seasonal amplitude 0.039 ± 0.002, lag 9 ± 1 weeks |
-| 12 (new) | A6 | Pick-two geometry; required AUC; Bayes ceiling and its SE; fit procedure; delivered vs configured (§8.10); gates firing | Delivered AUC within 0.03 of target on a fresh population; gate raises above ceiling |
+| 12 (new) | A6 | Pick-two geometry; required AUC; Bayes ceiling, its closed form for Beta populations, and its SE; fit procedure; delivered vs configured (§8.10); gates firing | Delivered AUC within 0.03 of target on a fresh population; closed-form ceiling within 0.01 of the simulated one; gate raises above ceiling; classification with `allow_infeasible` warns and reports the configured requirement (after the I-25 fix) |
 | 13 (new) | A7 | Causal chain in a minimal scenario: flag → response → capacity → effect; fatigue; Kumar timing; standard care on both branches | Expected vs realized prevented events agree within 3 SD; zero effect ⇒ identity |
 | 14 (new) | A3, A8 | Coupling and ground truth (§5.7): expected effect, untreated identity, variance ratio; uncertainty decomposition (§10.3) | Untreated differing = 0; variance ratio > 3 |
-| 15 (new) | A9 | ITS design study (§11.5), including the seasonal bias check; extended to a staggered multi-site rollout with DiD and controlled ITS against a real control | Power, type I and bias tables reproduced; seasonal bias at 20,000 patients more than 3 SE from zero; oracle CITS flagged as non-deployable |
-| 16 (new) | A10 | CUSUM run lengths (§12.3); calibrating $h$ by simulation; null and failure regimes on observable data | Known-parameter ARL₀ ≈ 168; calibrated chart meets its target in-control run length |
+| 15 (new) | A9 | ITS design study (§11.5) with matched estimands, including the seasonal bias check; extended to a staggered multi-site rollout with DiD and controlled ITS against a real control | Power, type I and bias tables reproduced; seasonal bias of $-\beta_2$ at 20,000 patients more than 3 SE from zero; oracle CITS flagged as non-deployable |
+| 16 (new) | A10 | CUSUM run lengths (§12.3); the closed-cohort trend in nurse retention (§12.4); a risk-adjusted CUSUM on observed minus expected departures; calibrating $h$ by simulation; null and failure regimes on observable data | Known-parameter ARL₀ ≈ 168; raw-turnover CUSUM alarms on the counterfactual branch, risk-adjusted CUSUM does not; calibrated chart meets its target in-control run length |
 | 17 (new) | A11 | The three cases of §13: the leak caught by Levels 2 and 3, the coupling audit, a null regime done right | Each check fails on the defective version and passes on the corrected one |
 
 ---
@@ -1035,7 +1108,9 @@ These principles are not in `design_principles.md` today. Each was needed to exp
 5. **Test the deployed path, with checks that can fail.** Self-reports and tautologies give false confidence (§13.3).
 6. **Monitoring is performative.** A model that drives an intervention changes the outcomes it is later scored against. Monitors must account for this or they will misread success as drift (§12.4).
 7. **Scenario objects are single-use** until the engine resets streams at the start of each run (§3.8).
-8. **Parameters must mean what they say.** Configured values that pass through dynamics (seasonality through AR(1), annual risk through hazards, thresholds through calibration) must be documented by their realized effect, not their input value (§7.6, §9.6).
+8. **Parameters must mean what they say.** Configured values that pass through dynamics (seasonality through AR(1), annual risk through hazards, thresholds through calibration) must be documented by their realized effect, not their input value (§7.6, §9.6). A configuration the code cannot honor must raise or warn and be recorded. It must never be silently replaced (I-25).
+9. **Check that a null is a null.** Before testing a monitor or estimator on a no-effect regime, run it on the counterfactual branch. If the statistic drifts there, the regime is not null for that statistic (§12.4).
+10. **Grade an estimate against its own estimand.** A level change, a post-period mean and a cumulative total are different quantities when effects ramp up. Bias is only meaningful when the estimate and the truth measure the same thing (§11.5).
 
 ---
 
