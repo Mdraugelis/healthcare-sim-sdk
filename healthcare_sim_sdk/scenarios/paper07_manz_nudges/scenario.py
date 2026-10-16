@@ -36,7 +36,7 @@ RNG DISCIPLINE:
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Optional
 import numpy as np
 
 from healthcare_sim_sdk.core.scenario import (
@@ -61,9 +61,11 @@ class ManzState:
         n_patients: Total patients
         n_oncologists: Number of oncologists
     """
+
     mortality_risk: np.ndarray
     sic_completed: np.ndarray
     oncologist_id: np.ndarray
+    ai_targeted: np.ndarray
     nudge_active: np.ndarray
     n_patients: int
     n_oncologists: int
@@ -101,7 +103,7 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
         model_auc: float = 0.78,  # ASSUMED
         mortality_threshold: float = 0.10,  # paper-specified
         base_sic_rate_low_risk: float = 0.0025,  # derived (see analysis)
-        base_sic_rate_high_risk: float = 0.04,   # paper-reported
+        base_sic_rate_high_risk: float = 0.04,  # paper-reported
         nudge_sic_rate_low_risk: float = 0.025,  # derived from overall 5%
         nudge_sic_rate_high_risk: float = 0.15,  # paper-reported
         stepped_wedge_start: int = 13,  # week 13 (approximate midpoint)
@@ -167,6 +169,7 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
             sic_completed=sic_completed,
             oncologist_id=oncologist_id,
             nudge_active=nudge_active,
+            ai_targeted=np.zeros(n_entities, dtype=bool),
             n_patients=n_entities,
             n_oncologists=self.n_oncologists,
         )
@@ -178,6 +181,7 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
         Model as ~2% weekly turnover. Risks of remaining patients
         drift slightly as disease progresses.
         """
+        state = self.clone_state(state)
         rng = self.rng.temporal
         n = state.n_patients
 
@@ -193,9 +197,7 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
             beta_p = alpha * (1 / self.base_mortality_prevalence - 1)
             new_risks = rng.beta(alpha, beta_p, n_new)
             scaling = self.base_mortality_prevalence / np.mean(new_risks)
-            new_risk[turnover_mask] = np.clip(
-                new_risks * scaling, 0.01, 0.99
-            )
+            new_risk[turnover_mask] = np.clip(new_risks * scaling, 0.01, 0.99)
             state.sic_completed[turnover_mask] = 0.0  # reset for new patients
 
         state.mortality_risk = new_risk
@@ -207,12 +209,12 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
         n = len(true_risks)
 
         if not self._model_fitted:
-            true_labels = (
-                self.rng.prediction.random(n) < true_risks
-            ).astype(int)
+            true_labels = (self.rng.prediction.random(n) < true_risks).astype(int)
             self._model.fit(
-                true_labels, true_risks,
-                self.rng.prediction, n_iterations=5,
+                true_labels,
+                true_risks,
+                self.rng.prediction,
+                n_iterations=5,
             )
             self._model_fitted = True
 
@@ -240,6 +242,7 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
         The nudge doesn't directly change patient state — it changes
         oncologist behavior probability, captured in measure().
         """
+        state = self.clone_state(state)
         # Determine which oncologists are in nudge condition at time t
         if t >= self.stepped_wedge_start + 13:
             # All oncologists nudged by end of study
@@ -257,14 +260,16 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
             state.nudge_active[:n_nudged] = 1.0
 
         # Identify which patients have nudged oncologists + high risk flag
-        high_risk = predictions.labels if predictions.labels is not None else (
-            predictions.scores >= self.mortality_threshold
-        ).astype(int)
+        high_risk = (
+            predictions.labels
+            if predictions.labels is not None
+            else (predictions.scores >= self.mortality_threshold).astype(int)
+        )
         patient_nudged = state.nudge_active[state.oncologist_id]
-        treated_indices = np.where(
-            (patient_nudged == 1.0) & (high_risk == 1)
-        )[0]
+        treated_indices = np.where((patient_nudged == 1.0) & (high_risk == 1))[0]
 
+        state.ai_targeted = np.zeros(state.n_patients, dtype=bool)
+        state.ai_targeted[treated_indices] = True
         return state, Interventions(
             treated_indices=treated_indices,
             metadata={
@@ -290,19 +295,21 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
         high_risk = (state.mortality_risk >= self.mortality_threshold).astype(float)
         patient_nudged = state.nudge_active[state.oncologist_id]
 
-        # SIC probabilities by cell
+        # The factual high-risk nudge is assigned by MODEL SCORES. Clinical
+        # risk determines usual-care rates on both branches. Low-score patients
+        # of nudged clinicians receive only the configured spillover rate.
+        base_prob = np.where(
+            high_risk == 1, self.base_sic_rate_high_risk, self.base_sic_rate_low_risk
+        )
+        targeted = state.ai_targeted
         sic_prob = np.where(
-            (high_risk == 1) & (patient_nudged == 1),
+            targeted & (patient_nudged == 1),
             self.nudge_sic_rate_high_risk,
             np.where(
-                (high_risk == 1) & (patient_nudged == 0),
-                self.base_sic_rate_high_risk,
-                np.where(
-                    (high_risk == 0) & (patient_nudged == 1),
-                    self.nudge_sic_rate_low_risk,  # nudge also helps low-risk
-                    self.base_sic_rate_low_risk,   # baseline low-risk
-                )
-            )
+                patient_nudged == 1,
+                np.maximum(self.nudge_sic_rate_low_risk, base_prob),
+                base_prob,
+            ),
         )
 
         # Sample SIC events this week (per-encounter rate, not lifetime)
@@ -311,9 +318,7 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
         sic_events = (rng.random(n) < sic_prob).astype(float)
 
         # Update cumulative SIC flag (for tracking, not for suppression)
-        state.sic_completed = np.clip(
-            state.sic_completed + sic_events, 0, 1
-        )
+        state.sic_completed = np.clip(state.sic_completed + sic_events, 0, 1)
 
         return Outcomes(
             events=sic_events,
@@ -333,11 +338,5 @@ class ManzNudgeScenario(BaseScenario[ManzState]):
 
     def clone_state(self, state: ManzState) -> ManzState:
         import copy
-        return ManzState(
-            mortality_risk=state.mortality_risk.copy(),
-            sic_completed=state.sic_completed.copy(),
-            oncologist_id=state.oncologist_id.copy(),
-            nudge_active=state.nudge_active.copy(),
-            n_patients=state.n_patients,
-            n_oncologists=state.n_oncologists,
-        )
+
+        return copy.deepcopy(state)

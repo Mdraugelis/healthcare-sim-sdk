@@ -24,6 +24,7 @@ from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
 
 # ---- Statistical assertion helpers ----------------------------------------
 
+
 def assert_mean_in_range(arr, expected_mean, tolerance_sigma=4.0, name=""):
     """Assert sample mean is within tolerance_sigma standard errors of expected.
 
@@ -44,9 +45,7 @@ def assert_mean_in_range(arr, expected_mean, tolerance_sigma=4.0, name=""):
     )
 
 
-def assert_rate_in_range(
-    count, n_trials, expected_rate, tolerance_sigma=4.0, name=""
-):
+def assert_rate_in_range(count, n_trials, expected_rate, tolerance_sigma=4.0, name=""):
     """Assert observed rate is within tolerance_sigma of expected binomial rate."""
     observed_rate = count / n_trials if n_trials > 0 else 0.0
     stderr = np.sqrt(expected_rate * (1 - expected_rate) / n_trials)
@@ -73,13 +72,11 @@ def assert_in_unit_interval(arr, name="", strict=False):
     arr = np.asarray(arr)
     if strict:
         assert np.all(arr > 0) and np.all(arr < 1), (
-            f"{name}: values outside (0,1): "
-            f"min={arr.min():.8f}, max={arr.max():.8f}"
+            f"{name}: values outside (0,1): min={arr.min():.8f}, max={arr.max():.8f}"
         )
     else:
         assert np.all(arr >= 0) and np.all(arr <= 1), (
-            f"{name}: values outside [0,1]: "
-            f"min={arr.min():.8f}, max={arr.max():.8f}"
+            f"{name}: values outside [0,1]: min={arr.min():.8f}, max={arr.max():.8f}"
         )
 
 
@@ -88,7 +85,7 @@ def assert_monotone_nondecreasing(seq, name=""):
     for i in range(1, len(seq)):
         assert seq[i] >= seq[i - 1] - 1e-10, (
             f"{name}: monotonicity violation at index {i}: "
-            f"{seq[i-1]:.6f} -> {seq[i]:.6f}"
+            f"{seq[i - 1]:.6f} -> {seq[i]:.6f}"
         )
 
 
@@ -101,12 +98,12 @@ def assert_arrays_equal_across_seeds(fn, seeds, name=""):
             reference = result
         else:
             np.testing.assert_array_equal(
-                reference, result,
-                err_msg=f"{name}: seed {seeds[0]} != seed {seed}"
+                reference, result, err_msg=f"{name}: seed {seeds[0]} != seed {seed}"
             )
 
 
 # ---- Scenario fixtures ----------------------------------------------------
+
 
 @pytest.fixture
 def rng():
@@ -118,6 +115,7 @@ def rng():
 def stroke_small():
     """Small stroke scenario for fast tests (1000 patients, 12 weeks)."""
     config = StrokeConfig(
+        allow_infeasible_model=True,
         n_patients=1000,
         n_weeks=12,
         prediction_interval=4,
@@ -151,7 +149,8 @@ def noshow_small():
         max_overbook_per_provider=2,
     )
     sc = NoShowOverbookingScenario(
-        time_config=tc, seed=42,
+        time_config=tc,
+        seed=42,
         n_patients=500,
         base_noshow_rate=0.13,
         overbooking_threshold=0.30,
@@ -171,6 +170,7 @@ def noshow_results_branched(noshow_small):
 
 
 # ---- Model fixtures -------------------------------------------------------
+
 
 @pytest.fixture
 def fitted_model():

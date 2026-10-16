@@ -12,6 +12,7 @@ class TestTier3Initialization:
 
     def test_invalid_mode_rejected(self):
         import pytest
+
         with pytest.raises(ValueError, match="mode must"):
             Tier3CITS(mode="bayesian")
 
@@ -40,7 +41,8 @@ class TestNoFitBeforeMinObservations:
 
     def test_first_fit_at_min_observations(self):
         cits = Tier3CITS(
-            mode="cits_with_cf", min_observations=13,
+            mode="cits_with_cf",
+            min_observations=13,
         )
         for week in range(13):
             cits.update(
@@ -85,30 +87,18 @@ class TestCITSWithCFMode:
         assert final.ci_lower <= -0.002 <= final.ci_upper
 
     def test_no_effect_in_null_regime(self):
-        """When factual and CF are identical (null effect), the
-        point estimate should be near zero.
-        """
-        cits = Tier3CITS(
-            mode="cits_with_cf",
-            refit_interval_weeks=13,
-            min_observations=13,
-        )
-        rng = np.random.default_rng(42)
-        for week in range(52):
-            # Same underlying rate with independent noise
-            rate = 0.01
-            f_rate = rate + rng.normal(0, 0.001)
-            cf_rate = rate + rng.normal(0, 0.001)
-            cits.update(
-                week=week,
-                factual_turnover=f_rate,
-                counterfactual_turnover=cf_rate,
-            )
-        # Final estimate should be within ~0.0005 of zero
-        final = cits.estimates[-1]
-        assert abs(final.effect_estimate) < 0.002
-        # CI should cover zero
-        assert final.ci_lower <= 0 <= final.ci_upper
+        """Coverage is a repeated-sample property, not a one-seed guarantee."""
+        false_positives = 0
+        for seed in range(100):
+            rng = np.random.default_rng(seed)
+            cits = Tier3CITS(mode="cits_with_cf", min_observations=52)
+            for week in range(52):
+                cits.update(
+                    week, 0.01 + rng.normal(0, 0.001), 0.01 + rng.normal(0, 0.001)
+                )
+            false_positives += cits.estimates[-1].p_value < 0.05
+        # Binomial 4-sigma bound fixed from nominal alpha and 100 replicates.
+        assert false_positives <= 5 + 4 * np.sqrt(100 * 0.05 * 0.95)
 
     def test_significance_triggers_detection(self):
         """A large effect should fire a DetectionEvent at the first

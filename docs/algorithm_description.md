@@ -5,16 +5,59 @@
 | | |
 |---|---|
 | Document | Algorithm Description Document (ADD) |
-| Version | 0.2, draft for review |
-| Date | 15 October 2026 |
+| Version | 0.3, issues register remediated |
+| Date | 16 October 2026 |
 | Code baseline | `main` at commit `3b94187`, which includes PR #5 (label-free model scores). "Before PR #5" means `main` at `648c56c`. |
-| Companion notebooks | Planned, not yet written. Section 15 specifies them. Most existing notebooks fail at their first import (I-26). |
+| Companion notebooks | All 14 existing notebooks repaired and executed in CI. Additional proposed teaching notebooks remain future work (Section 15). |
 | Status of numbers | Numbers in worked examples were produced by running the SDK at the baseline above. Numbers quoted from a docstring or a report say so. The notebooks in Section 15 will reproduce each measured number. |
 
 | Version | Change |
 |---|---|
 | 0.1 | First draft. |
 | 0.2 | Corrections after an independent re-run of every check. Main changes: the silent classification-mode path and the stroke default (I-25); Tier 2's null-regime alarms reinterpreted as a real trend (§12.4, I-04); the ITS example re-run with matched estimands (§11.5); the closed-form ceiling for Beta populations (§8.4); broken notebooks (I-26); hook and test-coverage gaps (§6.5). |
+
+**Reading the evidence.** Sections 3–13 retain the dated defect investigations and
+worked examples from the `main@3b94187` baseline. They are historical evidence,
+not numerical claims about the corrected implementation. The current behavior is
+summarized below and in the resolution column of Section 14. The four reports in
+`reports/` have been re-run with the corrected implementation and supersede their
+pre-fix versions. All 14 existing notebooks now execute in CI; the *new* teaching
+notebooks proposed in Section 15 remain future work.
+
+| Version | Change |
+|---|---|
+| 0.3 | Remediates I-01–I-29, adds regression/contract checks and notebook CI, separates oracle from observed monitoring, and replaces pre-fix reports. Historical worked examples remain tied to their original baseline. |
+
+### Current implementation after the register fixes
+
+- **Coupling and state:** fixed-size SOC priorities and overbooking coins retain
+  temporal/outcomes alignment. Every concrete scenario is tested for both stream
+  position and BRANCHED-versus-NONE identity. No-show operations copy input state.
+- **Lifecycle:** engine reuse of any scenario object raises. Fresh population
+  creation resets sepsis-family model/fatigue caches. NONE and SNAPSHOT work for
+  nurse retention; SNAPSHOT remains an explicitly uncoupled legacy mode.
+- **Models:** sepsis-family, no-show and nurse-retention fits use larger independent
+  reference cohorts, with horizon-specific labels. Unused arguments raise; refits
+  recompute empirical prevalence. Infeasible classification fits retain the
+  configured requirement, warn, and verify delivered PPV/sensitivity. Stroke's
+  unreachable legacy defaults now raise unless explicitly overridden.
+- **Measurement:** named exports resolve secondary outcomes or raise. Panel
+  treatment follows entity IDs and each entity's own first assignment, including
+  lagged appointment outcomes. Sepsis-family `incident_onset` separates new cases
+  from the patient-time measured by occupancy `events`.
+- **Monitoring:** Tier 2 charts observed-minus-predicted departures and its limits
+  are calibrated on separate seeds. Tier 3 defaults to an independent observed
+  control in the validation runner; oracle mode is labeled and uses paired
+  difference-series inference. Tier 4 uses mature factual outcomes, with a
+  separately labeled oracle comparison, logistic recalibration, a pooled baseline
+  of at least 100 events, and an explicit evaluation cadence.
+- **Scenario semantics:** MASAI uses a score percentile for routing. Manz's
+  high-risk nudge uses the model-selected patients; clinical risk determines
+  standard-care rates and clinician-level spillover remains explicit.
+- **Documentation and verification:** `AR1Process` is deprecated in favor of a
+  functional update; the AR(1) seasonal transfer and seed-42 default are documented.
+  Static hooks cover imports/aliases and state attribute/subscript access; tests
+  cover behavior. Epic ESM verification raises on failed checks.
 
 ---
 
@@ -64,7 +107,7 @@ Each algorithm chapter follows the same template:
 
 Analysts who configure scenarios and interpret results, developers who write scenarios, and reviewers who need to judge whether a result can be trusted.
 
-### 1.3 Critical review
+### 1.3 Critical review of the historical baseline
 
 This document was written alongside a critical read of the code. Problems found are recorded in Section 14, with the evidence and a proposed fix for each. Several of them affect reported results. The most important are:
 
@@ -221,7 +264,7 @@ On the second run, the factual branch keeps using streams already consumed by th
 
 `healthcare_sim_sdk/core/rng.py` (`RNGStreams`, `RNGPartitioner.create_streams`, `RNGPartitioner.fork`); `core/engine.py` lines 73–113.
 
-### 3.10 Open issues
+### 3.10 Register references
 
 I-03, I-19.
 
@@ -264,7 +307,7 @@ Notebook 02 shows mutation isolation for several state types and the speed diffe
 
 `core/scenario.py` (`BaseScenario.clone_state`); overrides in `scenarios/stroke_prevention/scenario.py` and `scenarios/sepsis_early_alert/scenario.py`.
 
-### 4.7 Open issues
+### 4.7 Register references
 
 I-12, I-14, I-28.
 
@@ -370,7 +413,7 @@ The coupled mean matches the expected 84.9. Its standard deviation is close to t
 
 `core/engine.py` (`BranchedSimulationEngine._run_branched`, `_run_snapshot`, `_run_simple`).
 
-### 5.9 Open issues
+### 5.9 Register references
 
 I-01, I-02, I-03, I-13, I-27.
 
@@ -411,13 +454,13 @@ Safe patterns:
 
 The last pattern is the strongest. A coin drawn once at creation and stored in state makes the pairing independent of any stream position.
 
-### 6.4 The two violations found
+### 6.4 Historical violations (fixed in version 0.3)
 
 **Nurse retention.** Standard-of-care allocation runs in `step()`, on both branches. For each manager, it shuffles eligible nurses with `rng.permutation(new_hires)` and `rng.permutation(others)`, and draws `rng.random(1)` when a team is empty. Team sizes depend on who has departed and who is in cooldown, which differs between branches once AI check-ins take effect. The code comment says "fixed RNG consumption"; that is not true. The audit shows the temporal stream decoupling between week 2 and week 5, depending on the seed. All later departures are drawn independently on the two branches.
 
 **No-show overbooking.** `step()` draws two extra variates (`rng.normal` and `rng.random`) for each overbooked slot. Only the factual branch has overbooked slots, so the temporal stream decouples at day 1. The problem is larger than independent show-up draws, because `step()` also draws the next day's schedule from the temporal stream. From day 2 on, the two branches book different patients into the same slots. With seed 42 and 1,000 patients, slot-to-patient agreement between the branches is 100% on days 0 and 1 and 0% from day 2. Any per-slot or per-patient contrast, including the burden and equity analyses, compares different appointments. Aggregate effects stay unbiased, because each branch is still a valid sample path.
 
-### 6.5 What is enforced today
+### 6.5 Enforcement at the historical baseline (superseded below)
 
 | Invariant (from `invariants.yaml`) | Enforced by | Gap |
 |---|---|---|
@@ -434,7 +477,7 @@ The last pattern is the strongest. A coin drawn once at creation and stored in s
 
 Notebook 04 demonstrates the purity test and what happens when purity or stream discipline is violated, once its imports are repaired (I-26). It does not cover draw-count invariance. Section 15 adds that.
 
-### 6.7 Open issues
+### 6.7 Register references
 
 I-01, I-02, I-12, I-17, I-22.
 
@@ -544,7 +587,7 @@ The bulletproof statistical-sanity tests check beta means within 4-sigma CLT bou
 
 `population/risk_distributions.py` (`beta_distributed_risks`); `population/temporal_dynamics.py` (`annual_risk_to_hazard`, `hazard_to_timestep_probability`, `AR1Process`); AR(1) state rows in `scenarios/stroke_prevention/scenario.py` and `scenarios/sepsis_early_alert/scenario.py`.
 
-### 7.10 Open issues
+### 7.10 Register references
 
 I-10, I-11, I-12.
 
@@ -724,7 +767,7 @@ The one test that runs classification mode with `allow_infeasible` (`test_sanity
 
 `ml/model.py` (`ControlledMLModel`); `ml/performance.py` (`auc_exact`, `required_auc_for_operating_point`, `sensitivity_at_ppv`, `ppv_at_sensitivity`, `validate_operating_point`); `ml/probability_model.py` (`ControlledProbabilityModel`, same principles in log-odds space).
 
-### 8.13 Open issues
+### 8.13 Register references
 
 I-18, I-21, I-25.
 
@@ -784,7 +827,7 @@ Monotonicity tests in `tests/bulletproof/test_conservation_laws.py` check that h
 
 Each scenario's `intervene()` and `step()`. Generic pieces worth extracting are listed in `design_principles.md` Appendix B: baseline care, Kumar decay, a capacity helper.
 
-### 9.9 Open issues
+### 9.9 Register references
 
 I-01, I-14, I-23, I-25.
 
@@ -839,7 +882,7 @@ Most of the uncertainty about one site's result comes from which patients it has
 
 All four, and `get_outcome_series()`, accept an `outcome_key` argument that is never used. They always return `events`. A request for `"mortality"` silently returns `events` (I-08).
 
-### 10.5 Open issues
+### 10.5 Register references
 
 I-08, I-09, I-10.
 
@@ -958,7 +1001,7 @@ Simulated two-sided CUSUM, $k = 0.5$, $h = 4$, 2,000 replicates:
 
 The first row matches the textbook ARL₀ of about 168 for this design (Montgomery). The other rows show why estimated limits and autocorrelation matter. The mean in row 2 is high because a few replicates with an overestimated $\sigma$ alarm very late, or not within the 2,000-step horizon.
 
-### 12.4 What this means for the monitoring validation report
+### 12.4 Why the historical monitoring report was withdrawn
 
 `reports/monitoring_validation/monitoring_validation.md` reports Tier 2 firing in **30 of 30 null-regime seeds, at a median of week 20**. It attributes the firing to "the beneficial effect of the AI", which cannot apply in a regime where the AI has no effect (I-04).
 
@@ -988,7 +1031,7 @@ The report also predates PR #5: nurse retention passed outcomes into `predict()`
 5. For autocorrelated data, chart residuals from a fitted AR model or use a longer baseline. Do not rely on textbook constants.
 6. Before calling a regime null, run the chart on the counterfactual branch. If it alarms there, the statistic drifts without the AI. For a closed cohort, chart observed minus expected events, with expected events from the active population's predicted risk.
 
-### 12.6 Open issues
+### 12.6 Register references
 
 I-04, I-05, I-06, I-07, I-20, I-29.
 
@@ -1039,47 +1082,51 @@ A monitoring tier that fires in every null seed must be explained before anythin
 
 ---
 
-## 14. Issues register
+<a id="14-issues-register"></a>
+
+## 14. Issues register — resolution record
+
+Reproduction, test coverage and report commands: [validation protocol](issue_register_validation.md).
 
 Severity: **High** means a reported result or conclusion is affected. **Medium** means results are weaker or a likely future error is unguarded. **Low** means a documentation or interface problem.
 
-| ID | Area | Finding | Evidence | Severity | Proposed fix |
-|---|---|---|---|---|---|
-| I-01 | Coupling | Nurse retention and no-show overbooking violate draw-count invariance. Nurse retention decouples between week 2 and week 5, depending on seed; overbooking at day 1, after which the branches book different patients into the same slots | Stream-position audit (§5.6); slot-to-patient agreement 0% from day 2 (§6.4). Nurse retention: `rng.permutation` on state-dependent team sizes in SOC allocation. Overbooking: extra draws for overbooked slots in `step()` | High | Draw fixed-size vectors and select by mask; order by `argsort` of $n$ uniforms; per-entity coins drawn at creation |
-| I-02 | Testing | The purity identity test proves non-interference, not coupling | §5.6 | Medium | Add the stream-position audit and an untreated-entity identity test to the scenario test template |
-| I-03 | Engine | Re-running a scenario object decouples its branches and changes its factual results | 118 discrepancies at zero effect on the second run (§3.8) | Medium | Reset `self.rng` from the partitioner at the start of `run()`, or make scenarios single-use and raise on reuse |
-| I-04 | Monitoring | Tier 2 CUSUM alarms in 30/30 null seeds (median week 20). The alarms are real: in the closed cohort, high-risk nurses leave first and weekly turnover falls from about 0.011 to about 0.0064. Every alarm is on the lower arm. The report attributes them to the AI, which has no effect in that regime | Validation report table; re-run of the null configuration (§12.4) | High | Risk-adjusted CUSUM on observed minus expected departures, or an open cohort; run every chart on the counterfactual branch before calling a regime null; then calibrate $h$ by simulation |
-| I-05 | Monitoring | Tier 3's null-regime "zero false positives" is guaranteed by construction (identical series) | Null regime ⇒ factual ≡ counterfactual | High | Validate Tier 3 with a real control series and observable noise; label oracle mode as a benchmark |
-| I-06 | Monitoring | Tier 4 scores against labels a deployment cannot observe; post-deployment AUC drop from the program's own effect is not modeled | `nurse_retention/scenario.py` `predict()` draws labels from the prediction stream | High | Score against realized factual outcomes; quantify the performative drop using the counterfactual branch |
-| I-07 | Reports | Monitoring validation and other pre-fix reports were produced with the outcome leak. Nurse retention's configured AUC of 0.80 is slightly above its large-sample ceiling of about 0.775 | PR #5 reruns; ceiling on three populations of 200,000 nurses (§12.4) | High | Re-run and revise all reports now that PR #5 has merged |
-| I-08 | Analysis API | `outcome_key` is accepted and ignored by every export; requests for other outcomes silently return `events` | `core/results.py` | Medium | Implement lookup in `secondary`, or raise when a key other than `"events"` is passed |
-| I-09 | Analysis API | `to_panel()` marks ever-treated entities as treated from the first intervention anywhere, not from their own first treatment. It also compares treated indices (positions) with entity IDs, which is wrong where IDs are not positions, as in no-show | `core/results.py` lines 183–213 | Medium | Map treated positions to entity IDs per step; use each entity's first treatment time; document both variants |
-| I-10 | Outcomes | Sepsis-family `events` are state occupancy; summed effects are patient-time, not cases | `sepsis_early_alert/scenario.py` `measure()` | Medium | Document per scenario; add an incident-onset outcome in `secondary` |
-| I-11 | Population | `seasonal_amplitude` sets the AR(1) target, not risk; stroke's 0.1 gives ±3.9% with a 9-week lag | §7.6, analytic and simulated | Medium | Document the transfer; or apply seasonality multiplicatively to risk |
-| I-12 | Purity | `AR1Process` keeps state on the object; using it from `self` inside `step()` would break purity | `temporal_dynamics.py` | Low | Make it functional (state in, state out) or deprecate |
-| I-13 | Engine | SNAPSHOT mode's counterfactual outcomes are not coupled and cover prediction steps only | `engine.py` `_run_snapshot` | Low | Document; or retire SNAPSHOT |
-| I-14 | State | Sepsis-family fatigue counter and model caches live on `self` and persist across runs | `self._cumulative_false_alerts` | Low | Move into state, or reset at run start |
-| I-15 | Estimators | `cits_with_control` treats the two series as independent and is oracle-only when the counterfactual branch is the control. The standard error is conservative only while the branches are coupled; nurse retention, its only oracle user, decouples by week 2–5 | `its.py`; I-01 | Medium | Paired difference-series estimator for oracle use; documentation |
-| I-16 | Verification | Epic ESM runner's checks cannot fail (`total_accounted = n` then `== n`; `abs(x) >= 0`); boundary checks print and assert nothing | `paper01_epic_esm/run_evaluation.py` lines 131–173 | Medium | Replace with real assertions; fail the run on violation |
-| I-17 | Invariants | Purity and draw-count invariance are test-only. Eight scenarios have no purity test (the seven paper replications and nurse retention). The hooks cover less than `invariants.yaml` states: no subscript or attribute check on state, no `import random` check, and `from numpy.random import ...` passes the bare-random check | §6.5 | Medium | Add the identity and audit tests to every scenario; fix the hook patterns; list hook exemptions in `invariants.yaml` |
-| I-18 | Model | Unused arguments are silently ignored in every mode; a refit on the same object reuses the first fit's prevalence | `ml/model.py` | Low | Raise on unused arguments; recompute prevalence on each fit |
-| I-19 | RNG | `seed=None` means 42, not a fresh seed | `core/scenario.py` | Low | Document, or draw a seed and record it |
-| I-20 | Monitoring | CUSUM docstring says both arms reset; the code resets only the arm that fired | `tier2_cusum.py` | Low | Align the docstring |
-| I-21 | Model | Sepsis-family, no-show and nurse-retention models fit at the first prediction on few events (9–42 in the sepsis family, about 18 in nurse retention); configured AUC is unverifiable | PR #5 reruns; 30 nurse-retention seeds | High | Fit on a larger reference cohort drawn from the same population |
-| I-22 | Docs | `design_principles.md` presents stream-per-method plus purity as sufficient for synchronization, and purity as machine-enforced | §6.3, §6.5 | Low | Update the text after review of this document |
-| I-23 | Scenarios | MASAI's 0.70 cut on calibrated scores flags nobody; Manz outcomes ignore model scores | PR #5 reruns | Medium | Percentile cut for MASAI; decide whether Manz should route outcomes through scores |
-| I-24 | Reports | Monitoring report says Tier 3 power "would be ~7x higher" at 6,800 nurses; power cannot scale that way (the standard error shrinks by about √6.8 ≈ 2.6) | Report §2 | Low | Re-estimate by simulation at 6,800 |
-| I-25 | Model | Classification mode with `allow_infeasible` silently replaces an unreachable required AUC with the ceiling. The report shows the ceiling as `required_auc`, the delivered-AUC check passes, and no warning is raised. Modes other than operating_point never check delivered sensitivity or PPV. Stroke runs this way by default and flags almost nobody: sensitivity 0.00 in five of six seeds at 20,000 patients, and 2 to 73 treatments per year. PR #5's description says this case "runs with a warning"; it does not | `ml/model.py` `_plan_classification` (lines 541–546), `_check_population_ceiling` (lines 708–709), `_check_auc_delivered`; stroke runs (§8.9, §9.6) | High | Keep the configured requirement in the report and warn whenever it is replaced; check delivered sensitivity and PPV in classification mode; make stroke raise by default, or move it to operating_point with a PPV binding and a realistic AUC |
-| I-26 | Notebooks | 12 of 14 notebooks fail at their first import: they use the old package layout (`sdk.*`, `scenarios.*`, `experiments.*`) | Import check of every notebook (§2.3) | Medium | Repair the imports; execute the notebooks in CI so they cannot rot again |
-| I-27 | Engine | Nurse retention cannot run in NONE or SNAPSHOT mode: its `validate_results()` reads the counterfactual outcome at the final week and raises `KeyError`. This blocks a purity test. Its module docstring also says `measure()` draws from the outcomes stream, which it does not | `nurse_retention/scenario.py` `validate_results` | Low | Guard `validate_results` for modes without a counterfactual; fix the docstring |
-| I-28 | State | No-show overbooking's `step()` and `intervene()` modify the incoming state in place | `noshow_overbooking/scenario.py` | Low | Copy the state first (§4.3 rule 2) |
-| I-29 | Monitoring | Tier 4's "calibration slope" is a least-squares fit of 0/1 outcomes on logit(p), not a logistic recalibration slope. Its reference is the first computable value, from one two-week snapshot with about 20 departures. "4 consecutive weeks" below AUC 0.65 is 4 two-weekly evaluations, or 8 weeks. Tier 4 fires in every regime at weeks 4–6 | `tier4_model_drift.py` (line 136 and the detection loop); validation report §6 | Medium | Logistic recalibration slope; a reference from a baseline period with enough events; state the cadence in weeks |
+| ID | Area | Finding | Evidence | Severity | Proposed fix | Resolution (version 0.3) |
+|---|---|---|---|---|---|---|
+| I-01 | Coupling | Nurse retention and no-show overbooking violate draw-count invariance. Nurse retention decouples between week 2 and week 5, depending on seed; overbooking at day 1, after which the branches book different patients into the same slots | Stream-position audit (§5.6); slot-to-patient agreement 0% from day 2 (§6.4). Nurse retention: `rng.permutation` on state-dependent team sizes in SOC allocation. Overbooking: extra draws for overbooked slots in `step()` | High | Draw fixed-size vectors and select by mask; order by `argsort` of $n$ uniforms; per-entity coins drawn at creation | **Resolved.** Fixed: full-size SOC priorities and overbooking coins; all-scenario stream audit, two seeds. |
+| I-02 | Testing | The purity identity test proves non-interference, not coupling | §5.6 | Medium | Add the stream-position audit and an untreated-entity identity test to the scenario test template | **Resolved.** Fixed: independent non-interference, stream-position and untreated-identity checks; template checklist. |
+| I-03 | Engine | Re-running a scenario object decouples its branches and changes its factual results | 118 discrepancies at zero effect on the second run (§3.8) | Medium | Reset `self.rng` from the partitioner at the start of `run()`, or make scenarios single-use and raise on reuse | **Resolved.** Fixed: single-use guard applies across engines and after failed runs. |
+| I-04 | Monitoring | Tier 2 CUSUM alarms in 30/30 null seeds (median week 20). The alarms are real: in the closed cohort, high-risk nurses leave first and weekly turnover falls from about 0.011 to about 0.0064. Every alarm is on the lower arm. The report attributes them to the AI, which has no effect in that regime | Validation report table; re-run of the null configuration (§12.4) | High | Risk-adjusted CUSUM on observed minus expected departures, or an open cohort; run every chart on the counterfactual branch before calling a regime null; then calibrate $h$ by simulation | **Resolved.** Fixed: prospective risk-adjusted departure residuals; simulated h calibration and independent holdout nulls. See revised monitoring report. |
+| I-05 | Monitoring | Tier 3's null-regime "zero false positives" is guaranteed by construction (identical series) | Null regime ⇒ factual ≡ counterfactual | High | Validate Tier 3 with a real control series and observable noise; label oracle mode as a benchmark | **Resolved.** Fixed: independent observed control in validation; oracle benchmark explicitly labeled. |
+| I-06 | Monitoring | Tier 4 scores against labels a deployment cannot observe; post-deployment AUC drop from the program's own effect is not modeled | `nurse_retention/scenario.py` `predict()` draws labels from the prediction stream | High | Score against realized factual outcomes; quantify the performative drop using the counterfactual branch | **Resolved.** Fixed: mature factual departure labels; separate matched-risk-set oracle diagnostics quantify performative changes. |
+| I-07 | Reports | Monitoring validation and other pre-fix reports were produced with the outcome leak. Nurse retention's configured AUC of 0.80 is slightly above its large-sample ceiling of about 0.775 | PR #5 reruns; ceiling on three populations of 200,000 nurses (§12.4) | High | Re-run and revise all reports now that PR #5 has merged | **Resolved.** Fixed: all four tracked reports replaced with post-fix runs; nurse default AUC reduced to 0.75. |
+| I-08 | Analysis API | `outcome_key` is accepted and ignored by every export; requests for other outcomes silently return `events` | `core/results.py` | Medium | Implement lookup in `secondary`, or raise when a key other than `"events"` is passed | **Resolved.** Fixed: every export resolves named secondary outcomes or raises KeyError. |
+| I-09 | Analysis API | `to_panel()` marks ever-treated entities as treated from the first intervention anywhere, not from their own first treatment. It also compares treated indices (positions) with entity IDs, which is wrong where IDs are not positions, as in no-show | `core/results.py` lines 183–213 | Medium | Map treated positions to entity IDs per step; use each entity's first treatment time; document both variants | **Resolved.** Fixed: treatment positions map to contemporaneous IDs; explicit IDs for lagged appointments; own first treatment or explicit ever variant. |
+| I-10 | Outcomes | Sepsis-family `events` are state occupancy; summed effects are patient-time, not cases | `sepsis_early_alert/scenario.py` `measure()` | Medium | Document per scenario; add an incident-onset outcome in `secondary` | **Resolved.** Fixed: incident_onset outcome added; occupancy and mortality estimands documented. |
+| I-11 | Population | `seasonal_amplitude` sets the AR(1) target, not risk; stroke's 0.1 gives ±3.9% with a 9-week lag | §7.6, analytic and simulated | Medium | Document the transfer; or apply seasonality multiplicatively to risk | **Resolved.** Fixed by documentation: parameter is AR(1) target amplitude; +/-3.9% and nine-week lag stated in code and design docs. |
+| I-12 | Purity | `AR1Process` keeps state on the object; using it from `self` inside `step()` would break purity | `temporal_dynamics.py` | Low | Make it functional (state in, state out) or deprecate | **Resolved.** Fixed: mutable helper deprecated; functional ar1_step available. |
+| I-13 | Engine | SNAPSHOT mode's counterfactual outcomes are not coupled and cover prediction steps only | `engine.py` `_run_snapshot` | Low | Document; or retire SNAPSHOT | **Resolved.** Fixed by documentation: SNAPSHOT explicitly uncoupled, prediction-times only, no downstream effect propagation. |
+| I-14 | State | Sepsis-family fatigue counter and model caches live on `self` and persist across runs | `self._cumulative_false_alerts` | Low | Move into state, or reset at run start | **Resolved.** Fixed: sepsis-family caches/fatigue reset at population creation; engine rejects reuse. |
+| I-15 | Estimators | `cits_with_control` treats the two series as independent and is oracle-only when the counterfactual branch is the control. The standard error is conservative only while the branches are coupled; nurse retention, its only oracle user, decouples by week 2–5 | `its.py`; I-01 | Medium | Paired difference-series estimator for oracle use; documentation | **Resolved.** Fixed: paired difference-series oracle estimator, t inference; independent-group estimator retained for real controls. |
+| I-16 | Verification | Epic ESM runner's checks cannot fail (`total_accounted = n` then `== n`; `abs(x) >= 0`); boundary checks print and assert nothing | `paper01_epic_esm/run_evaluation.py` lines 131–173 | Medium | Replace with real assertions; fail the run on violation | **Resolved.** Fixed: actual stage counts, null identity and random-model assertions; failed checks abort runner. |
+| I-17 | Invariants | Purity and draw-count invariance are test-only. Eight scenarios have no purity test (the seven paper replications and nurse retention). The hooks cover less than `invariants.yaml` states: no subscript or attribute check on state, no `import random` check, and `from numpy.random import ...` passes the bare-random check | §6.5 | Medium | Add the identity and audit tests to every scenario; fix the hook patterns; list hook exemptions in `invariants.yaml` | **Resolved.** Fixed: all 13 domain scenarios in contract matrix; AST import/state checks, explicit exemptions, CI. |
+| I-18 | Model | Unused arguments are silently ignored in every mode; a refit on the same object reuses the first fit's prevalence | `ml/model.py` | Low | Raise on unused arguments; recompute prevalence on each fit | **Resolved.** Fixed: mode-unused arguments raise; empirical prevalence recomputed on each fit. |
+| I-19 | RNG | `seed=None` means 42, not a fresh seed | `core/scenario.py` | Low | Document, or draw a seed and record it | **Resolved.** Fixed by documentation: seed=None deterministically means 42; regression pins it. |
+| I-20 | Monitoring | CUSUM docstring says both arms reset; the code resets only the arm that fired | `tier2_cusum.py` | Low | Align the docstring | **Resolved.** Fixed: CUSUM docs state only firing arm resets. |
+| I-21 | Model | Sepsis-family, no-show and nurse-retention models fit at the first prediction on few events (9–42 in the sepsis family, about 18 in nurse retention); configured AUC is unverifiable | PR #5 reruns; 30 nurse-retention seeds | High | Fit on a larger reference cohort drawn from the same population | **Resolved.** Fixed: independent bootstrap reference fits target 200 expected events, minimum event gate and explicit label horizons. |
+| I-22 | Docs | `design_principles.md` presents stream-per-method plus purity as sufficient for synchronization, and purity as machine-enforced | §6.3, §6.5 | Low | Update the text after review of this document | **Resolved.** Fixed: design principles distinguish purity, coupling and static versus behavioral enforcement. |
+| I-23 | Scenarios | MASAI's 0.70 cut on calibrated scores flags nobody; Manz outcomes ignore model scores | PR #5 reruns | Medium | Percentile cut for MASAI; decide whether Manz should route outcomes through scores | **Resolved.** Fixed: MASAI percentile routing; Manz high-risk nudge driven by model flags. |
+| I-24 | Reports | Monitoring report says Tier 3 power "would be ~7x higher" at 6,800 nurses; power cannot scale that way (the standard error shrinks by about √6.8 ≈ 2.6) | Report §2 | Low | Re-estimate by simulation at 6,800 | **Resolved.** Fixed: direct 6,800-nurse independent-control simulation; no linear power extrapolation. See revised report. |
+| I-25 | Model | Classification mode with `allow_infeasible` silently replaces an unreachable required AUC with the ceiling. The report shows the ceiling as `required_auc`, the delivered-AUC check passes, and no warning is raised. Modes other than operating_point never check delivered sensitivity or PPV. Stroke runs this way by default and flags almost nobody: sensitivity 0.00 in five of six seeds at 20,000 patients, and 2 to 73 treatments per year. PR #5's description says this case "runs with a warning"; it does not | `ml/model.py` `_plan_classification` (lines 541–546), `_check_population_ceiling` (lines 708–709), `_check_auc_delivered`; stroke runs (§8.9, §9.6) | High | Keep the configured requirement in the report and warn whenever it is replaced; check delivered sensitivity and PPV in classification mode; make stroke raise by default, or move it to operating_point with a PPV binding and a realistic AUC | **Resolved.** Fixed: original requirement retained, override warning and delivered threshold-metric gates; stroke raises by default. |
+| I-26 | Notebooks | 12 of 14 notebooks fail at their first import: they use the old package layout (`sdk.*`, `scenarios.*`, `experiments.*`) | Import check of every notebook (§2.3) | Medium | Repair the imports; execute the notebooks in CI so they cannot rot again | **Resolved.** Fixed: imports and removed APIs repaired; all 14 notebooks executed and required by CI. |
+| I-27 | Engine | Nurse retention cannot run in NONE or SNAPSHOT mode: its `validate_results()` reads the counterfactual outcome at the final week and raises `KeyError`. This blocks a purity test. Its module docstring also says `measure()` draws from the outcomes stream, which it does not | `nurse_retention/scenario.py` `validate_results` | Low | Guard `validate_results` for modes without a counterfactual; fix the docstring | **Resolved.** Fixed: validation handles missing/full-trajectory counterfactuals; measure docstring corrected. |
+| I-28 | State | No-show overbooking's `step()` and `intervene()` modify the incoming state in place | `noshow_overbooking/scenario.py` | Low | Copy the state first (§4.3 rule 2) | **Resolved.** Fixed: no-show step/intervene copy input state. |
+| I-29 | Monitoring | Tier 4's "calibration slope" is a least-squares fit of 0/1 outcomes on logit(p), not a logistic recalibration slope. Its reference is the first computable value, from one two-week snapshot with about 20 departures. "4 consecutive weeks" below AUC 0.65 is 4 two-weekly evaluations, or 8 weeks. Tier 4 fires in every regime at weeks 4–6 | `tier4_model_drift.py` (line 136 and the detection loop); validation report §6 | Medium | Logistic recalibration slope; a reference from a baseline period with enough events; state the cadence in weeks | **Resolved.** Fixed: logistic recalibration; pooled 12-week baseline with >=100 events; cadence labeled in evaluations. |
 
 ---
 
 ## 15. Companion notebooks
 
-Each notebook demonstrates one chapter, reproduces the chapter's worked-example numbers, and ends with checks that fail loudly if the numbers do not reproduce. The first step is repairing the imports of the existing notebooks (I-26); only 02 runs as it stands. Notebooks 01, 03, 04 and 07 are then kept and extended. Notebooks 05 and 06 demonstrate legacy classes and are superseded by 12. All notebooks should run in CI, so a broken import fails a build instead of going unnoticed.
+Each notebook demonstrates one chapter, reproduces the chapter's worked-example numbers, and ends with checks that fail loudly if the numbers do not reproduce. The existing imports and retired evaluator API have been repaired (I-26), and all 14 notebooks now execute in CI. Notebooks 01, 03, 04 and 07 are then kept and extended. Notebooks 05 and 06 demonstrate legacy classes and are superseded by 12. All notebooks should run in CI, so a broken import fails a build instead of going unnoticed.
 
 | Notebook | Chapter | Demonstrates | Acceptance checks |
 |---|---|---|---|
@@ -1107,7 +1154,7 @@ These principles are not in `design_principles.md` today. Each was needed to exp
 4. **Report both kinds of uncertainty.** Within-population noise and between-population variation answer different questions (§10.3).
 5. **Test the deployed path, with checks that can fail.** Self-reports and tautologies give false confidence (§13.3).
 6. **Monitoring is performative.** A model that drives an intervention changes the outcomes it is later scored against. Monitors must account for this or they will misread success as drift (§12.4).
-7. **Scenario objects are single-use** until the engine resets streams at the start of each run (§3.8).
+7. **Scenario objects are single-use.** The engine rejects reuse, including across engine instances; construct a fresh object to reproduce a seed (§3.8).
 8. **Parameters must mean what they say.** Configured values that pass through dynamics (seasonality through AR(1), annual risk through hazards, thresholds through calibration) must be documented by their realized effect, not their input value (§7.6, §9.6). A configuration the code cannot honor must raise or warn and be recorded. It must never be silently replaced (I-25).
 9. **Check that a null is a null.** Before testing a monitor or estimator on a no-effect regime, run it on the counterfactual branch. If the statistic drifts there, the regime is not null for that statistic (§12.4).
 10. **Grade an estimate against its own estimand.** A level change, a post-period mean and a cumulative total are different quantities when effects ramp up. Bias is only meaningful when the estimate and the truth measure the same thing (§11.5).

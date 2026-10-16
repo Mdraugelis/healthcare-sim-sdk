@@ -13,6 +13,21 @@ import numpy as np
 from .scenario import TimeConfig, Predictions, Interventions, Outcomes
 
 
+def outcome_values(outcome: Outcomes, key: str) -> np.ndarray:
+    """Resolve a named per-entity outcome; never silently substitute events."""
+    if key == "events":
+        return outcome.events
+    if key not in outcome.secondary:
+        raise KeyError(
+            f"Unknown outcome {key!r}; available: events, "
+            + ", ".join(outcome.secondary)
+        )
+    values = np.asarray(outcome.secondary[key])
+    if values.shape != outcome.events.shape:
+        raise ValueError(f"Outcome {key!r} must have the same shape as events")
+    return values
+
+
 @dataclass
 class SimulationResults:
     """Standardized results container with unit-of-analysis awareness.
@@ -21,6 +36,7 @@ class SimulationResults:
     Knows the unit_of_analysis declared by the scenario, enabling
     structured export to AnalysisDataset.
     """
+
     n_entities: int = 0
     time_config: Optional[TimeConfig] = None
     unit_of_analysis: str = "entity"
@@ -29,9 +45,7 @@ class SimulationResults:
     predictions: Dict[int, Predictions] = field(default_factory=dict)
     interventions: Dict[int, Interventions] = field(default_factory=dict)
     outcomes: Dict[int, Outcomes] = field(default_factory=dict)
-    counterfactual_outcomes: Dict[int, Outcomes] = field(
-        default_factory=dict
-    )
+    counterfactual_outcomes: Dict[int, Outcomes] = field(default_factory=dict)
 
     validations: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -39,9 +53,7 @@ class SimulationResults:
     def record_predictions(self, t: int, predictions: Predictions) -> None:
         self.predictions[t] = predictions
 
-    def record_interventions(
-        self, t: int, interventions: Interventions
-    ) -> None:
+    def record_interventions(self, t: int, interventions: Interventions) -> None:
         self.interventions[t] = interventions
 
     def record_outcomes(
@@ -52,20 +64,16 @@ class SimulationResults:
         else:
             self.outcomes[t] = outcomes
 
-    def record_validation(
-        self, phase: str, results: Dict[str, Any]
-    ) -> None:
+    def record_validation(self, phase: str, results: Dict[str, Any]) -> None:
         self.validations[phase] = results
 
-    def get_outcome_series(
-        self, outcome_key: str = "events"
-    ) -> np.ndarray:
+    def get_outcome_series(self, outcome_key: str = "events") -> np.ndarray:
         """Aggregated time series, shape (n_timesteps,)."""
         n_t = self.time_config.n_timesteps if self.time_config else 0
         series = np.zeros(n_t)
         for t in range(n_t):
             if t in self.outcomes:
-                events = self.outcomes[t].events
+                events = outcome_values(self.outcomes[t], outcome_key)
                 series[t] = events.sum()
         return series
 
@@ -77,7 +85,7 @@ class SimulationResults:
         series = np.zeros(n_t)
         for t in range(n_t):
             if t in self.counterfactual_outcomes:
-                events = self.counterfactual_outcomes[t].events
+                events = outcome_values(self.counterfactual_outcomes[t], outcome_key)
                 series[t] = events.sum()
         return series
 
@@ -113,10 +121,13 @@ class AnalysisDataset:
         return self.results.unit_of_analysis
 
     def _get_outcomes_dict(
-        self, branch: str = "factual",
+        self,
+        branch: str = "factual",
     ) -> Dict[int, Outcomes]:
         if branch == "counterfactual":
             return self.results.counterfactual_outcomes
+        if branch != "factual":
+            raise ValueError(f"Unknown branch: {branch!r}")
         return self.results.outcomes
 
     def to_time_series(
@@ -139,7 +150,7 @@ class AnalysisDataset:
         outcomes = np.zeros(n_t)
         for t in range(n_t):
             if t in outcomes_dict:
-                events = outcomes_dict[t].events
+                events = outcome_values(outcomes_dict[t], outcome_key)
                 outcomes[t] = events.sum()
 
         return {
@@ -152,8 +163,13 @@ class AnalysisDataset:
         self,
         outcome_key: str = "events",
         branch: str = "factual",
+        treatment_definition: str = "since_first",
     ) -> Dict[str, Any]:
         """Export entity-level panel data for DiD analysis.
+
+        treatment_definition='since_first' marks each entity from its own
+        first assignment. 'ever' marks that entity at every observed time.
+        Treatment is the factual assignment even on counterfactual exports.
 
         Returns:
             Dict with:
@@ -179,10 +195,23 @@ class AnalysisDataset:
                     "Set entity_ids in measure() for panel export."
                 )
 
-        # Build treated set across all intervention timesteps
-        treated_entities: set = set()
+        if treatment_definition not in ("since_first", "ever"):
+            raise ValueError("treatment_definition must be 'since_first' or 'ever'")
+        # Interventions name positions, not IDs. Resolve against the factual
+        # population at the assignment time (or explicit IDs for lagged outcomes).
+        first_treatment = {}
         for t_int, intv in self.results.interventions.items():
-            treated_entities.update(intv.treated_indices.tolist())
+            if "treated_entity_ids" in intv.metadata:
+                ids = np.asarray(intv.metadata["treated_entity_ids"])
+            else:
+                out = self.results.outcomes[t_int]
+                if out.entity_ids is None:
+                    raise ValueError(
+                        "entity_ids required to resolve treatment positions"
+                    )
+                ids = out.entity_ids[intv.treated_indices]
+            for eid in ids:
+                first_treatment[eid] = min(t_int, first_treatment.get(eid, t_int))
 
         all_entity_ids: List[np.ndarray] = []
         all_timesteps: List[np.ndarray] = []
@@ -194,28 +223,34 @@ class AnalysisDataset:
                 continue
             out = outcomes_dict[t]
             n_e = len(out.events)
-            eids = (
-                out.entity_ids if out.entity_ids is not None
-                else np.arange(n_e)
-            )
+            eids = out.entity_ids if out.entity_ids is not None else np.arange(n_e)
             all_entity_ids.append(eids)
             all_timesteps.append(np.full(n_e, t))
-            all_outcomes.append(out.events)
-
-            treated_mask = np.isin(eids, list(treated_entities))
-            # Only mark treated after first intervention time
-            first_intv = (
-                min(self.results.interventions.keys())
-                if self.results.interventions else n_t
+            all_outcomes.append(outcome_values(out, outcome_key))
+            treated_arr = np.array(
+                [
+                    int(
+                        eid in first_treatment
+                        and (
+                            treatment_definition == "ever" or t >= first_treatment[eid]
+                        )
+                    )
+                    for eid in eids
+                ]
             )
-            treated_arr = (treated_mask & (t >= first_intv)).astype(int)
             all_treated.append(treated_arr)
 
         return {
-            "entity_ids": np.concatenate(all_entity_ids),
-            "timesteps": np.concatenate(all_timesteps),
-            "outcomes": np.concatenate(all_outcomes),
-            "treated": np.concatenate(all_treated),
+            "entity_ids": np.concatenate(all_entity_ids)
+            if all_entity_ids
+            else np.array([]),
+            "timesteps": np.concatenate(all_timesteps)
+            if all_timesteps
+            else np.array([], dtype=int),
+            "outcomes": np.concatenate(all_outcomes) if all_outcomes else np.array([]),
+            "treated": np.concatenate(all_treated)
+            if all_treated
+            else np.array([], dtype=int),
             "unit_of_analysis": self.unit_of_analysis,
         }
 
@@ -239,8 +274,7 @@ class AnalysisDataset:
 
         out = outcomes_dict[t]
         eids = (
-            out.entity_ids if out.entity_ids is not None
-            else np.arange(len(out.events))
+            out.entity_ids if out.entity_ids is not None else np.arange(len(out.events))
         )
 
         scores = None
@@ -249,7 +283,7 @@ class AnalysisDataset:
 
         return {
             "entity_ids": eids,
-            "outcomes": out.events,
+            "outcomes": outcome_values(out, outcome_key),
             "scores": scores,
         }
 
@@ -284,5 +318,5 @@ class AnalysisDataset:
             else:
                 all_groups.append(np.full(n_e, "unknown"))
 
-        panel["subgroup"] = np.concatenate(all_groups)
+        panel["subgroup"] = np.concatenate(all_groups) if all_groups else np.array([])
         return panel

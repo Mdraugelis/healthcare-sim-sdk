@@ -22,7 +22,12 @@ Bundle compliance baseline: ~50% [ASSUMED from 5pp increase]
 
 import numpy as np
 
-from healthcare_sim_sdk.core.scenario import BaseScenario, Predictions, Interventions, Outcomes
+from healthcare_sim_sdk.core.scenario import (
+    BaseScenario,
+    Predictions,
+    Interventions,
+    Outcomes,
+)
 from healthcare_sim_sdk.ml.model import ControlledMLModel
 from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
 
@@ -30,17 +35,18 @@ from healthcare_sim_sdk.population.risk_distributions import beta_distributed_ri
 ROW_BASE_RISK = 0
 ROW_CURRENT_RISK = 1
 ROW_AR1_MOD = 2
-ROW_STAGE = 3              # 0=at_risk, 1=sepsis, 2=severe, 3=deceased, 4=discharged
+ROW_STAGE = 3  # 0=at_risk, 1=sepsis, 2=severe, 3=deceased, 4=discharged
 ROW_STAGE_TIMER = 4
 ROW_TREATED = 5
-ROW_BUNDLE_COMPLIANT = 6   # COMPOSER-specific: sepsis bundle received
+ROW_BUNDLE_COMPLIANT = 6  # COMPOSER-specific: sepsis bundle received
 ROW_DEMO_RACE = 7
 ROW_DEMO_INSURANCE = 8
 ROW_DEMO_AGE = 9
 ROW_DEMO_RISK_MULT = 10
 ROW_LOS_REMAINING = 11
-ROW_BPA_FIRED = 12         # BPA fired for this patient
-N_ROWS = 13
+ROW_BPA_FIRED = 12  # BPA fired for this patient
+ROW_INCIDENT_ONSET = 13
+N_ROWS = 14
 
 STAGE_AT_RISK = 0
 STAGE_SEPSIS = 1
@@ -66,14 +72,18 @@ class COMPOSERScenario(BaseScenario):
 
     unit_of_analysis = "patient_admission"
 
-    def __init__(self, time_config, seed=None,
-                 model_auc=0.81,              # [ASSUMED: not explicitly stated]
-                 alert_threshold_percentile=88.0,
-                 treatment_effectiveness=0.17,  # 17% relative mortality reduction
-                 bundle_compliance_boost=0.05,  # 5.0pp absolute bundle compliance increase
-                 baseline_bundle_compliance=0.50,  # [ASSUMED]
-                 sepsis_prevalence=0.112,          # ~11.2% baseline mortality implied
-                 nurse_response_rate=0.72,):        # [ASSUMED] nurse BPA acknowledgment
+    def __init__(
+        self,
+        time_config,
+        seed=None,
+        model_auc=0.81,  # [ASSUMED: not explicitly stated]
+        alert_threshold_percentile=88.0,
+        treatment_effectiveness=0.17,  # 17% relative mortality reduction
+        bundle_compliance_boost=0.05,  # 5.0pp absolute bundle compliance increase
+        baseline_bundle_compliance=0.50,  # [ASSUMED]
+        sepsis_prevalence=0.112,  # ~11.2% baseline mortality implied
+        nurse_response_rate=0.72,
+    ):  # [ASSUMED] nurse BPA acknowledgment
         super().__init__(time_config=time_config, seed=seed)
 
         self.model_auc = model_auc
@@ -113,6 +123,8 @@ class COMPOSERScenario(BaseScenario):
         self._cumulative_false_alerts = 0
 
     def create_population(self, n_entities):
+        self._model_fitted = False
+        self._cumulative_false_alerts = 0
         rng = self.rng.population
         n = n_entities
         state = np.zeros((N_ROWS, n))
@@ -125,16 +137,26 @@ class COMPOSERScenario(BaseScenario):
         )
         state[ROW_AR1_MOD] = 1.0
 
-        state[ROW_DEMO_RACE] = rng.choice(len(RACE_LABELS), size=n, p=self.race_proportions).astype(float)
-        state[ROW_DEMO_INSURANCE] = rng.choice(len(INSURANCE_LABELS), size=n, p=self.insurance_proportions).astype(float)
-        state[ROW_DEMO_AGE] = rng.choice(len(AGE_LABELS), size=n, p=self.age_proportions).astype(float)
+        state[ROW_DEMO_RACE] = rng.choice(
+            len(RACE_LABELS), size=n, p=self.race_proportions
+        ).astype(float)
+        state[ROW_DEMO_INSURANCE] = rng.choice(
+            len(INSURANCE_LABELS), size=n, p=self.insurance_proportions
+        ).astype(float)
+        state[ROW_DEMO_AGE] = rng.choice(
+            len(AGE_LABELS), size=n, p=self.age_proportions
+        ).astype(float)
 
-        race_mult = np.array(self.race_risk_multipliers)[state[ROW_DEMO_RACE].astype(int)]
+        race_mult = np.array(self.race_risk_multipliers)[
+            state[ROW_DEMO_RACE].astype(int)
+        ]
         age_mult = np.array(self.age_risk_multipliers)[state[ROW_DEMO_AGE].astype(int)]
         state[ROW_DEMO_RISK_MULT] = race_mult * age_mult
 
         state[ROW_CURRENT_RISK] = np.clip(
-            state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT], 0.001, 0.99
+            state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
+            0.001,
+            0.99,
         )
         state[ROW_STAGE] = STAGE_AT_RISK
         state[ROW_STAGE_TIMER] = 0
@@ -156,7 +178,9 @@ class COMPOSERScenario(BaseScenario):
         new_mods = self.ar1_rho * state[ROW_AR1_MOD] + (1 - self.ar1_rho) * 1.0 + noise
         new_state[ROW_AR1_MOD] = np.clip(new_mods, 0.5, 2.0)
         new_state[ROW_CURRENT_RISK] = np.clip(
-            state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT], 0.001, 0.99
+            state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
+            0.001,
+            0.99,
         )
 
         # Bundle compliance reduces progression: treated patients have better outcomes
@@ -165,43 +189,59 @@ class COMPOSERScenario(BaseScenario):
             1.0 - self.treatment_effectiveness,
             1.0,
         )
-        mean_risk = float(new_state[ROW_CURRENT_RISK][active].mean()) if active.any() else self.sepsis_prevalence
-        risk_scale = np.clip(new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0)
+        mean_risk = (
+            float(new_state[ROW_CURRENT_RISK][active].mean())
+            if active.any()
+            else self.sepsis_prevalence
+        )
+        risk_scale = np.clip(
+            new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0
+        )
 
         draws = rng.random(n)
         at_risk_mask = active & (state[ROW_STAGE] == STAGE_AT_RISK)
-        progressed = at_risk_mask & (draws < self.prog_at_risk * risk_scale * bundle_factor)
+        progressed = at_risk_mask & (
+            draws < self.prog_at_risk * risk_scale * bundle_factor
+        )
         new_state[ROW_STAGE, progressed] = STAGE_SEPSIS
         new_state[ROW_STAGE_TIMER, progressed] = 0
 
         draws2 = rng.random(n)
         sepsis_mask = active & (state[ROW_STAGE] == STAGE_SEPSIS)
-        progressed2 = sepsis_mask & (draws2 < self.prog_sepsis * risk_scale * bundle_factor)
+        progressed2 = sepsis_mask & (
+            draws2 < self.prog_sepsis * risk_scale * bundle_factor
+        )
         new_state[ROW_STAGE, progressed2] = STAGE_SEVERE
         new_state[ROW_STAGE_TIMER, progressed2] = 0
 
         mort_draws = rng.random(n)
-        deceased = (
-            (sepsis_mask & ~progressed2 & (mort_draws < self.mort_sepsis)) |
-            (active & (state[ROW_STAGE] == STAGE_SEVERE) & (mort_draws < self.mort_severe))
+        deceased = (sepsis_mask & ~progressed2 & (mort_draws < self.mort_sepsis)) | (
+            active
+            & (state[ROW_STAGE] == STAGE_SEVERE)
+            & (mort_draws < self.mort_severe)
         )
         new_state[ROW_STAGE, deceased] = STAGE_DECEASED
 
         new_state[ROW_LOS_REMAINING] = np.maximum(state[ROW_LOS_REMAINING] - 1, 0)
         discharge_eligible = (
-            active & ~deceased
+            active
+            & ~deceased
             & (new_state[ROW_LOS_REMAINING] <= 0)
             & (state[ROW_STAGE] <= STAGE_SEPSIS)
         )
         new_state[ROW_STAGE, discharge_eligible] = STAGE_DISCHARGED
 
         still_active = new_state[ROW_STAGE] < STAGE_DECEASED
-        new_state[ROW_STAGE_TIMER] = np.where(still_active, new_state[ROW_STAGE_TIMER] + 1, state[ROW_STAGE_TIMER])
+        new_state[ROW_STAGE_TIMER] = np.where(
+            still_active, new_state[ROW_STAGE_TIMER] + 1, state[ROW_STAGE_TIMER]
+        )
+        # Record the actual transition, including a same-step discharge.
+        new_state[ROW_INCIDENT_ONSET] = progressed.astype(float)
         return new_state
 
     def predict(self, state, t):
         rng = self.rng.prediction
-        n = state.shape[1]
+        state.shape[1]
 
         true_labels = (
             (state[ROW_STAGE] >= STAGE_SEPSIS) & (state[ROW_STAGE] < STAGE_DECEASED)
@@ -209,7 +249,7 @@ class COMPOSERScenario(BaseScenario):
         true_risks = state[ROW_CURRENT_RISK]
 
         if not self._model_fitted:
-            self._model.fit(true_labels, true_risks, rng, n_iterations=3)
+            self._model.fit_reference(true_risks, rng)
             self._model_fitted = True
 
         scores = self._model.predict(true_risks, rng)
@@ -232,7 +272,9 @@ class COMPOSERScenario(BaseScenario):
                 "n_active": int(active.sum()),
                 "n_flagged": int(labels.sum()),
                 "alert_rate": float(labels[active].mean()) if active.any() else 0.0,
-                "prevalence": float(true_labels[active].mean()) if active.any() else 0.0,
+                "prevalence": float(true_labels[active].mean())
+                if active.any()
+                else 0.0,
             },
         )
 
@@ -254,15 +296,20 @@ class COMPOSERScenario(BaseScenario):
         # Nurse response — higher for BPA vs. interruptive alert (nurse-facing)
         response_rate = max(
             self.floor_response_rate,
-            self.nurse_response_rate * np.exp(-self.fatigue_coefficient * self._cumulative_false_alerts)
+            self.nurse_response_rate
+            * np.exp(-self.fatigue_coefficient * self._cumulative_false_alerts),
         )
         responds = rng.random(len(flagged_indices)) < response_rate
         responded_indices = flagged_indices[responds]
 
         # Mark treated and bundle compliant
-        newly_treated = responded_indices[new_state[ROW_TREATED, responded_indices] == 0]
+        newly_treated = responded_indices[
+            new_state[ROW_TREATED, responded_indices] == 0
+        ]
         new_state[ROW_TREATED, newly_treated] = 1
-        new_state[ROW_BUNDLE_COMPLIANT, newly_treated] = 1  # Bundle initiated on first response
+        new_state[ROW_BUNDLE_COMPLIANT, newly_treated] = (
+            1  # Bundle initiated on first response
+        )
 
         # Also: some patients get bundle spontaneously (baseline compliance = 50%)
         # These are the counterfactual "treat anyway" patients
@@ -279,11 +326,18 @@ class COMPOSERScenario(BaseScenario):
                 "n_responded": int(len(responded_indices)),
                 "n_newly_treated": int(len(newly_treated)),
                 "response_rate": round(response_rate, 4),
-                "bundle_compliance_rate": round(float(new_state[ROW_BUNDLE_COMPLIANT].sum()) / max(n, 1), 4),
+                "bundle_compliance_rate": round(
+                    float(new_state[ROW_BUNDLE_COMPLIANT].sum()) / max(n, 1), 4
+                ),
             },
         )
 
     def measure(self, state, t):
+        """Measure occupancy (patient-time), not cases.
+
+        secondary['incident_onset'] counts new onsets this step. Mortality
+        is cumulative occupancy: read its final count rather than summing it.
+        """
         n = state.shape[1]
         events = (
             (state[ROW_STAGE] >= STAGE_SEPSIS) & (state[ROW_STAGE] < STAGE_DECEASED)
@@ -291,12 +345,15 @@ class COMPOSERScenario(BaseScenario):
         mortality = (state[ROW_STAGE] == STAGE_DECEASED).astype(float)
         bundle_compliance = state[ROW_BUNDLE_COMPLIANT].copy()
         race_labels = np.array(RACE_LABELS)[state[ROW_DEMO_RACE].astype(int)]
-        insurance_labels = np.array(INSURANCE_LABELS)[state[ROW_DEMO_INSURANCE].astype(int)]
+        insurance_labels = np.array(INSURANCE_LABELS)[
+            state[ROW_DEMO_INSURANCE].astype(int)
+        ]
 
         return Outcomes(
             events=events,
             entity_ids=np.arange(n),
             secondary={
+                "incident_onset": state[ROW_INCIDENT_ONSET].copy(),
                 "mortality": mortality,
                 "stage": state[ROW_STAGE].copy(),
                 "treated": state[ROW_TREATED].copy(),
@@ -307,8 +364,12 @@ class COMPOSERScenario(BaseScenario):
             },
             metadata={
                 "deceased": int((state[ROW_STAGE] == STAGE_DECEASED).sum()),
-                "mortality_rate": round(float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4),
-                "bundle_compliance_rate": round(float(state[ROW_BUNDLE_COMPLIANT].sum()) / max(1, n), 4),
+                "mortality_rate": round(
+                    float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4
+                ),
+                "bundle_compliance_rate": round(
+                    float(state[ROW_BUNDLE_COMPLIANT].sum()) / max(1, n), 4
+                ),
             },
         )
 

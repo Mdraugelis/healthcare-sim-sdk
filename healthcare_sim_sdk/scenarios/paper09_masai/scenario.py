@@ -104,7 +104,7 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         single_reader_sensitivity: float = 0.70,  # ASSUMED
         double_reader_sensitivity: float = 0.83,  # ASSUMED
         ai_single_reader_sensitivity: float = 0.90,  # ASSUMED
-        high_risk_threshold: float = 0.70,  # AI score >7/10
+        high_risk_threshold: float = 0.70,  # score percentile (top 30%)
         workload_reduction: float = 0.44,  # paper-derived
     ):
         super().__init__(time_config=time_config, seed=seed)
@@ -113,6 +113,8 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         self.single_reader_sensitivity = single_reader_sensitivity
         self.double_reader_sensitivity = double_reader_sensitivity
         self.ai_single_reader_sensitivity = ai_single_reader_sensitivity
+        if not 0 < high_risk_threshold < 1:
+            raise ValueError("high_risk_threshold is a percentile in (0,1)")
         self.high_risk_threshold = high_risk_threshold
         self.workload_reduction = workload_reduction
 
@@ -178,12 +180,12 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         n = len(true_risks)
 
         if not self._model_fitted:
-            true_labels = (
-                self.rng.prediction.random(n) < true_risks
-            ).astype(int)
+            true_labels = (self.rng.prediction.random(n) < true_risks).astype(int)
             self._model.fit(
-                true_labels, true_risks,
-                self.rng.prediction, n_iterations=5,
+                true_labels,
+                true_risks,
+                self.rng.prediction,
+                n_iterations=5,
             )
             self._model_fitted = True
 
@@ -199,14 +201,15 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         """AI triage: route high-risk to double reading, low-risk to single.
 
         In factual (AI) arm:
-          - Score > threshold: double reading (high sensitivity)
-          - Score <= threshold: single AI-assisted reading (reduced workload)
+          - Score at/above the configured percentile: double reading
+          - Remaining scores: single AI-assisted reading (reduced workload)
 
         Detection enhancement for high-score cases:
           Reading pathway encoded in state col 2.
         """
         scores = predictions.scores
-        high_risk_mask = scores >= self.high_risk_threshold
+        cut = np.quantile(scores, self.high_risk_threshold)
+        high_risk_mask = scores >= cut
         treated_indices = np.where(high_risk_mask)[0]
         low_risk_indices = np.where(~high_risk_mask)[0]
 
@@ -286,9 +289,8 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         stable_draws ^= stable_draws >> np.uint64(27)
         stable_draws *= np.uint64(0x94D049BB133111EB)
         stable_draws ^= stable_draws >> np.uint64(31)
-        stable_uniforms = (
-            (stable_draws >> np.uint64(11)).astype(np.float64)
-            * (1.0 / (1 << 53))
+        stable_uniforms = (stable_draws >> np.uint64(11)).astype(np.float64) * (
+            1.0 / (1 << 53)
         )
         true_cancer = (stable_uniforms < true_risks).astype(float)
         detected = (rng.random(n) < sensitivity).astype(float) * true_cancer
@@ -297,7 +299,8 @@ class MASAIScenario(BaseScenario[np.ndarray]):
         reads_per_patient = np.where(pathway == 1.0, 2.0, 1.0)
 
         age = (
-            self._demographics if self._demographics is not None
+            self._demographics
+            if self._demographics is not None
             else np.array(["Unknown"] * n)
         )
 

@@ -22,7 +22,10 @@ defaults:
 
 # ── Identification ──
 seed: 1000
-tier3_mode: cits_with_cf
+tier3_mode: cits_with_control
+# Calibrated on no-AI seeds 9000..9099 for <=10% alarms over 104 weeks
+# at n=1000; holdout rates and limitations are in the monitoring report.
+tier2_h: 96.0
 
 # ── Population ──
 population:
@@ -42,7 +45,7 @@ prediction_interval: 2
 
 # ── Model (may be overridden by regime as time-varying) ──
 model:
-  auc: 0.80
+  auc: 0.75
 
 # ── Policy (may be overridden by regime as time-varying) ──
 policy:

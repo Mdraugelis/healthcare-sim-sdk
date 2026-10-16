@@ -21,7 +21,12 @@ SDK note: RCT maps directly to branched counterfactual.
 
 import numpy as np
 
-from healthcare_sim_sdk.core.scenario import BaseScenario, Predictions, Interventions, Outcomes
+from healthcare_sim_sdk.core.scenario import (
+    BaseScenario,
+    Predictions,
+    Interventions,
+    Outcomes,
+)
 from healthcare_sim_sdk.ml.model import ControlledMLModel
 from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
 
@@ -29,7 +34,7 @@ from healthcare_sim_sdk.population.risk_distributions import beta_distributed_ri
 ROW_BASE_RISK = 0
 ROW_CURRENT_RISK = 1
 ROW_AR1_MOD = 2
-ROW_STAGE = 3         # 0=stable, 1=deteriorating, 2=severe, 3=deceased, 4=discharged
+ROW_STAGE = 3  # 0=stable, 1=deteriorating, 2=severe, 3=deceased, 4=discharged
 ROW_STAGE_TIMER = 4
 ROW_TREATED = 5
 ROW_TREATMENT_TIMER = 6
@@ -37,8 +42,9 @@ ROW_DEMO_RACE = 7
 ROW_DEMO_AGE = 8
 ROW_DEMO_RISK_MULT = 9
 ROW_LOS_REMAINING = 10
-ROW_RCT_ARM = 11       # 0=control, 1=intervention (randomized)
-N_ROWS = 12
+ROW_RCT_ARM = 11  # 0=control, 1=intervention (randomized)
+ROW_INCIDENT_ONSET = 12
+N_ROWS = 13
 
 STAGE_STABLE = 0
 STAGE_DETERIORATING = 1
@@ -63,23 +69,29 @@ class InSightRCTScenario(BaseScenario):
 
     unit_of_analysis = "patient_admission"
 
-    def __init__(self, time_config, seed=None,
-                 model_auc=0.78,              # [ASSUMED: not reported in paper]
-                 alert_threshold_percentile=85.0,
-                 treatment_effectiveness=0.58,  # calibrated to 58% mortality reduction
-                 sepsis_prevalence=0.213,        # paper control arm mortality ~ baseline
-                 intervention_ratio=0.50,):      # 50/50 RCT randomization
+    def __init__(
+        self,
+        time_config,
+        seed=None,
+        model_auc=0.78,  # [ASSUMED: not reported in paper]
+        alert_threshold_percentile=85.0,
+        treatment_effectiveness=0.58,  # calibrated to 58% mortality reduction
+        sepsis_prevalence=0.213,  # paper control arm mortality ~ baseline
+        intervention_ratio=0.50,
+    ):  # 50/50 RCT randomization
         super().__init__(time_config=time_config, seed=seed)
 
         self.model_auc = model_auc
         self.alert_threshold_percentile = alert_threshold_percentile
         self.treatment_effectiveness = treatment_effectiveness
-        self.sepsis_prevalence = sepsis_prevalence    # ICU population — high baseline risk
+        self.sepsis_prevalence = (
+            sepsis_prevalence  # ICU population — high baseline risk
+        )
         self.intervention_ratio = intervention_ratio
 
         # UCSF demographics (approximate)
         self.race_proportions = [0.42, 0.05, 0.15, 0.32, 0.06]  # [ASSUMED]
-        self.age_proportions = [0.15, 0.30, 0.35, 0.20]          # [ASSUMED]
+        self.age_proportions = [0.15, 0.30, 0.35, 0.20]  # [ASSUMED]
         self.race_risk_multipliers = [1.0, 1.8, 0.9, 0.8, 1.0]
         self.age_risk_multipliers = [0.5, 1.0, 1.8, 2.5]
 
@@ -88,18 +100,18 @@ class InSightRCTScenario(BaseScenario):
 
         # ICU LOS: paper reports 13.0 days control, 10.3 days intervention
         # Timestep = 4h → 13 days = 78 timesteps
-        self.mean_los_timesteps = 52   # ~8.7 days mean (mix of intervention/control)
+        self.mean_los_timesteps = 52  # ~8.7 days mean (mix of intervention/control)
         self.los_std_timesteps = 20
 
         # ICU stage transitions — higher mortality than ward
-        self.prog_stable = 0.020       # faster deterioration in ICU
+        self.prog_stable = 0.020  # faster deterioration in ICU
         self.prog_deteriorating = 0.080
         self.mort_deteriorating = 0.008
-        self.mort_severe = 0.045       # high ICU mortality calibrated to 21.3% baseline
+        self.mort_severe = 0.045  # high ICU mortality calibrated to 21.3% baseline
 
         # Good clinician response in ICU context (RCT with dedicated monitoring)
         self.initial_response_rate = 0.85
-        self.fatigue_coefficient = 0.0005    # low fatigue in research protocol
+        self.fatigue_coefficient = 0.0005  # low fatigue in research protocol
 
         self._model = ControlledMLModel(
             mode="discrimination",
@@ -109,6 +121,8 @@ class InSightRCTScenario(BaseScenario):
         self._cumulative_false_alerts = 0
 
     def create_population(self, n_entities):
+        self._model_fitted = False
+        self._cumulative_false_alerts = 0
         rng = self.rng.population
         n = n_entities
         state = np.zeros((N_ROWS, n))
@@ -121,15 +135,23 @@ class InSightRCTScenario(BaseScenario):
         )
         state[ROW_AR1_MOD] = 1.0
 
-        state[ROW_DEMO_RACE] = rng.choice(len(RACE_LABELS), size=n, p=self.race_proportions).astype(float)
-        state[ROW_DEMO_AGE] = rng.choice(len(AGE_LABELS), size=n, p=self.age_proportions).astype(float)
+        state[ROW_DEMO_RACE] = rng.choice(
+            len(RACE_LABELS), size=n, p=self.race_proportions
+        ).astype(float)
+        state[ROW_DEMO_AGE] = rng.choice(
+            len(AGE_LABELS), size=n, p=self.age_proportions
+        ).astype(float)
 
-        race_mult = np.array(self.race_risk_multipliers)[state[ROW_DEMO_RACE].astype(int)]
+        race_mult = np.array(self.race_risk_multipliers)[
+            state[ROW_DEMO_RACE].astype(int)
+        ]
         age_mult = np.array(self.age_risk_multipliers)[state[ROW_DEMO_AGE].astype(int)]
         state[ROW_DEMO_RISK_MULT] = race_mult * age_mult
 
         state[ROW_CURRENT_RISK] = np.clip(
-            state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT], 0.001, 0.99
+            state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
+            0.001,
+            0.99,
         )
         state[ROW_STAGE] = STAGE_STABLE
         state[ROW_STAGE_TIMER] = 0
@@ -153,12 +175,22 @@ class InSightRCTScenario(BaseScenario):
         new_mods = self.ar1_rho * state[ROW_AR1_MOD] + (1 - self.ar1_rho) * 1.0 + noise
         new_state[ROW_AR1_MOD] = np.clip(new_mods, 0.5, 2.0)
         new_state[ROW_CURRENT_RISK] = np.clip(
-            state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT], 0.001, 0.99
+            state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
+            0.001,
+            0.99,
         )
 
-        tx_factor = np.where(state[ROW_TREATED] == 1, 1.0 - self.treatment_effectiveness, 1.0)
-        mean_risk = float(new_state[ROW_CURRENT_RISK][active].mean()) if active.any() else self.sepsis_prevalence
-        risk_scale = np.clip(new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0)
+        tx_factor = np.where(
+            state[ROW_TREATED] == 1, 1.0 - self.treatment_effectiveness, 1.0
+        )
+        mean_risk = (
+            float(new_state[ROW_CURRENT_RISK][active].mean())
+            if active.any()
+            else self.sepsis_prevalence
+        )
+        risk_scale = np.clip(
+            new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0
+        )
 
         draws = rng.random(n)
         stable_mask = active & (state[ROW_STAGE] == STAGE_STABLE)
@@ -168,43 +200,56 @@ class InSightRCTScenario(BaseScenario):
 
         draws2 = rng.random(n)
         det_mask = active & (state[ROW_STAGE] == STAGE_DETERIORATING)
-        progressed2 = det_mask & (draws2 < self.prog_deteriorating * risk_scale * tx_factor)
+        progressed2 = det_mask & (
+            draws2 < self.prog_deteriorating * risk_scale * tx_factor
+        )
         new_state[ROW_STAGE, progressed2] = STAGE_SEVERE
         new_state[ROW_STAGE_TIMER, progressed2] = 0
 
         mort_draws = rng.random(n)
         deceased = (
-            (det_mask & ~progressed2 & (mort_draws < self.mort_deteriorating)) |
-            (active & (state[ROW_STAGE] == STAGE_SEVERE) & (mort_draws < self.mort_severe))
+            det_mask & ~progressed2 & (mort_draws < self.mort_deteriorating)
+        ) | (
+            active
+            & (state[ROW_STAGE] == STAGE_SEVERE)
+            & (mort_draws < self.mort_severe)
         )
         new_state[ROW_STAGE, deceased] = STAGE_DECEASED
 
         new_state[ROW_LOS_REMAINING] = np.maximum(state[ROW_LOS_REMAINING] - 1, 0)
         discharge_eligible = (
-            active & ~deceased
+            active
+            & ~deceased
             & (new_state[ROW_LOS_REMAINING] <= 0)
             & (state[ROW_STAGE] == STAGE_STABLE)
         )
         new_state[ROW_STAGE, discharge_eligible] = STAGE_DISCHARGED
 
         still_active = new_state[ROW_STAGE] < STAGE_DECEASED
-        new_state[ROW_STAGE_TIMER] = np.where(still_active, new_state[ROW_STAGE_TIMER] + 1, state[ROW_STAGE_TIMER])
-        new_state[ROW_TREATMENT_TIMER] = np.where(
-            (state[ROW_TREATED] == 1) & still_active, state[ROW_TREATMENT_TIMER] + 1, state[ROW_TREATMENT_TIMER]
+        new_state[ROW_STAGE_TIMER] = np.where(
+            still_active, new_state[ROW_STAGE_TIMER] + 1, state[ROW_STAGE_TIMER]
         )
+        new_state[ROW_TREATMENT_TIMER] = np.where(
+            (state[ROW_TREATED] == 1) & still_active,
+            state[ROW_TREATMENT_TIMER] + 1,
+            state[ROW_TREATMENT_TIMER],
+        )
+        # Record the actual transition, including a same-step discharge.
+        new_state[ROW_INCIDENT_ONSET] = progressed.astype(float)
         return new_state
 
     def predict(self, state, t):
         rng = self.rng.prediction
-        n = state.shape[1]
+        state.shape[1]
 
         true_labels = (
-            (state[ROW_STAGE] >= STAGE_DETERIORATING) & (state[ROW_STAGE] < STAGE_DECEASED)
+            (state[ROW_STAGE] >= STAGE_DETERIORATING)
+            & (state[ROW_STAGE] < STAGE_DECEASED)
         ).astype(int)
         true_risks = state[ROW_CURRENT_RISK]
 
         if not self._model_fitted:
-            self._model.fit(true_labels, true_risks, rng, n_iterations=3)
+            self._model.fit_reference(true_risks, rng)
             self._model_fitted = True
 
         scores = self._model.predict(true_risks, rng)
@@ -241,12 +286,15 @@ class InSightRCTScenario(BaseScenario):
 
         response_rate = max(
             0.30,
-            self.initial_response_rate * np.exp(-self.fatigue_coefficient * self._cumulative_false_alerts)
+            self.initial_response_rate
+            * np.exp(-self.fatigue_coefficient * self._cumulative_false_alerts),
         )
         responds = rng.random(len(flagged_indices)) < response_rate
         responded_indices = flagged_indices[responds]
 
-        newly_treated = responded_indices[new_state[ROW_TREATED, responded_indices] == 0]
+        newly_treated = responded_indices[
+            new_state[ROW_TREATED, responded_indices] == 0
+        ]
         new_state[ROW_TREATED, newly_treated] = 1
         new_state[ROW_TREATMENT_TIMER, newly_treated] = 0
 
@@ -264,9 +312,15 @@ class InSightRCTScenario(BaseScenario):
         )
 
     def measure(self, state, t):
+        """Measure occupancy (patient-time), not cases.
+
+        secondary['incident_onset'] counts new onsets this step. Mortality
+        is cumulative occupancy: read its final count rather than summing it.
+        """
         n = state.shape[1]
         events = (
-            (state[ROW_STAGE] >= STAGE_DETERIORATING) & (state[ROW_STAGE] < STAGE_DECEASED)
+            (state[ROW_STAGE] >= STAGE_DETERIORATING)
+            & (state[ROW_STAGE] < STAGE_DECEASED)
         ).astype(float)
         mortality = (state[ROW_STAGE] == STAGE_DECEASED).astype(float)
         race_labels = np.array(RACE_LABELS)[state[ROW_DEMO_RACE].astype(int)]
@@ -275,6 +329,7 @@ class InSightRCTScenario(BaseScenario):
             events=events,
             entity_ids=np.arange(n),
             secondary={
+                "incident_onset": state[ROW_INCIDENT_ONSET].copy(),
                 "mortality": mortality,
                 "stage": state[ROW_STAGE].copy(),
                 "treated": state[ROW_TREATED].copy(),
@@ -284,7 +339,9 @@ class InSightRCTScenario(BaseScenario):
             },
             metadata={
                 "deceased": int((state[ROW_STAGE] == STAGE_DECEASED).sum()),
-                "mortality_rate": round(float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4),
+                "mortality_rate": round(
+                    float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4
+                ),
             },
         )
 

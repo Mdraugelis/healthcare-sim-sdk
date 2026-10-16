@@ -48,12 +48,18 @@ banned_patterns:
     allowed_in:
       - healthcare_sim_sdk/core/rng.py
       - tests/
+      - scripts/validate_its_estimator.py  # independent estimator calibration
+    annotation_exemptions:
+      - numpy.random.Generator
+      - numpy.random.SeedSequence
     message: >
       All randomness must flow through RNGPartitioner streams.
       Use self.rng.temporal, self.rng.population, etc.
 
   - pattern: "import random"
-    allowed_in: []
+    allowed_in:
+      - tests/
+      - scripts/validate_its_estimator.py
     message: >
       Do not use Python stdlib random. Use RNGPartitioner streams.
 
@@ -122,3 +128,8 @@ analytical_first_pass:
     - Explicit list of questions the analytical pass cannot answer
   reference_protocol: docs/analytical_first_pass.md
   worked_example: docs/analytical_first_pass.md
+
+behavioral_enforcement:
+  purity: tests/integration/test_all_scenario_contracts.py
+  draw_count_invariance: tests/integration/test_all_scenario_contracts.py
+  note: Static hooks check structure; behavioral invariants require execution.

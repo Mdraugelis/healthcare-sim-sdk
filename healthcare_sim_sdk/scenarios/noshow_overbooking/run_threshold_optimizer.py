@@ -30,7 +30,6 @@ Baseline only (9 runs):
         model.type=baseline model.threshold=0.50
 """
 
-import json
 import logging
 import time
 from pathlib import Path
@@ -42,14 +41,17 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from healthcare_sim_sdk.core.engine import (
-    BranchedSimulationEngine, CounterfactualMode,
+    BranchedSimulationEngine,
+    CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
 from healthcare_sim_sdk.ml.performance import (
-    auc_score, confusion_matrix_metrics,
+    auc_score,
+    confusion_matrix_metrics,
 )
 from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
-    ClinicConfig, RealisticNoShowScenario,
+    ClinicConfig,
+    RealisticNoShowScenario,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,9 +106,7 @@ def main(cfg: DictConfig) -> float:
         model_type=model_type,
         model_auc=model_auc,
         overbooking_threshold=threshold,
-        max_individual_overbooks=(
-            cfg.policy.max_individual_overbooks
-        ),
+        max_individual_overbooks=(cfg.policy.max_individual_overbooks),
         overbooking_policy="threshold",
         clinic_config=cc,
         ar1_rho=cfg.policy.ar1_rho,
@@ -115,7 +115,8 @@ def main(cfg: DictConfig) -> float:
 
     t0 = time.time()
     results = BranchedSimulationEngine(
-        sc, CounterfactualMode.NONE,
+        sc,
+        CounterfactualMode.NONE,
     ).run(cfg.n_patients)
     sim_time = time.time() - t0
 
@@ -145,22 +146,20 @@ def main(cfg: DictConfig) -> float:
     ya = np.concatenate(all_a) if all_a else np.array([])
 
     auc = float(auc_score(ya, pa)) if len(pa) > 100 else 0
-    cm = (
-        confusion_matrix_metrics(ya, pa, threshold)
-        if len(pa) > 100 else {}
-    )
+    cm = confusion_matrix_metrics(ya, pa, threshold) if len(pa) > 100 else {}
 
     # Burden (re-run for patient state)
     sc2 = RealisticNoShowScenario(
-        time_config=tc, seed=cfg.seed,
+        time_config=tc,
+        seed=cfg.seed,
         n_patients=cfg.n_patients,
         base_noshow_rate=cfg.clinic.noshow_rate,
-        model_type=model_type, model_auc=model_auc,
+        model_type=model_type,
+        model_auc=model_auc,
         overbooking_threshold=threshold,
-        max_individual_overbooks=(
-            cfg.policy.max_individual_overbooks
-        ),
-        overbooking_policy="threshold", clinic_config=cc,
+        max_individual_overbooks=(cfg.policy.max_individual_overbooks),
+        overbooking_policy="threshold",
+        clinic_config=cc,
         ar1_rho=cfg.policy.ar1_rho,
         ar1_sigma=cfg.policy.ar1_sigma,
     )
@@ -169,16 +168,11 @@ def main(cfg: DictConfig) -> float:
         st = sc2.step(st, t)
         pr = sc2.predict(st, t)
         st, _ = sc2.intervene(st, pr, t)
-    max_burden = max(
-        p.n_times_overbooked for p in st.patients.values()
-    )
+    max_burden = max(p.n_times_overbooked for p in st.patients.values())
 
     # -- Build metrics dict --
     metrics = {
-        "archetype": (
-            f"NS{cfg.clinic.noshow_rate:.0%}"
-            f"_Util{cfg.clinic.utilization}%"
-        ),
+        "archetype": (f"NS{cfg.clinic.noshow_rate:.0%}_Util{cfg.clinic.utilization}%"),
         "noshow_config": cfg.clinic.noshow_rate,
         "util_level": cfg.clinic.utilization,
         "ob_cap": up["ob_cap"],
@@ -192,10 +186,7 @@ def main(cfg: DictConfig) -> float:
         "specificity": cm.get("specificity", 0),
         "flag_rate": cm.get("flag_rate", 0),
         "utilization": float(np.mean(uv)) if uv else 0,
-        "collision_rate": (
-            meta["total_collisions"] / max(n_ob, 1)
-            if n_ob > 0 else 0
-        ),
+        "collision_rate": (meta["total_collisions"] / max(n_ob, 1) if n_ob > 0 else 0),
         "collisions": meta["total_collisions"],
         "overbooked": n_ob,
         "ob_per_week": n_ob / max(cfg.n_days / 7, 1),
@@ -204,20 +195,17 @@ def main(cfg: DictConfig) -> float:
         "avg_wait_days": meta["avg_wait_days"],
         "max_burden": max_burden,
         "mean_burden": meta["mean_overbooking_burden"],
-        "noshow_observed": (
-            meta["total_noshows"] / max(n_res, 1)
-        ),
+        "noshow_observed": (meta["total_noshows"] / max(n_res, 1)),
         "sim_seconds": sim_time,
     }
 
     # Save via lifecycle
     from healthcare_sim_sdk.experiments.lifecycle import (
-        save_experiment, register_experiment,
+        save_experiment,
+        register_experiment,
     )
-    out_dir = Path(
-        hydra.core.hydra_config.HydraConfig.get()
-        .runtime.output_dir
-    )
+
+    out_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
     config_dict = OmegaConf.to_container(cfg, resolve=True)
     config_dict["timestamp"] = out_dir.name
     config_dict["scenario"] = "noshow_overbooking"
@@ -230,8 +218,7 @@ def main(cfg: DictConfig) -> float:
         logger.warning("Catalog registration failed: %s", e)
 
     logger.info(
-        "Result: util=%.1f%% coll=%.1f%% WL=%d burden=%d "
-        "(%.1fs)",
+        "Result: util=%.1f%% coll=%.1f%% WL=%d burden=%d (%.1fs)",
         metrics["utilization"] * 100,
         metrics["collision_rate"] * 100,
         metrics["waitlist"],

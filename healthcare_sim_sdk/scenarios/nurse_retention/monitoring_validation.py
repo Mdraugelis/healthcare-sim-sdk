@@ -29,7 +29,6 @@ All configs in configs/monitoring/ relative to this file.
 import json
 import logging
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict
 
@@ -115,7 +114,7 @@ def _build_retention_config(cfg: DictConfig) -> RetentionConfig:
         prediction_interval=int(
             cfg.get("prediction_interval", 2),
         ),
-        model_auc=_resolve_tvp(model.get("auc", 0.80)),
+        model_auc=_resolve_tvp(model.get("auc", 0.75)),
         max_interventions_per_manager_per_week=_resolve_tvp(
             policy.get("max_interventions_per_week", 6),
         ),
@@ -136,10 +135,12 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
     """Run one (regime, seed) cell and return metrics + output path."""
     regime = str(cfg.get("regime", "unnamed"))
     seed = int(cfg.get("seed", 42))
-    tier3_mode = str(cfg.get("tier3_mode", "cits_with_cf"))
+    tier3_mode = str(cfg.get("tier3_mode", "cits_with_control"))
 
     logger.info(
-        "Starting regime=%s seed=%d", regime, seed,
+        "Starting regime=%s seed=%d",
+        regime,
+        seed,
     )
     t0 = time.time()
 
@@ -149,7 +150,8 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
 
     # Run the simulation
     results = BranchedSimulationEngine(
-        scenario, CounterfactualMode.BRANCHED,
+        scenario,
+        CounterfactualMode.BRANCHED,
     ).run(rc.n_nurses)
 
     sim_time = time.time() - t0
@@ -160,8 +162,18 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
         regime=regime,
         seed=seed,
         tier3_mode=tier3_mode,
+        tier2_h=float(cfg.get("tier2_h", 96.0)),
     )
-    mon_run = harness.run_from_results(results, rc)
+    # An independent no-AI site provides observable control noise. The
+    # seed is disjoint; the oracle branch is retained only for grading.
+    from dataclasses import replace
+
+    control_config = replace(rc, manager_adherence_rate=0.0)
+    control = BranchedSimulationEngine(
+        NurseRetentionScenario(config=control_config, seed=seed + 1000000),
+        CounterfactualMode.BRANCHED,
+    ).run(rc.n_nurses)
+    mon_run = harness.run_from_results(results, rc, control_results=control)
     harness_time = time.time() - t1
 
     # Extract key metrics for the lifecycle pipeline
@@ -180,9 +192,7 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
 
     # Tier 3 latest estimate
     tier3_latest = (
-        mon_run.tier3_estimates[-1].to_dict()
-        if mon_run.tier3_estimates
-        else None
+        mon_run.tier3_estimates[-1].to_dict() if mon_run.tier3_estimates else None
     )
 
     # First detection per tier (if any)
@@ -207,18 +217,10 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
         "tier2_n_events": len(tier2_events),
         "tier3_n_events": len(tier3_events),
         "tier4_n_events": len(tier4_events),
-        "tier1_first_detection_week": (
-            first_t1.week if first_t1 else None
-        ),
-        "tier2_first_detection_week": (
-            first_t2.week if first_t2 else None
-        ),
-        "tier3_first_detection_week": (
-            first_t3.week if first_t3 else None
-        ),
-        "tier4_first_detection_week": (
-            first_t4.week if first_t4 else None
-        ),
+        "tier1_first_detection_week": (first_t1.week if first_t1 else None),
+        "tier2_first_detection_week": (first_t2.week if first_t2 else None),
+        "tier3_first_detection_week": (first_t3.week if first_t3 else None),
+        "tier4_first_detection_week": (first_t4.week if first_t4 else None),
         "tier3_latest_estimate": tier3_latest,
     }
 
@@ -258,12 +260,18 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
         "(sim=%.1fs, harness=%.1fs) "
         "departures: F=%d CF=%d saved=%d "
         "events: T1=%d T2=%d T3=%d T4=%d",
-        regime, seed, total_time,
-        sim_time, harness_time,
-        f_departures, cf_departures,
+        regime,
+        seed,
+        total_time,
+        sim_time,
+        harness_time,
+        f_departures,
+        cf_departures,
         cf_departures - f_departures,
-        len(tier1_events), len(tier2_events),
-        len(tier3_events), len(tier4_events),
+        len(tier1_events),
+        len(tier2_events),
+        len(tier3_events),
+        len(tier4_events),
     )
 
     return metrics
@@ -277,15 +285,16 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
 def main(cfg: DictConfig) -> None:
     """Entry point for Hydra-driven monitoring validation runs."""
     logger.info(
-        "Config:\n%s", OmegaConf.to_yaml(cfg),
+        "Config:\n%s",
+        OmegaConf.to_yaml(cfg),
     )
     metrics = run_one(cfg)
 
     # Print summary to console
     print(
-        f"\n{'='*60}\n"
+        f"\n{'=' * 60}\n"
         f"REGIME: {metrics['regime']}  SEED: {metrics['seed']}\n"
-        f"{'='*60}\n"
+        f"{'=' * 60}\n"
         f"Departures: F={metrics['factual_departures']}  "
         f"CF={metrics['counterfactual_departures']}  "
         f"saved={metrics['departures_prevented']}\n"

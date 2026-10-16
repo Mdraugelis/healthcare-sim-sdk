@@ -13,6 +13,7 @@ Unit of analysis: appointment
 State: NoShowState dataclass (patient dict + schedule list + counters)
 """
 
+import copy
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -56,6 +57,7 @@ AGE_BAND = {
 @dataclass
 class ClinicConfig:
     """Configuration for a clinic."""
+
     name: str = "Primary Care"
     n_providers: int = 8
     slots_per_provider_per_day: int = 12
@@ -67,6 +69,7 @@ class ClinicConfig:
 @dataclass
 class Patient:
     """Persistent patient attributes across appointments."""
+
     patient_id: int
     base_noshow_probability: float
     n_past_appointments: int = 0
@@ -88,6 +91,7 @@ class Patient:
 @dataclass
 class AppointmentSlot:
     """A single appointment slot in the daily schedule."""
+
     slot_id: int
     day: int
     provider_id: int
@@ -112,6 +116,7 @@ class NoShowState:
     (show/no-show determined). `schedule` holds the current day's
     slots for predict/intervene. measure() reports from resolved_slots.
     """
+
     day: int
     patients: Dict[int, Patient]
     schedule: List[AppointmentSlot]  # current day (for predict/intervene)
@@ -219,9 +224,7 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         patients: Dict[int, Patient] = {}
         for i in range(self.n_patients):
             past_appts = int(rng.poisson(8))
-            past_noshows = int(rng.binomial(
-                max(past_appts, 0), base_probs[i]
-            ))
+            past_noshows = int(rng.binomial(max(past_appts, 0), base_probs[i]))
             patients[i] = Patient(
                 patient_id=i,
                 base_noshow_probability=float(base_probs[i]),
@@ -237,14 +240,15 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         # The temporal stream must start at position 0 for both
         # factual and counterfactual branches (fork gives fresh streams).
         schedule = _generate_schedule(
-            patients, day=0, clinic_config=cc,
+            patients,
+            day=0,
+            clinic_config=cc,
             noshow_variability=self.noshow_variability,
             rng=self.rng.population,
         )
 
         overbook_budget = {
-            pid: cc.max_overbook_per_provider
-            for pid in range(cc.n_providers)
+            pid: cc.max_overbook_per_provider for pid in range(cc.n_providers)
         }
 
         return NoShowState(
@@ -262,22 +266,26 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         PURITY: uses only self.rng.temporal and state.
         """
         rng = self.rng.temporal
+        state = copy.deepcopy(state)
+        # Draw for every slot on both branches, including unused overbook
+        # coins, before applying eligibility masks. Schedule draws stay aligned.
+        n_slots = len(state.schedule)
+        original_coins = rng.random(n_slots)
+        overbook_noise = rng.normal(0, self.noshow_variability, n_slots)
+        overbook_coins = rng.random(n_slots)
 
-        for slot in state.schedule:
+        for idx, slot in enumerate(state.schedule):
             if slot.resolved:
                 continue
 
-            slot.original_showed = (
-                rng.random() >= slot.true_noshow_prob
-            )
+            slot.original_showed = original_coins[idx] >= slot.true_noshow_prob
 
-            if (slot.is_overbooked
-                    and slot.overbooked_patient_id is not None):
+            if slot.is_overbooked and slot.overbooked_patient_id is not None:
                 ob_patient = state.patients[slot.overbooked_patient_id]
                 ob_prob = ob_patient.base_noshow_probability
-                ob_prob += rng.normal(0, self.noshow_variability)
+                ob_prob += overbook_noise[idx]
                 ob_prob = float(np.clip(ob_prob, 0.01, 0.80))
-                slot.overbooked_showed = (rng.random() >= ob_prob)
+                slot.overbooked_showed = overbook_coins[idx] >= ob_prob
 
                 if slot.original_showed and slot.overbooked_showed:
                     slot.wait_time_minutes = float(
@@ -303,9 +311,10 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         # Save resolved slots for measure() to report on
         state.resolved_slots = list(state.schedule)
 
-        state.day = t
+        state.day = t + 1
         state.schedule = _generate_schedule(
-            state.patients, day=t,
+            state.patients,
+            day=t + 1,
             clinic_config=state.clinic_config,
             noshow_variability=self.noshow_variability,
             rng=rng,
@@ -320,36 +329,31 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
 
     def predict(self, state: NoShowState, t: int) -> Predictions:
         """Generate predictions using configured model type."""
-        true_probs = np.array([
-            s.true_noshow_prob for s in state.schedule
-        ])
+        true_probs = np.array([s.true_noshow_prob for s in state.schedule])
 
         if self.model_type == "baseline":
             # Use each patient's historical no-show rate
-            predicted = np.array([
-                state.patients[s.patient_id].historical_noshow_rate
-                for s in state.schedule
-            ])
-            # Add small noise for variability
-            noise = self.rng.prediction.normal(
-                0, 0.02, len(predicted)
+            predicted = np.array(
+                [
+                    state.patients[s.patient_id].historical_noshow_rate
+                    for s in state.schedule
+                ]
             )
+            # Add small noise for variability
+            noise = self.rng.prediction.normal(0, 0.02, len(predicted))
             predicted = np.clip(predicted + noise, 0.01, 0.99)
         else:
             # Fit model on first prediction call
             if not self._model_fitted:
-                true_labels = (
-                    self.rng.prediction.random(len(true_probs))
-                    < true_probs
-                ).astype(int)
-                self._model.fit(
-                    true_labels, true_probs,
-                    self.rng.prediction, n_iterations=3,
+                reference_risks = np.array(
+                    [p.base_noshow_probability for p in state.patients.values()]
                 )
+                self._model.fit_reference(reference_risks, self.rng.prediction)
                 self._model_fitted = True
 
             predicted = self._model.predict(
-                true_probs, self.rng.prediction,
+                true_probs,
+                self.rng.prediction,
             )
 
         for i, slot in enumerate(state.schedule):
@@ -365,10 +369,14 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         )
 
     def intervene(
-        self, state: NoShowState, predictions: Predictions, t: int,
+        self,
+        state: NoShowState,
+        predictions: Predictions,
+        t: int,
     ) -> tuple[NoShowState, Interventions]:
         """Overbook high no-show probability slots with guardrails."""
         rng = self.rng.intervention
+        state = copy.deepcopy(state)
         overbooked_indices: List[int] = []
 
         scored = sorted(
@@ -387,7 +395,8 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
                 continue
 
             candidates = [
-                p for pid, p in state.patients.items()
+                p
+                for pid, p in state.patients.items()
                 if pid not in scheduled_ids
                 and p.n_times_overbooked < self.max_individual_overbooks
             ]
@@ -405,6 +414,9 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         return state, Interventions(
             treated_indices=np.array(overbooked_indices, dtype=int),
             metadata={
+                "treated_entity_ids": np.array(
+                    [state.schedule[i].slot_id for i in overbooked_indices], dtype=int
+                ),
                 "n_overbooked": len(overbooked_indices),
                 "overbooking_rate": (
                     len(overbooked_indices) / max(len(state.schedule), 1)
@@ -419,46 +431,29 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
         appointments). On day 0 before any resolution, reports
         from the current schedule (unresolved).
         """
-        slots = (
-            state.resolved_slots if state.resolved_slots
-            else state.schedule
-        )
+        slots = state.resolved_slots if state.resolved_slots else state.schedule
 
         slot_ids = np.array([s.slot_id for s in slots])
-        noshows = np.array([
-            0.0 if s.original_showed else 1.0
-            for s in slots
-        ])
+        noshows = np.array([0.0 if s.original_showed else 1.0 for s in slots])
 
-        utilized = np.array([
-            1.0 if s.original_showed
-            else (
-                1.0 if s.is_overbooked and s.overbooked_showed
-                else 0.0
-            )
-            for s in slots
-        ])
+        utilized = np.array(
+            [
+                1.0
+                if s.original_showed
+                else (1.0 if s.is_overbooked and s.overbooked_showed else 0.0)
+                for s in slots
+            ]
+        )
 
-        wait_times = np.array([
-            s.wait_time_minutes for s in slots
-        ])
+        wait_times = np.array([s.wait_time_minutes for s in slots])
 
-        patient_ids = np.array([
-            s.patient_id for s in slots
-        ])
+        patient_ids = np.array([s.patient_id for s in slots])
 
-        race = np.array([
-            state.patients[s.patient_id].race_ethnicity
-            for s in slots
-        ])
-        insurance = np.array([
-            state.patients[s.patient_id].insurance_type
-            for s in slots
-        ])
-        age_band = np.array([
-            state.patients[s.patient_id].age_band
-            for s in slots
-        ])
+        race = np.array([state.patients[s.patient_id].race_ethnicity for s in slots])
+        insurance = np.array(
+            [state.patients[s.patient_id].insurance_type for s in slots]
+        )
+        age_band = np.array([state.patients[s.patient_id].age_band for s in slots])
 
         return Outcomes(
             events=noshows,
@@ -478,10 +473,9 @@ class NoShowOverbookingScenario(BaseScenario["NoShowState"]):
                 "total_overbooked_showed": state.total_overbooked_showed,
                 "total_noshows": state.total_noshows,
                 "total_resolved": state.total_slots_resolved,
-                "mean_overbooking_burden": float(np.mean([
-                    p.n_times_overbooked
-                    for p in state.patients.values()
-                ])),
+                "mean_overbooking_burden": float(
+                    np.mean([p.n_times_overbooked for p in state.patients.values()])
+                ),
             },
         )
 
@@ -507,16 +501,16 @@ def _generate_schedule(
     schedule: List[AppointmentSlot] = []
     for i, pid in enumerate(patient_ids):
         patient = patients[pid]
-        appt_prob = patient.base_noshow_probability + rng.normal(
-            0, noshow_variability
-        )
+        appt_prob = patient.base_noshow_probability + rng.normal(0, noshow_variability)
         appt_prob = float(np.clip(appt_prob, 0.01, 0.80))
 
-        schedule.append(AppointmentSlot(
-            slot_id=day * 10000 + i,
-            day=day,
-            provider_id=i % cc.n_providers,
-            patient_id=pid,
-            true_noshow_prob=appt_prob,
-        ))
+        schedule.append(
+            AppointmentSlot(
+                slot_id=day * 10000 + i,
+                day=day,
+                provider_id=i % cc.n_providers,
+                patient_id=pid,
+                true_noshow_prob=appt_prob,
+            )
+        )
     return schedule

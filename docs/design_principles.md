@@ -1,5 +1,7 @@
 # Healthcare Intervention Simulation SDK: Design Principles
 
+> Numerical proof-point claims below are historical. The four revised reports in `reports/` supersede results produced before label-free scoring and the ADD fixes.
+
 > A design principles document for the `healthcare-sim-sdk`. Explains why the SDK is built the way it is, what it enables, what it deliberately excludes, and the lessons we learned building and validating it against 30 published healthcare AI deployment papers.
 
 ---
@@ -97,9 +99,15 @@ Implementation: `BranchedSimulationEngine` maintains two state trajectories, and
 
 The `step()` method — the function that evolves state from one timestep to the next — must be a pure function of `(state, t, rng.temporal)`. No side effects. No external mutable state. No reading from RNG streams other than `temporal`. No attribute access on `self` beyond reading configuration.
 
-This is what makes branch synchronization mathematically valid. If `step()` were allowed to read or write shared state, the factual and counterfactual branches could desynchronize silently. A test called `test_branched_vs_none_identity` verifies this property directly: running the factual branch of a branched simulation must produce identical outcomes to running the same scenario with no counterfactual branch, on every timestep. If the test fails, `step()` is impure.
+Purity is necessary for branch synchronization. A second condition is required:
+`step()` and `measure()` must consume shared temporal/outcomes streams in a
+state-independent order and count. Draw full-population vectors before masking;
+never shuffle state-dependent groups directly. If `step()` were allowed to read or write shared state, the factual and counterfactual branches could desynchronize silently. A test called `test_branched_vs_none_identity` verifies this property directly: running the factual branch of a branched simulation must produce identical outcomes to running the same scenario with no counterfactual branch, on every timestep. If the test fails, `step()` is impure.
 
-The purity contract is machine-enforced. It is what distinguishes the SDK from an ad hoc simulation script.
+Purity and draw-count invariance are behaviorally enforced by the all-scenario
+contract matrix in `tests/integration/test_all_scenario_contracts.py`. The
+BRANCHED-versus-NONE test checks non-interference; the stream-position audit checks
+coupling. Neither substitutes for the other. Static hooks cannot prove purity.
 
 ### 5. Unit-of-Analysis Agnosticism
 
@@ -123,7 +131,10 @@ When we first built the sepsis scenario, the counterfactual branch assumed nobod
 
 The fix: model standard-of-care sepsis detection as a per-patient delay drawn from `Beta(2, 5) × 24h` (right-skewed, mean ~6.9h, matching CMS SEP-1 compliance). Baseline detection runs on *both* branches. The AI only gets credit for improvement *over* baseline care.
 
-With this correction, the TREWS replication produces 4.27pp mortality reduction among septic patients (95% CI: 3.30-5.56 across 30 seeds), with the published 3.3pp falling within the CI. The TREWS paper moved from PARTIALLY_REPRODUCED to REPRODUCED in the 30-paper audit.
+Earlier numerical replication claims predate label-free fitting and are withdrawn.
+See the re-run in `reports/trews_baseline_detection_sweep.md`. A risk-only score
+model does not reproduce onset-specific clinical detection timing, so numerical
+agreement alone would not establish a faithful TREWS replication.
 
 This is more than a parameter adjustment. It is a principle: **the counterfactual in a well-designed healthcare simulation must reflect what would actually happen without the AI, including competent standard care.** Any scenario where "no AI" means "no treatment" is asking the wrong question.
 
@@ -131,12 +142,14 @@ A related principle: **time matters.** We also added Kumar time-dependent treatm
 
 ### 7. Machine-Checked Invariants
 
-Architectural guarantees are encoded in `.claude/invariants.yaml` and enforced by pre-commit hooks. No reliance on human discipline:
+Structural invariants are encoded in `.claude/invariants.yaml` and checked by
+pre-commit hooks. Behavioral invariants require the test suite; CI runs the tests
+and all example notebooks:
 
 - **Protected files:** `core/scenario.py`, `core/engine.py`, `core/rng.py`, `core/results.py` require explicit review. Scenario developers should never need to touch these.
 - **Banned patterns:** bare `np.random` and `import random` are blocked everywhere except `core/rng.py` and tests. All randomness must flow through RNGPartitioner streams.
 - **Structural checks:** the 5-method contract is verified — required abstract methods (`create_population`, `step`, `predict`, `intervene`, `measure`) must be implemented.
-- **Counterfactual isolation:** the engine must not call `predict()` on the counterfactual branch.
+- **Counterfactual isolation:** engine tests check that predictions/interventions run only on the factual branch.
 - **State opacity:** the engine must not inspect state internals.
 
 If a principle is worth stating, it is worth enforcing mechanically.
@@ -184,7 +197,7 @@ Every scenario in the SDK inherits from `BaseScenario[S]` (generic over state ty
 | `intervene` | `(state: S, predictions: Predictions, t: int) -> (S, Interventions)` | `rng.intervention` | After predict, **factual only** |
 | `measure` | `(state: S, t: int) -> Outcomes` | `rng.outcomes` | Every timestep, **both branches** |
 
-Each method may read only from its assigned RNG stream. This is what enables branch synchronization — the factual branch consuming the `prediction` and `intervention` streams does not advance the `temporal` stream, so the counterfactual branch's `step()` calls draw from identical positions in the `temporal` stream and the two branches evolve in lockstep (modulo intervention-induced state changes).
+Each method may read only from its assigned RNG stream. This isolates factual-only draws: consuming `prediction` and `intervention` does not advance `temporal`. Synchronization additionally requires purity and identical draw counts and ordering in the shared temporal and outcomes streams.
 
 ### Why Exactly Five Methods
 
@@ -222,7 +235,7 @@ STREAM_NAMES = ["population", "temporal", "prediction", "intervention", "outcome
 
 Each stream is an independent `np.random.Generator`. Drawing from the `prediction` stream does not advance the `temporal` stream. When the `BranchedSimulationEngine` creates the counterfactual branch, it calls `partitioner.fork()` to produce a new partitioner with the same master seed spawned into a fresh child sequence — ensuring the counterfactual branch has independent mutable generator state but identical starting positions.
 
-This provides a mathematical guarantee, not a statistical approximation: the factual and counterfactual branches draw from identical RNG positions in the `temporal` stream at every timestep (provided `step()` is pure). Divergence between branches comes only from intervention-induced state changes.
+This provides a mathematical guarantee, not a statistical approximation: the factual and counterfactual branches draw from identical RNG positions in the `temporal` stream at every timestep (provided `step()` and `measure()` are pure and consume shared streams in state-independent order and count). Divergence between branches comes only from intervention-induced state changes.
 
 ### Heterogeneous Patient Risk
 
@@ -593,3 +606,38 @@ Each item is an open task. The SDK is useful today; these are the candidates for
 ---
 
 *This document describes the SDK as of the 30-paper audit reconciliation (April 2026). The current state of code and scenarios is the source of truth; where this document and the code disagree, the code wins and the document should be updated.*
+
+
+## Contracts clarified by the algorithm-description review
+
+- Scenario objects are single-use; a second engine run raises even after failure.
+  Construct a fresh scenario with the same seed to reproduce a run. `seed=None`
+  means the documented deterministic seed 42.
+- `AR1Process` is deprecated because it holds mutable state. Store modifiers in
+  branch state and use functional `ar1_step` instead. Seasonal amplitude changes
+  the AR(1) target: smoothing attenuates and delays the realized risk response.
+- SNAPSHOT is a legacy, uncoupled same-step benchmark, recorded only at prediction
+  times. Use BRANCHED for paired effects propagated through time.
+- Sepsis-family `events` count state occupancy. Their sum is patient-time, not
+  cases. Use `incident_onset` for new cases and `mortality` for mortality occupancy
+  (use the final cumulative death count, not a sum across steps).
+- Named exports resolve `secondary` outcomes or raise on an unknown name. Panel
+  treatment uses explicit entity IDs and each entity's own first assignment.
+  `treatment_definition='ever'` explicitly requests the alternative cohort flag.
+- Fit models on an independent reference cohort drawn from the empirical risk
+  distribution, using labels for an explicit horizon. No fit can create risk
+  heterogeneity absent from that population. Reject unused model arguments;
+  recompute empirical prevalence on refit. Infeasibility overrides warn, preserve
+  the original requirement, and check delivered sensitivity/PPV as well as AUC.
+- The counterfactual branch is an oracle for grading, never an observable control.
+  Oracle CITS uses paired difference-series inference. Real-control CITS must be
+  validated with independently observed control noise.
+- Chart observed-minus-predicted departures to adjust for closed-cohort attrition.
+  Calibrate chart limits by simulation with separate calibration/validation seeds.
+  A null for the AI is not automatically a stationary raw-turnover process.
+- Score model drift against mature factual outcomes. Compare a separately labeled
+  oracle benchmark to quantify intervention-induced performance changes. Logistic
+  recalibration uses a pooled baseline with enough events; four two-weekly
+  evaluations mean eight weeks, not four.
+
+The current resolution record is Section 14 of `algorithm_description.md`.

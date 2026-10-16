@@ -29,14 +29,48 @@ from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
 )
 
 
-_CONFIG_DIR = Path(
-    "healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs")
+_CONFIG_DIR = Path("healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs")
 requires_frozen_model = pytest.mark.skipif(
-    not ((_CONFIG_DIR / "model_frozen.yaml").exists()
-         and (_CONFIG_DIR / "model_targets.yaml").exists()),
+    not (
+        (_CONFIG_DIR / "model_frozen.yaml").exists()
+        and (_CONFIG_DIR / "model_targets.yaml").exists()
+    ),
     reason="local model_targets.yaml / model_frozen.yaml not present "
-           "(gitignored institution-specific files; see "
-           "configs/model_targets.example.yaml)")
+    "(gitignored institution-specific files; see "
+    "configs/model_targets.example.yaml)",
+)
+
+
+@pytest.fixture(autouse=True)
+def synthetic_scorer_for_contracts(monkeypatch):
+    """Public synthetic parameters, never presented as a calibrated model.
+
+    Private fidelity tests below remain skipped without their real artifacts.
+    """
+    if (_CONFIG_DIR / "model_frozen.yaml").exists():
+        return
+    from healthcare_sim_sdk.scenarios.malnutrition_prioritization.subgroup_performance import (
+        FrozenSubgroupScorer,
+        ScorerParams,
+    )
+
+    scorer = FrozenSubgroupScorer(
+        ScorerParams(
+            d=1.85,
+            kappa=0.5,
+            h=0.2,
+            theta_female=0.5,
+            theta_black=0.5,
+            theta_hl=0.5,
+            delta_hard=0.5,
+            scramble_scale=0.15,
+            scramble_depth=0.5,
+        ),
+        {"source": "synthetic contract-test fixture; uncalibrated"},
+    )
+    monkeypatch.setattr(
+        FrozenSubgroupScorer, "load", classmethod(lambda cls, path: scorer)
+    )
 
 
 def _make(seed=42, horizon=28, ml_enabled=False, **overrides):
@@ -54,8 +88,7 @@ def _make(seed=42, horizon=28, ml_enabled=False, **overrides):
         timestep_unit="day",
         prediction_schedule=list(range(horizon)),
     )
-    sc = MalnutritionPrioritizationScenario(
-        time_config=tc, seed=seed, config=cfg)
+    sc = MalnutritionPrioritizationScenario(time_config=tc, seed=seed, config=cfg)
     engine = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED)
     results = engine.run(sc.n_entities_required)
     return sc, results
@@ -70,8 +103,7 @@ def _make_full(seed=42, horizon=84, ml_enabled=False, **overrides):
         timestep_unit="day",
         prediction_schedule=list(range(horizon)),
     )
-    sc = MalnutritionPrioritizationScenario(
-        time_config=tc, seed=seed, config=cfg)
+    sc = MalnutritionPrioritizationScenario(time_config=tc, seed=seed, config=cfg)
     engine = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED)
     results = engine.run(sc.n_entities_required)
     return sc, results
@@ -96,12 +128,14 @@ class TestAccounting:
         assert not np.any(missed & assessed), "missed AND assessed"
         n_split = (mal_at_disch & assessed).sum() + missed.sum()
         assert n_split == mal_at_disch.sum(), (
-            f"partition leak: {n_split} vs {mal_at_disch.sum()}")
+            f"partition leak: {n_split} vs {mal_at_disch.sum()}"
+        )
         # Censored bucket: true+ still in hospital (or pre-admission).
         censored = tm & ~discharged
         never_manifested = discharged & tm & ~mal_at_disch
-        assert (mal_at_disch.sum() + censored.sum()
-                + never_manifested.sum()) == tm.sum()
+        assert (
+            mal_at_disch.sum() + censored.sum() + never_manifested.sum()
+        ) == tm.sum()
         # The never-manifested edge must stay negligible.
         assert never_manifested.sum() / max(tm.sum(), 1) < 0.02
 
@@ -113,15 +147,14 @@ class TestAccounting:
         frac = censored.sum() / max(tm.sum(), 1)
         assert frac < 0.15, (
             f"censored true+ fraction {frac:.2f} too high; "
-            "lengthen horizon or trim admission window")
+            "lengthen horizon or trim admission window"
+        )
 
     def test_entity_status_partition_every_timestep(self):
         _, res = _make()
         for t in range(len(res.outcomes)):
             status = res.outcomes[t].secondary["status"]
-            valid = np.isin(
-                status, [STATUS_PRE, STATUS_INPATIENT,
-                         STATUS_DISCHARGED])
+            valid = np.isin(status, [STATUS_PRE, STATUS_INPATIENT, STATUS_DISCHARGED])
             assert valid.all(), f"invalid status at t={t}"
             assert len(status) == 3660 or len(status) > 0
 
@@ -132,8 +165,7 @@ class TestCapacity:
     def test_daily_assessments_never_exceed_capacity(self):
         _, res = _make()
         for t in range(len(res.outcomes)):
-            for out in (res.outcomes[t],
-                        res.counterfactual_outcomes[t]):
+            for out in (res.outcomes[t], res.counterfactual_outcomes[t]):
                 assert out.metadata["assessed_today"] <= 6
 
     def test_capacity_binding_when_queue_nonempty(self):
@@ -145,7 +177,8 @@ class TestCapacity:
                 assert out.metadata["assessed_today"] == 6, (
                     f"t={t}: queue {out.metadata['queue_depth']} "
                     f"but only {out.metadata['assessed_today']} "
-                    "assessed")
+                    "assessed"
+                )
 
     def test_capacity_zero_nobody_assessed(self):
         _, res = _make(rdn_assessments_per_day=0)
@@ -168,10 +201,21 @@ class TestCRNSync:
     data-dependent RNG draw the instant someone introduces one."""
 
     NUMERIC_KEYS = (
-        "true_malnourished", "severity", "assessed", "assess_day",
-        "assess_source", "time_to_assessment", "missed",
-        "severity_at_assess", "harm", "diagnosed", "coded", "los",
-        "readmit", "ml_flagged", "status",
+        "true_malnourished",
+        "severity",
+        "assessed",
+        "assess_day",
+        "assess_source",
+        "time_to_assessment",
+        "missed",
+        "severity_at_assess",
+        "harm",
+        "diagnosed",
+        "coded",
+        "los",
+        "readmit",
+        "ml_flagged",
+        "status",
     )
 
     def test_branches_bit_identical_with_ml_off(self):
@@ -180,13 +224,14 @@ class TestCRNSync:
             f = res.outcomes[t]
             c = res.counterfactual_outcomes[t]
             np.testing.assert_array_equal(
-                f.events, c.events,
-                err_msg=f"events diverge at t={t}")
+                f.events, c.events, err_msg=f"events diverge at t={t}"
+            )
             for k in self.NUMERIC_KEYS:
                 np.testing.assert_array_equal(
-                    f.secondary[k], c.secondary[k],
-                    err_msg=f"{k} diverges at t={t} "
-                            "(data-dependent RNG draw?)")
+                    f.secondary[k],
+                    c.secondary[k],
+                    err_msg=f"{k} diverges at t={t} (data-dependent RNG draw?)",
+                )
 
 
 class TestTierExclusivity:
@@ -211,10 +256,9 @@ class TestEventSemantics:
     def test_event_sum_equals_final_missed_count(self):
         _, res = _make_full()
         total_events = sum(
-            res.outcomes[t].events.sum()
-            for t in range(len(res.outcomes)))
-        final_missed = res.outcomes[
-            len(res.outcomes) - 1].secondary["missed"].sum()
+            res.outcomes[t].events.sum() for t in range(len(res.outcomes))
+        )
+        final_missed = res.outcomes[len(res.outcomes) - 1].secondary["missed"].sum()
         assert total_events == final_missed
 
     def test_ml_priority_never_nan(self):
@@ -235,17 +279,16 @@ class TestMonotonicity:
         for cap in (3, 8, 20):
             rates = []
             for seed in range(1, 6):
-                _, res = _make(
-                    seed=seed, rdn_assessments_per_day=cap)
-                last = res.outcomes[
-                    len(res.outcomes) - 1].secondary
+                _, res = _make(seed=seed, rdn_assessments_per_day=cap)
+                last = res.outcomes[len(res.outcomes) - 1].secondary
                 tm = last["true_malnourished"] == 1
                 discharged = last["status"] == STATUS_DISCHARGED
                 denom = max((discharged & tm).sum(), 1)
                 rates.append(last["missed"].sum() / denom)
             missed_by_cap.append(np.mean(rates))
         assert missed_by_cap[0] >= missed_by_cap[1] >= missed_by_cap[2], (
-            f"missed not monotone in capacity: {missed_by_cap}")
+            f"missed not monotone in capacity: {missed_by_cap}"
+        )
 
 
 class TestStatistical:
@@ -261,7 +304,8 @@ class TestStatistical:
         sigma = np.sqrt(cfg_prev * (1 - cfg_prev) / n)
         assert abs(rate - cfg_prev) < 4 * sigma + 0.01, (
             f"coded rate {rate:.4f} vs configured {cfg_prev} "
-            f"(4-sigma band +/-{4*sigma:.4f})")
+            f"(4-sigma band +/-{4 * sigma:.4f})"
+        )
 
     def test_no_nan_outside_model_score(self):
         sc, _ = _make()
@@ -280,10 +324,8 @@ class TestStatistical:
         _, res_b = _make(seed=7)
         last_a = res_a.outcomes[len(res_a.outcomes) - 1].secondary
         last_b = res_b.outcomes[len(res_b.outcomes) - 1].secondary
-        np.testing.assert_array_equal(
-            last_a["harm"], last_b["harm"])
-        np.testing.assert_array_equal(
-            last_a["missed"], last_b["missed"])
+        np.testing.assert_array_equal(last_a["harm"], last_b["harm"])
+        np.testing.assert_array_equal(last_a["missed"], last_b["missed"])
 
 
 class TestArmCCalibration:
@@ -304,7 +346,8 @@ class TestArmCCalibration:
         med = np.median(tta)
         assert 1.0 <= med <= 5.0, (
             f"Arm-C discretionary median TTA {med:.1f}d implausible "
-            "vs configured baseline_time_to_consult_days=3.0")
+            "vs configured baseline_time_to_consult_days=3.0"
+        )
 
 
 @requires_frozen_model
@@ -313,27 +356,34 @@ class TestModelFidelity:
     model targets on the calibration cohort."""
 
     def test_frozen_params_hit_targets(self):
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .subgroup_performance import (
-                FrozenSubgroupScorer, build_calibration_cohort,
-                evaluate, load_targets)
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.subgroup_performance import (
+            FrozenSubgroupScorer,
+            build_calibration_cohort,
+            evaluate,
+            load_targets,
+        )
+
         targets = load_targets()
-        scorer = FrozenSubgroupScorer.load(
-            str(_CONFIG_DIR / "model_frozen.yaml"))
-        cohort = build_calibration_cohort(
-            prevalence=targets.calibration_prevalence)
-        m = evaluate(scorer.params, cohort, targets,
-                     gradient=MalnutritionConfig().severity_score_gradient)
+        scorer = FrozenSubgroupScorer.load(str(_CONFIG_DIR / "model_frozen.yaml"))
+        cohort = build_calibration_cohort(prevalence=targets.calibration_prevalence)
+        m = evaluate(
+            scorer.params,
+            cohort,
+            targets,
+            gradient=MalnutritionConfig().severity_score_gradient,
+        )
         assert abs(m["auroc"] - targets.auroc) <= 0.01
         for k, t in targets.lifts.items():
             assert abs(m[f"lift_{k}"] - t) <= 0.08, (
-                f"lift_{k}: {m[f'lift_{k}']:.3f} vs {t}")
+                f"lift_{k}: {m[f'lift_{k}']:.3f} vs {t}"
+            )
 
     def test_scorer_scores_scenario_state(self):
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .subgroup_performance import FrozenSubgroupScorer
-        scorer = FrozenSubgroupScorer.load(
-            str(_CONFIG_DIR / "model_frozen.yaml"))
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.subgroup_performance import (
+            FrozenSubgroupScorer,
+        )
+
+        scorer = FrozenSubgroupScorer.load(str(_CONFIG_DIR / "model_frozen.yaml"))
         sc, _ = _make()
         state = sc.create_population(500)
         for t in range(3):
@@ -353,32 +403,33 @@ class TestMLBoundaries:
         # ml_flagged is excluded: it is the Epic display LABEL, written
         # by the tool in every mode regardless of whether anything acts
         # on it. The boundary claim is about OUTCOMES.
-        keys = tuple(k for k in TestCRNSync.NUMERIC_KEYS
-                     if k != "ml_flagged")
+        keys = tuple(k for k in TestCRNSync.NUMERIC_KEYS if k != "ml_flagged")
         for t in range(len(res.outcomes)):
             f = res.outcomes[t]
             c = res.counterfactual_outcomes[t]
             np.testing.assert_array_equal(f.events, c.events)
             for k in keys:
                 np.testing.assert_array_equal(
-                    f.secondary[k], c.secondary[k],
-                    err_msg=f"{k} diverges at t={t}")
+                    f.secondary[k], c.secondary[k], err_msg=f"{k} diverges at t={t}"
+                )
 
     def test_top_k_zero_arms_bit_identical(self):
-        _, res = _make(ml_enabled=True, operating_mode="top_k",
-                       top_k_fraction=0.0, mst_reference_floor=0.0)
+        _, res = _make(
+            ml_enabled=True,
+            operating_mode="top_k",
+            top_k_fraction=0.0,
+            mst_reference_floor=0.0,
+        )
         self._assert_bit_equal(res)
 
     def test_insufficient_data_all_arms_bit_identical(self):
-        _, res = _make(ml_enabled=True, insuff_data_rate=1.0,
-                       mst_reference_floor=0.0)
+        _, res = _make(ml_enabled=True, insuff_data_rate=1.0, mst_reference_floor=0.0)
         self._assert_bit_equal(res)
 
     def test_capacity_infinite_arms_bit_identical(self):
         # flag_driven_coding_uplift defaults to 0, so with infinite
         # capacity the ML ordering is irrelevant end to end.
-        _, res = _make(
-            ml_enabled=True, rdn_assessments_per_day=10**9)
+        _, res = _make(ml_enabled=True, rdn_assessments_per_day=10**9)
         self._assert_bit_equal(res)
 
     def test_degenerate_auroc05_no_benefit(self):
@@ -387,27 +438,20 @@ class TestMLBoundaries:
         informative MST order) -- qualitative, per R11."""
         deltas_real, deltas_degen = [], []
         for seed in range(1, 6):
-            for degen, sink in ((False, deltas_real),
-                                (True, deltas_degen)):
-                _, res = _make(
-                    seed=seed, ml_enabled=True,
-                    degenerate_auroc05=degen)
-                last_f = res.outcomes[
-                    len(res.outcomes) - 1].secondary
-                last_c = res.counterfactual_outcomes[
-                    len(res.outcomes) - 1].secondary
-                mf = (last_f["missed"].sum()
-                      / max(last_f["mal_at_discharge"].sum(), 1))
-                mc = (last_c["missed"].sum()
-                      / max(last_c["mal_at_discharge"].sum(), 1))
+            for degen, sink in ((False, deltas_real), (True, deltas_degen)):
+                _, res = _make(seed=seed, ml_enabled=True, degenerate_auroc05=degen)
+                last_f = res.outcomes[len(res.outcomes) - 1].secondary
+                last_c = res.counterfactual_outcomes[len(res.outcomes) - 1].secondary
+                mf = last_f["missed"].sum() / max(last_f["mal_at_discharge"].sum(), 1)
+                mc = last_c["missed"].sum() / max(last_c["mal_at_discharge"].sum(), 1)
                 sink.append(mc - mf)  # >0 means ML helps
         real, degen = np.mean(deltas_real), np.mean(deltas_degen)
         assert real > degen, (
-            f"real model ({real:+.3f}) must beat chance-level "
-            f"({degen:+.3f})")
+            f"real model ({real:+.3f}) must beat chance-level ({degen:+.3f})"
+        )
         assert degen < 0.03, (
-            f"chance-level model shows implausible benefit "
-            f"{degen:+.3f}")
+            f"chance-level model shows implausible benefit {degen:+.3f}"
+        )
 
 
 @requires_frozen_model
@@ -416,6 +460,7 @@ class TestBayesBound:
 
     def test_realized_ppv_within_theoretical_bound(self):
         from healthcare_sim_sdk.ml.performance import theoretical_ppv
+
         _, res = _make_full(ml_enabled=True)
         last = res.outcomes[len(res.outcomes) - 1].secondary
         discharged = last["status"] == STATUS_DISCHARGED
@@ -429,7 +474,8 @@ class TestBayesBound:
         assert ppv <= bound + 0.02, (
             f"realized PPV {ppv:.3f} exceeds Bayes bound "
             f"{bound:.3f} (prev {prev:.3f}, sens {sens:.3f}, "
-            f"spec {spec:.3f})")
+            f"spec {spec:.3f})"
+        )
 
 
 @requires_frozen_model
@@ -442,19 +488,17 @@ class TestMLDominance:
         for seed in range(1, 11):
             _, res = _make(seed=seed, ml_enabled=True)
             last_f = res.outcomes[len(res.outcomes) - 1].secondary
-            last_c = res.counterfactual_outcomes[
-                len(res.outcomes) - 1].secondary
-            mf = (last_f["missed"].sum()
-                  / max(last_f["mal_at_discharge"].sum(), 1))
-            mc = (last_c["missed"].sum()
-                  / max(last_c["mal_at_discharge"].sum(), 1))
+            last_c = res.counterfactual_outcomes[len(res.outcomes) - 1].secondary
+            mf = last_f["missed"].sum() / max(last_f["mal_at_discharge"].sum(), 1)
+            mc = last_c["missed"].sum() / max(last_c["mal_at_discharge"].sum(), 1)
             deltas.append(mc - mf)
-        assert np.mean(deltas) >= 0, (
-            f"ML arm worse on average: {np.mean(deltas):+.4f}")
+        assert np.mean(deltas) >= 0, f"ML arm worse on average: {np.mean(deltas):+.4f}"
 
     def test_ml_source_present_and_exclusive(self):
-        from healthcare_sim_sdk.scenarios.\
-            malnutrition_prioritization.scenario import SOURCE_ML
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
+            SOURCE_ML,
+        )
+
         _, res = _make_full(ml_enabled=True)
         last = res.outcomes[len(res.outcomes) - 1].secondary
         assessed = last["assessed"] == 1
@@ -462,7 +506,8 @@ class TestMLDominance:
         assert (src[assessed] > 0).all()
         assert (src[~assessed] == 0).all()
         assert (src[assessed] == SOURCE_ML).sum() > 0, (
-            "no ML-sourced assessments despite ml_enabled")
+            "no ML-sourced assessments despite ml_enabled"
+        )
 
 
 class TestConsultPath:
@@ -473,39 +518,50 @@ class TestConsultPath:
         """If any consult-due patient goes unassessed on a day, every
         assessment that day must itself be a consult (capacity was
         exhausted by path 1) -- on BOTH branches."""
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .scenario import (
-                ROW_ADMIT_DAY, ROW_ASSESS_DAY, ROW_ASSESS_SOURCE,
-                ROW_ASSESSED, ROW_MANDATORY_CONSULT,
-                ROW_PHYS_CONSULT_DAY, ROW_STATUS, NEVER,
-                SOURCE_CONSULT, STATUS_INPATIENT)
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
+            ROW_ADMIT_DAY,
+            ROW_ASSESS_DAY,
+            ROW_ASSESS_SOURCE,
+            ROW_ASSESSED,
+            ROW_MANDATORY_CONSULT,
+            ROW_PHYS_CONSULT_DAY,
+            ROW_STATUS,
+            NEVER,
+            SOURCE_CONSULT,
+            STATUS_INPATIENT,
+        )
+
         sc, _ = _make()
         state = sc.create_population(400)
         for t in range(25):
             state = sc.step(state, t)
             timebound = np.where(
-                state[ROW_MANDATORY_CONSULT] == 1,
-                state[ROW_ADMIT_DAY], NEVER)
-            timebound = np.minimum(
-                timebound, state[ROW_PHYS_CONSULT_DAY])
+                state[ROW_MANDATORY_CONSULT] == 1, state[ROW_ADMIT_DAY], NEVER
+            )
+            timebound = np.minimum(timebound, state[ROW_PHYS_CONSULT_DAY])
             due_unworked = (
                 (state[ROW_STATUS] == STATUS_INPATIENT)
                 & (state[ROW_ASSESSED] == 0)
-                & (timebound <= t))
+                & (timebound <= t)
+            )
             if due_unworked.any():
                 today = state[ROW_ASSESS_DAY] == t
                 srcs = state[ROW_ASSESS_SOURCE][today]
                 assert (srcs == SOURCE_CONSULT).all(), (
-                    f"t={t}: non-consult assessment while a "
-                    "time-bound consult waited")
+                    f"t={t}: non-consult assessment while a time-bound consult waited"
+                )
 
     def test_provider_consult_ppv_realized(self):
         """Realized provider-consult PPV (consults arriving before
         discharge) lands near the configured target."""
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .scenario import (
-                ROW_DISCHARGE_DAY, ROW_ONSET_DAY,
-                ROW_PHYS_CONSULT_DAY, ROW_STATUS, STATUS_DISCHARGED)
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
+            ROW_DISCHARGE_DAY,
+            ROW_ONSET_DAY,
+            ROW_PHYS_CONSULT_DAY,
+            ROW_STATUS,
+            STATUS_DISCHARGED,
+        )
+
         target = MalnutritionConfig().provider_consult_ppv
         ppvs = []
         for seed in range(1, 6):
@@ -514,48 +570,49 @@ class TestConsultPath:
             # factual branch (cheap) to read raw state rows.
             state = sc2 = None
             sc2 = MalnutritionPrioritizationScenario(
-                time_config=sc.time_config, seed=seed,
-                config=sc.cfg)
+                time_config=sc.time_config, seed=seed, config=sc.cfg
+            )
             state = sc2.create_population(sc2.n_entities_required)
             for t in range(sc2.time_config.n_timesteps):
                 state = sc2.step(state, t)
             discharged = state[ROW_STATUS] == STATUS_DISCHARGED
-            arrived = (
-                discharged
-                & (state[ROW_PHYS_CONSULT_DAY]
-                   <= state[ROW_DISCHARGE_DAY]))
+            arrived = discharged & (
+                state[ROW_PHYS_CONSULT_DAY] <= state[ROW_DISCHARGE_DAY]
+            )
             if arrived.sum() >= 30:
                 truth = np.isfinite(state[ROW_ONSET_DAY])[arrived]
                 ppvs.append(truth.mean())
         realized = float(np.mean(ppvs))
         assert abs(realized - target) < 0.10, (
             f"realized provider-consult PPV {realized:.3f} vs "
-            f"target {target} (first-order calibration band 0.10)")
+            f"target {target} (first-order calibration band 0.10)"
+        )
 
     def test_mst_floor_protects_flagged_cases(self):
         """Higher MST reference floor -> MST-flagged true cases are
         missed no more often (mean over seeds), at capacity where the
         ranked list is not exhausted."""
         rates = []
-        for floor in (0.0, None):   # off vs default (threshold)
+        for floor in (0.0, None):  # off vs default (threshold)
             miss = []
             for seed in range(1, 8):
                 _, res = _make(
-                    seed=seed, ml_enabled=True,
+                    seed=seed,
+                    ml_enabled=True,
                     rdn_assessments_per_day=5,
-                    mst_reference_floor=floor)
+                    mst_reference_floor=floor,
+                )
                 last = res.outcomes[len(res.outcomes) - 1].secondary
                 # MST-flagged proxy: assessed via MST or floor is not
                 # directly observable; use overall missed as the
                 # monotonicity target (floor can only add reach for
                 # flagged patients, never remove it).
                 mal = last["mal_at_discharge"] == 1
-                miss.append(
-                    last["missed"].sum() / max(mal.sum(), 1))
+                miss.append(last["missed"].sum() / max(mal.sum(), 1))
             rates.append(np.mean(miss))
         assert rates[1] <= rates[0] + 0.01, (
-            f"MST floor made things worse: off {rates[0]:.3f} vs "
-            f"on {rates[1]:.3f}")
+            f"MST floor made things worse: off {rates[0]:.3f} vs on {rates[1]:.3f}"
+        )
 
 
 class TestEffectFunctions:
@@ -564,8 +621,10 @@ class TestEffectFunctions:
     overlay (plan section C)."""
 
     def test_timing_days_early_shapes(self):
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .scenario import timing_days_early
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
+            timing_days_early,
+        )
+
         assess = np.array([3.0, 3.0, 10.0, 5.0])
         onset = np.array([3.0, 0.0, 2.0, 7.0])
         admit = np.array([0.0, 2.0, 2.0, 3.0])
@@ -576,13 +635,16 @@ class TestEffectFunctions:
         # case 3: hospital-acquired onset after assess -> a<0 clamped
         #   to 0 -> full d_ref
         np.testing.assert_allclose(de, [5.0, 4.0, 0.0, 5.0])
-        assert (timing_days_early(
-            np.array([100.0]), np.array([0.0]),
-            np.array([0.0]), 5.0) == 0).all()
+        assert (
+            timing_days_early(np.array([100.0]), np.array([0.0]), np.array([0.0]), 5.0)
+            == 0
+        ).all()
 
     def test_readmission_probability(self):
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .scenario import readmission_probability
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
+            readmission_probability,
+        )
+
         r0 = np.array([0.30])
         dx = np.array([1.0])
         de = np.array([5.0])
@@ -590,37 +652,37 @@ class TestEffectFunctions:
         p = readmission_probability(r0, dx, de, 0.20, 0.01)
         np.testing.assert_allclose(p, [0.30 * 0.80 * 0.95])
         # efficacy off -> baseline exactly
-        np.testing.assert_allclose(
-            readmission_probability(r0, dx, de, 0.0, 0.0), r0)
+        np.testing.assert_allclose(readmission_probability(r0, dx, de, 0.0, 0.0), r0)
         # undiagnosed -> baseline exactly, regardless of knobs
         np.testing.assert_allclose(
-            readmission_probability(r0, np.zeros(1), de, 0.9, 0.03),
-            r0)
+            readmission_probability(r0, np.zeros(1), de, 0.9, 0.03), r0
+        )
         # monotone non-increasing in days_early
-        p_late = readmission_probability(
-            r0, dx, np.array([0.0]), 0.20, 0.01)
+        p_late = readmission_probability(r0, dx, np.array([0.0]), 0.20, 0.01)
         assert p[0] <= p_late[0]
 
     def test_los_reduction_and_runway_cap(self):
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .scenario import los_reduction
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
+            los_reduction,
+        )
+
         dx = np.array([1.0])
         de = np.array([5.0])
         # uncapped: 0.5 + 0.05*5 = 0.75 (runway generous)
         np.testing.assert_allclose(
-            los_reduction(dx, de, np.array([10.0]), 0.5, 0.05),
-            [0.75])
+            los_reduction(dx, de, np.array([10.0]), 0.5, 0.05), [0.75]
+        )
         # runway binds
         np.testing.assert_allclose(
-            los_reduction(dx, de, np.array([0.3]), 0.5, 0.05),
-            [0.3])
+            los_reduction(dx, de, np.array([0.3]), 0.5, 0.05), [0.3]
+        )
         # undiagnosed or efficacy off -> zero
         np.testing.assert_allclose(
-            los_reduction(np.zeros(1), de, np.array([10.0]),
-                          0.5, 0.05), [0.0])
+            los_reduction(np.zeros(1), de, np.array([10.0]), 0.5, 0.05), [0.0]
+        )
         np.testing.assert_allclose(
-            los_reduction(dx, de, np.array([10.0]), 0.0, 0.0),
-            [0.0])
+            los_reduction(dx, de, np.array([10.0]), 0.0, 0.0), [0.0]
+        )
 
 
 class TestOutcomeCoins:
@@ -629,8 +691,11 @@ class TestOutcomeCoins:
     touched by step(), identical across branches by construction."""
 
     def test_coins_immutable_through_steps(self):
-        from healthcare_sim_sdk.scenarios.malnutrition_prioritization \
-            .scenario import ROW_U_DIAG, ROW_U_READMIT
+        from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
+            ROW_U_DIAG,
+            ROW_U_READMIT,
+        )
+
         sc, _ = _make(ml_enabled=True)
         state = sc.create_population(300)
         u_r = state[ROW_U_READMIT].copy()
@@ -647,15 +712,19 @@ class TestOutcomeCoins:
         must not move it (the effect enters only through the effect
         functions)."""
         sc_a, _ = _make(seed=7)
-        sc_b, _ = _make(seed=7, eff_detect_rel=0.25,
-                        eff_timing_rel=0.03, eff_detect_los=1.5,
-                        eff_timing_los=0.10)
+        sc_b, _ = _make(
+            seed=7,
+            eff_detect_rel=0.25,
+            eff_timing_rel=0.03,
+            eff_detect_los=1.5,
+            eff_timing_los=0.10,
+        )
         state = sc_a.create_population(300)
         for t in range(10):
             state = sc_a.step(state, t)
         np.testing.assert_array_equal(
-            sc_a._readmit_baseline(state, 10),
-            sc_b._readmit_baseline(state, 10))
+            sc_a._readmit_baseline(state, 10), sc_b._readmit_baseline(state, 10)
+        )
 
 
 class TestConsultProtection:
@@ -665,8 +734,7 @@ class TestConsultProtection:
     @staticmethod
     def _final(res):
         h = len(res.outcomes) - 1
-        return (res.outcomes[h].secondary,
-                res.counterfactual_outcomes[h].secondary)
+        return (res.outcomes[h].secondary, res.counterfactual_outcomes[h].secondary)
 
     def test_consult_bit_identity_at_zero_efficacy(self):
         """At eff=0 with tier 0 UNSATURATED (consult demand < daily
@@ -683,25 +751,30 @@ class TestConsultProtection:
         (mandatory_consult_fraction=1.0 -> bit-identical arms)."""
         for seed in range(1, 6):
             _, res = _make(
-                seed=seed, ml_enabled=True,
+                seed=seed,
+                ml_enabled=True,
                 rdn_assessments_per_day=12,
-                eff_detect_rel=0.0, eff_timing_rel=0.0,
-                eff_detect_los=0.0, eff_timing_los=0.0)
+                eff_detect_rel=0.0,
+                eff_timing_rel=0.0,
+                eff_detect_los=0.0,
+                eff_timing_los=0.0,
+            )
             f, c = self._final(res)
             f_con = f["assess_source"] == SOURCE_CONSULT
             c_con = c["assess_source"] == SOURCE_CONSULT
             both = f_con & c_con
             assert both.any()
-            np.testing.assert_array_equal(
-                f["assess_day"][both], c["assess_day"][both])
+            np.testing.assert_array_equal(f["assess_day"][both], c["assess_day"][both])
             f_only = f_con & ~c_con
-            assert ((c["assessed"][f_only] == 1)
-                    & (c["assess_day"][f_only]
-                       < f["assess_day"][f_only])).all()
+            assert (
+                (c["assessed"][f_only] == 1)
+                & (c["assess_day"][f_only] < f["assess_day"][f_only])
+            ).all()
             c_only = c_con & ~f_con
-            assert ((f["assessed"][c_only] == 1)
-                    & (f["assess_day"][c_only]
-                       < c["assess_day"][c_only])).all()
+            assert (
+                (f["assessed"][c_only] == 1)
+                & (f["assess_day"][c_only] < c["assess_day"][c_only])
+            ).all()
 
     def test_gating_attribution(self):
         """A patient missed in F but assessed in C was necessarily
@@ -711,21 +784,25 @@ class TestConsultProtection:
         found = 0
         for seed in range(1, 8):
             _, res = _make(
-                seed=seed, ml_enabled=True,
+                seed=seed,
+                ml_enabled=True,
                 rdn_assessments_per_day=5,
-                eff_detect_rel=0.0, eff_timing_rel=0.0,
-                eff_detect_los=0.0, eff_timing_los=0.0)
+                eff_detect_rel=0.0,
+                eff_timing_rel=0.0,
+                eff_detect_los=0.0,
+                eff_timing_los=0.0,
+            )
             f, c = self._final(res)
             displaced = (f["missed"] == 1) & (c["assessed"] == 1)
             if not displaced.any():
                 continue
             found += int(displaced.sum())
             srcs = c["assess_source"][displaced]
-            assert np.isin(
-                srcs, [SOURCE_MST, SOURCE_BACKSTOP]).all(), (
+            assert np.isin(srcs, [SOURCE_MST, SOURCE_BACKSTOP]).all(), (
                 f"seed {seed}: displaced patient reached in C via "
                 f"source {set(srcs.tolist())} -- tier-0 protection "
-                "violated")
+                "violated"
+            )
         assert found > 0, "no displaced patients found; test is vacuous"
 
 
@@ -753,8 +830,7 @@ class TestFlagDayBookkeeping:
             cur = res.outcomes[t].secondary["ml_flag_day"]
             if prev is not None:
                 was_set = prev >= 0
-                np.testing.assert_array_equal(
-                    cur[was_set], prev[was_set])
+                np.testing.assert_array_equal(cur[was_set], prev[was_set])
             prev = cur
         f = res.outcomes[h].secondary
         flagged = f["ml_flagged"] == 1

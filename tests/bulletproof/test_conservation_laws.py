@@ -40,57 +40,53 @@ from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
 # 1. POPULATION CONSERVATION
 # =====================================================================
 
+
 class TestPopulationConservation:
     """Entity count must not change during simulation."""
 
     def test_stroke_population_constant(self):
         """Number of entities in outcomes must equal n_entities at all t."""
         config = StrokeConfig(
-            n_patients=500, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=500,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(500)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(500)
 
         for t in range(12):
             f_n = len(results.outcomes[t].events)
             cf_n = len(results.counterfactual_outcomes[t].events)
-            assert f_n == 500, (
-                f"Factual population changed at t={t}: {f_n} != 500"
-            )
-            assert cf_n == 500, (
-                f"CF population changed at t={t}: {cf_n} != 500"
-            )
+            assert f_n == 500, f"Factual population changed at t={t}: {f_n} != 500"
+            assert cf_n == 500, f"CF population changed at t={t}: {cf_n} != 500"
 
     def test_prediction_scores_match_population(self):
         """Prediction scores should have same length as population."""
         config = StrokeConfig(
-            n_patients=300, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=300,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(300)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(300)
 
         for t, pred in results.predictions.items():
             assert len(pred.scores) == 300, (
-                f"Prediction scores length at t={t}: "
-                f"{len(pred.scores)} != 300"
+                f"Prediction scores length at t={t}: {len(pred.scores)} != 300"
             )
 
     def test_entity_ids_consistent_across_time(self):
         """Entity IDs should be the same set at every timestep."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=8,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=8,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(200)
 
         reference_ids = None
         for t in range(8):
@@ -111,6 +107,7 @@ class TestPopulationConservation:
 # 2. CONFUSION MATRIX ACCOUNTING IDENTITIES
 # =====================================================================
 
+
 class TestConfusionMatrixAccounting:
     """Confusion matrix must satisfy exact identities."""
 
@@ -126,8 +123,7 @@ class TestConfusionMatrixAccounting:
             m = confusion_matrix_metrics(y_true, y_pred, threshold)
             total = m["tp"] + m["fp"] + m["tn"] + m["fn"]
             assert total == n, (
-                f"seed={seed}, n={n}, threshold={threshold}: "
-                f"TP+FP+TN+FN={total} != {n}"
+                f"seed={seed}, n={n}, threshold={threshold}: TP+FP+TN+FN={total} != {n}"
             )
 
     @pytest.mark.parametrize("seed", range(10))
@@ -160,8 +156,7 @@ class TestConfusionMatrixAccounting:
             m = confusion_matrix_metrics(y_true, y_pred, threshold)
             if m["ppv"] > 0 and m["sensitivity"] > 0:
                 expected_f1 = (
-                    2 * m["ppv"] * m["sensitivity"]
-                    / (m["ppv"] + m["sensitivity"])
+                    2 * m["ppv"] * m["sensitivity"] / (m["ppv"] + m["sensitivity"])
                 )
                 assert abs(m["f1"] - expected_f1) < 1e-10, (
                     f"F1={m['f1']:.6f} != expected={expected_f1:.6f}"
@@ -178,14 +173,14 @@ class TestConfusionMatrixAccounting:
             m = confusion_matrix_metrics(y_true, y_pred, threshold)
             expected_flag = (m["tp"] + m["fp"]) / n
             assert abs(m["flag_rate"] - expected_flag) < 1e-10, (
-                f"flag_rate={m['flag_rate']:.6f} != "
-                f"(TP+FP)/N={expected_flag:.6f}"
+                f"flag_rate={m['flag_rate']:.6f} != (TP+FP)/N={expected_flag:.6f}"
             )
 
 
 # =====================================================================
 # 3. MONOTONICITY INVARIANTS
 # =====================================================================
+
 
 class TestMonotonicity:
     """Properties that must be monotone in their inputs."""
@@ -198,25 +193,25 @@ class TestMonotonicity:
         event_counts = {}
         for eff in [0.0, 0.25, 0.50, 0.75]:
             config = StrokeConfig(
-                n_patients=5000, n_weeks=26,
+                allow_infeasible_model=True,
+                n_patients=5000,
+                n_weeks=26,
                 prediction_interval=4,
                 intervention_effectiveness=eff,
             )
             sc = StrokePreventionScenario(config=config, seed=42)
-            results = BranchedSimulationEngine(
-                sc, CounterfactualMode.BRANCHED
-            ).run(5000)
-            total = sum(
-                results.outcomes[t].events.sum() for t in range(26)
+            results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(
+                5000
             )
+            total = sum(results.outcomes[t].events.sum() for t in range(26))
             event_counts[eff] = total
 
         # Should be non-increasing (more effectiveness = fewer events)
         effs = sorted(event_counts.keys())
         for i in range(1, len(effs)):
-            assert event_counts[effs[i]] <= event_counts[effs[i-1]] * 1.10, (
+            assert event_counts[effs[i]] <= event_counts[effs[i - 1]] * 1.10, (
                 f"Monotonicity violation: "
-                f"eff={effs[i-1]}->{event_counts[effs[i-1]]}, "
+                f"eff={effs[i - 1]}->{event_counts[effs[i - 1]]}, "
                 f"eff={effs[i]}->{event_counts[effs[i]]}"
             )
 
@@ -225,26 +220,30 @@ class TestMonotonicity:
         treated_counts = {}
         for thresh in [0.2, 0.4, 0.6, 0.8]:
             config = StrokeConfig(
-                n_patients=3000, n_weeks=12,
+                allow_infeasible_model=True,
+                n_patients=3000,
+                n_weeks=12,
                 prediction_interval=4,
                 treatment_threshold=thresh,
             )
             sc = StrokePreventionScenario(config=config, seed=42)
-            results = BranchedSimulationEngine(
-                sc, CounterfactualMode.BRANCHED
-            ).run(3000)
+            results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(
+                3000
+            )
 
             total_treated = sum(
-                len(intv.treated_indices)
-                for intv in results.interventions.values()
+                len(intv.treated_indices) for intv in results.interventions.values()
             )
             treated_counts[thresh] = total_treated
 
         thresholds = sorted(treated_counts.keys())
         for i in range(1, len(thresholds)):
-            assert treated_counts[thresholds[i]] <= treated_counts[thresholds[i-1]] * 1.05, (
+            assert (
+                treated_counts[thresholds[i]]
+                <= treated_counts[thresholds[i - 1]] * 1.05
+            ), (
                 f"Higher threshold should treat fewer: "
-                f"thresh={thresholds[i-1]}->{treated_counts[thresholds[i-1]]}, "
+                f"thresh={thresholds[i - 1]}->{treated_counts[thresholds[i - 1]]}, "
                 f"thresh={thresholds[i]}->{treated_counts[thresholds[i]]}"
             )
 
@@ -253,9 +252,9 @@ class TestMonotonicity:
         specs = np.linspace(0.5, 0.99, 50)
         ppvs = [theoretical_ppv(0.13, 0.80, s) for s in specs]
         for i in range(1, len(ppvs)):
-            assert ppvs[i] >= ppvs[i-1] - 1e-10, (
+            assert ppvs[i] >= ppvs[i - 1] - 1e-10, (
                 f"PPV not monotone in specificity: "
-                f"spec={specs[i-1]:.3f}->PPV={ppvs[i-1]:.4f}, "
+                f"spec={specs[i - 1]:.3f}->PPV={ppvs[i - 1]:.4f}, "
                 f"spec={specs[i]:.3f}->PPV={ppvs[i]:.4f}"
             )
 
@@ -264,9 +263,9 @@ class TestMonotonicity:
         prevs = np.linspace(0.01, 0.90, 50)
         ppvs = [theoretical_ppv(p, 0.80, 0.90) for p in prevs]
         for i in range(1, len(ppvs)):
-            assert ppvs[i] >= ppvs[i-1] - 1e-10, (
+            assert ppvs[i] >= ppvs[i - 1] - 1e-10, (
                 f"PPV not monotone in prevalence: "
-                f"prev={prevs[i-1]:.3f}->PPV={ppvs[i-1]:.4f}, "
+                f"prev={prevs[i - 1]:.3f}->PPV={ppvs[i - 1]:.4f}, "
                 f"prev={prevs[i]:.3f}->PPV={ppvs[i]:.4f}"
             )
 
@@ -275,19 +274,20 @@ class TestMonotonicity:
 # 4. TREATMENT INDICATOR CONSISTENCY
 # =====================================================================
 
+
 class TestTreatmentConsistency:
     """Treatment-related invariants that must hold."""
 
     def test_treated_indices_are_unique(self):
         """No entity should be treated twice at the same timestep."""
         config = StrokeConfig(
-            n_patients=1000, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=1000,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(1000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(1000)
 
         for t, intv in results.interventions.items():
             indices = intv.treated_indices
@@ -299,18 +299,16 @@ class TestTreatmentConsistency:
     def test_treated_indices_valid_range(self):
         """All treated indices must be valid entity indices."""
         config = StrokeConfig(
-            n_patients=500, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=500,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(500)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(500)
 
         for t, intv in results.interventions.items():
-            assert np.all(intv.treated_indices >= 0), (
-                f"Negative index at t={t}"
-            )
+            assert np.all(intv.treated_indices >= 0), f"Negative index at t={t}"
             assert np.all(intv.treated_indices < 500), (
                 f"Index >= n at t={t}: max={intv.treated_indices.max()}"
             )
@@ -318,25 +316,25 @@ class TestTreatmentConsistency:
     def test_intervention_only_at_prediction_times(self):
         """Interventions should only occur at scheduled prediction times."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=20,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=20,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(200)
 
         pred_times = set(results.predictions.keys())
         intv_times = set(results.interventions.keys())
         assert intv_times.issubset(pred_times), (
-            f"Interventions at non-prediction times: "
-            f"{intv_times - pred_times}"
+            f"Interventions at non-prediction times: {intv_times - pred_times}"
         )
 
 
 # =====================================================================
 # 5. HAZARD CONVERSION IDENTITIES
 # =====================================================================
+
 
 class TestHazardConservation:
     """Hazard conversion must preserve ordering and bounds."""
@@ -348,9 +346,9 @@ class TestHazardConservation:
         probs = hazard_to_timestep_probability(hazards, 1 / 52)
 
         for i in range(1, len(risks)):
-            assert probs[i] > probs[i-1], (
+            assert probs[i] > probs[i - 1], (
                 f"Ordering not preserved: "
-                f"risk={risks[i-1]:.3f}->prob={probs[i-1]:.6f}, "
+                f"risk={risks[i - 1]:.3f}->prob={probs[i - 1]:.6f}, "
                 f"risk={risks[i]:.3f}->prob={probs[i]:.6f}"
             )
 
@@ -358,7 +356,7 @@ class TestHazardConservation:
         """All timestep probabilities must be in [0, 1]."""
         risks = np.linspace(0, 0.999, 1000)
         hazards = annual_risk_to_hazard(risks)
-        for dt in [1/365, 1/52, 1/12, 1/4, 1.0]:
+        for dt in [1 / 365, 1 / 52, 1 / 12, 1 / 4, 1.0]:
             probs = hazard_to_timestep_probability(hazards, dt)
             assert np.all(probs >= 0), f"Negative prob at dt={dt}"
             assert np.all(probs <= 1), f"Prob > 1 at dt={dt}"
@@ -368,19 +366,20 @@ class TestHazardConservation:
 # 6. SIMULATION COUNTERFACTUAL ACCOUNTING
 # =====================================================================
 
+
 class TestCounterfactualAccounting:
     """Counterfactual branch must satisfy structural invariants."""
 
     def test_counterfactual_has_all_timesteps(self):
         """Counterfactual outcomes must exist at every timestep in BRANCHED mode."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(200)
 
         for t in range(12):
             assert t in results.counterfactual_outcomes, (
@@ -390,13 +389,13 @@ class TestCounterfactualAccounting:
     def test_snapshot_only_at_prediction_times(self):
         """In SNAPSHOT mode, counterfactual only at prediction times."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.SNAPSHOT
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.SNAPSHOT).run(200)
 
         cf_times = set(results.counterfactual_outcomes.keys())
         pred_times = set(results.predictions.keys())
@@ -407,13 +406,13 @@ class TestCounterfactualAccounting:
     def test_none_mode_no_counterfactual(self):
         """In NONE mode, no counterfactual outcomes should exist."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(200)
 
         assert len(results.counterfactual_outcomes) == 0, (
             f"NONE mode should have no CF outcomes, "

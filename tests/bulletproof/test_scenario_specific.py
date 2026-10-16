@@ -30,19 +30,30 @@ from .conftest import assert_no_nan_inf, assert_in_unit_interval
 # 1. STROKE SCENARIO — domain invariants
 # =====================================================================
 
+
 class TestStrokeDomainInvariants:
     """Healthcare-specific invariants for stroke prevention."""
 
     def test_state_shape_invariant(self):
         """State should always be (4, n_patients) array."""
-        config = StrokeConfig(n_patients=200, n_weeks=8, prediction_interval=4)
+        config = StrokeConfig(
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=8,
+            prediction_interval=4,
+        )
         sc = StrokePreventionScenario(config=config, seed=42)
         state = sc.create_population(200)
         assert state.shape == (4, 200), f"State shape: {state.shape}"
 
     def test_base_risks_immutable_after_step(self):
         """Base risks (row 0) should not change during step()."""
-        config = StrokeConfig(n_patients=500, n_weeks=8, prediction_interval=4)
+        config = StrokeConfig(
+            allow_infeasible_model=True,
+            n_patients=500,
+            n_weeks=8,
+            prediction_interval=4,
+        )
         sc = StrokePreventionScenario(config=config, seed=42)
         state = sc.create_population(500)
         base_risks_before = state[0].copy()
@@ -51,8 +62,9 @@ class TestStrokeDomainInvariants:
             state = sc.step(state, t)
 
         np.testing.assert_array_equal(
-            state[0], base_risks_before,
-            err_msg="Base risks (row 0) changed during step()"
+            state[0],
+            base_risks_before,
+            err_msg="Base risks (row 0) changed during step()",
         )
 
     def test_treatment_effect_persists(self):
@@ -63,7 +75,9 @@ class TestStrokeDomainInvariants:
         branch over the full simulation.
         """
         config = StrokeConfig(
-            n_patients=3000, n_weeks=26,
+            allow_infeasible_model=True,
+            n_patients=3000,
+            n_weeks=26,
             prediction_interval=4,
             intervention_effectiveness=0.50,
             # Aggressive on the calibrated score scale: scores are
@@ -76,12 +90,9 @@ class TestStrokeDomainInvariants:
         engine = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED)
         results = engine.run(3000)
 
-        f_total = sum(
-            results.outcomes[t].events.sum() for t in range(26)
-        )
+        f_total = sum(results.outcomes[t].events.sum() for t in range(26))
         cf_total = sum(
-            results.counterfactual_outcomes[t].events.sum()
-            for t in range(26)
+            results.counterfactual_outcomes[t].events.sum() for t in range(26)
         )
         # With persistent treatment at 50% effectiveness,
         # factual should have meaningfully fewer events
@@ -92,7 +103,12 @@ class TestStrokeDomainInvariants:
 
     def test_current_risks_positive(self):
         """Current risks (row 3) should always be positive."""
-        config = StrokeConfig(n_patients=1000, n_weeks=20, prediction_interval=4)
+        config = StrokeConfig(
+            allow_infeasible_model=True,
+            n_patients=1000,
+            n_weeks=20,
+            prediction_interval=4,
+        )
         sc = StrokePreventionScenario(config=config, seed=42)
         state = sc.create_population(1000)
 
@@ -106,7 +122,12 @@ class TestStrokeDomainInvariants:
 
     def test_ar1_modifiers_bounded(self):
         """AR(1) modifiers (row 1) should stay within configured bounds."""
-        config = StrokeConfig(n_patients=1000, n_weeks=52, prediction_interval=52)
+        config = StrokeConfig(
+            allow_infeasible_model=True,
+            n_patients=1000,
+            n_weeks=52,
+            prediction_interval=52,
+        )
         sc = StrokePreventionScenario(config=config, seed=42)
         state = sc.create_population(1000)
 
@@ -126,12 +147,13 @@ class TestStrokeDomainInvariants:
         Not exact (noise injection), but rank correlation should be positive.
         """
         config = StrokeConfig(
-            n_patients=3000, n_weeks=8, prediction_interval=4,
+            allow_infeasible_model=True,
+            n_patients=3000,
+            n_weeks=8,
+            prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(3000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(3000)
 
         # Get first prediction
         if results.predictions:
@@ -144,31 +166,41 @@ class TestStrokeDomainInvariants:
 # 2. NO-SHOW SCENARIO — domain invariants
 # =====================================================================
 
+
 class TestNoShowDomainInvariants:
     """Healthcare-specific invariants for no-show/overbooking."""
 
-    def _run_noshow(self, n_days=15, n_patients=500, seed=42,
-                    base_noshow_rate=0.13, overbooking_threshold=0.30,
-                    max_overbook_per_provider=2):
+    def _run_noshow(
+        self,
+        n_days=15,
+        n_patients=500,
+        seed=42,
+        base_noshow_rate=0.13,
+        overbooking_threshold=0.30,
+        max_overbook_per_provider=2,
+    ):
         tc = TimeConfig(
-            n_timesteps=n_days, timestep_duration=1 / 365,
+            n_timesteps=n_days,
+            timestep_duration=1 / 365,
             timestep_unit="day",
             prediction_schedule=list(range(n_days)),
         )
         cc = ClinicConfig(
-            n_providers=3, slots_per_provider_per_day=8,
+            n_providers=3,
+            slots_per_provider_per_day=8,
             max_overbook_per_provider=max_overbook_per_provider,
         )
         sc = NoShowOverbookingScenario(
-            time_config=tc, seed=seed, n_patients=n_patients,
+            time_config=tc,
+            seed=seed,
+            n_patients=n_patients,
             base_noshow_rate=base_noshow_rate,
             overbooking_threshold=overbooking_threshold,
-            model_type="predictor", model_auc=0.80,
+            model_type="predictor",
+            model_auc=0.80,
             clinic_config=cc,
         )
-        return BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(n_patients)
+        return BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(n_patients)
 
     def test_utilization_bounded_01(self):
         """Utilization (slot filled or not) must be in {0, 1}."""
@@ -189,9 +221,7 @@ class TestNoShowDomainInvariants:
             out = results.outcomes[t]
             if "wait_times" in out.secondary:
                 wt = out.secondary["wait_times"]
-                assert np.all(wt >= 0), (
-                    f"Negative wait time at t={t}: min={wt.min()}"
-                )
+                assert np.all(wt >= 0), f"Negative wait time at t={t}: min={wt.min()}"
 
     def test_noshow_events_binary(self):
         """No-show events must be binary (0 or 1)."""
@@ -219,8 +249,7 @@ class TestNoShowDomainInvariants:
         results = self._run_noshow(overbooking_threshold=1.0)
         for t, intv in results.interventions.items():
             assert len(intv.treated_indices) == 0, (
-                f"Overbookings at t={t} with threshold=1.0: "
-                f"{len(intv.treated_indices)}"
+                f"Overbookings at t={t} with threshold=1.0: {len(intv.treated_indices)}"
             )
 
     def test_aggressive_threshold_more_overbooking(self):
@@ -261,18 +290,25 @@ class TestNoShowDomainInvariants:
 # 3. CROSS-SCENARIO UNIVERSAL INVARIANTS
 # =====================================================================
 
+
 class TestUniversalScenarioInvariants:
     """Properties that must hold for ANY scenario implementation."""
 
-    @pytest.mark.parametrize("mode", [
-        CounterfactualMode.NONE,
-        CounterfactualMode.SNAPSHOT,
-        CounterfactualMode.BRANCHED,
-    ])
+    @pytest.mark.parametrize(
+        "mode",
+        [
+            CounterfactualMode.NONE,
+            CounterfactualMode.SNAPSHOT,
+            CounterfactualMode.BRANCHED,
+        ],
+    )
     def test_all_modes_complete_without_error(self, mode):
         """Every counterfactual mode should run to completion."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=8, prediction_interval=4,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=8,
+            prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
         results = BranchedSimulationEngine(sc, mode).run(100)
@@ -281,12 +317,13 @@ class TestUniversalScenarioInvariants:
     def test_results_metadata_populated(self):
         """SimulationResults should have correct metadata."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=8, prediction_interval=4,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=8,
+            prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(100)
 
         assert results.n_entities == 100
         assert results.time_config.n_timesteps == 8
@@ -296,12 +333,13 @@ class TestUniversalScenarioInvariants:
     def test_validations_recorded(self):
         """Population and final validations should be recorded."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=4, prediction_interval=4,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=4,
+            prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(100)
 
         assert "population" in results.validations
         assert "final" in results.validations

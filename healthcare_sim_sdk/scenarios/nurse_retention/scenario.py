@@ -21,7 +21,7 @@ RNG DISCIPLINE CHECKLIST:
 - step()              -> self.rng.temporal
 - predict()           -> self.rng.prediction
 - intervene()         -> self.rng.intervention
-- measure()           -> self.rng.outcomes
+- measure()           -> deterministic observation (no RNG)
 
 STEP PURITY CHECKLIST:
 - step() uses ONLY (state, t, self.rng.temporal)
@@ -90,7 +90,7 @@ class RetentionConfig:
 
     # Model
     # Accepts float or TimeVaryingParameter.
-    model_auc: TimeVaryingFloat = 0.80
+    model_auc: TimeVaryingFloat = 0.75
 
     # Intervention (manager check-in)
     # Each manager takes the top K flagged nurses by risk score.
@@ -123,30 +123,32 @@ class NurseRetentionState:
     n_managers: int
 
     # Per-nurse arrays (length n_nurses)
-    base_risk: np.ndarray        # Annual turnover probability
-    ar1_modifier: np.ndarray     # Temporal risk modifier (AR(1))
-    tenure_weeks: np.ndarray     # Weeks employed at simulation start + t
-    is_new_hire: np.ndarray      # Boolean: tenure < 52 weeks
-    manager_id: np.ndarray       # Integer manager assignment
-    current_risk: np.ndarray     # Effective annual turnover probability
+    base_risk: np.ndarray  # Annual turnover probability
+    ar1_modifier: np.ndarray  # Temporal risk modifier (AR(1))
+    tenure_weeks: np.ndarray  # Weeks employed at simulation start + t
+    is_new_hire: np.ndarray  # Boolean: tenure < 52 weeks
+    manager_id: np.ndarray  # Integer manager assignment
+    current_risk: np.ndarray  # Effective annual turnover probability
 
     # AI-directed intervention tracking (factual branch only)
-    intervention_effect: np.ndarray       # Current effect [0, 1]
+    intervention_effect: np.ndarray  # Current effect [0, 1]
     weeks_since_intervention: np.ndarray  # Weeks since AI check-in
 
     # Standard-of-care intervention tracking (both branches)
-    soc_intervention_effect: np.ndarray   # Current SOC effect [0, 1]
+    soc_intervention_effect: np.ndarray  # Current SOC effect [0, 1]
     soc_weeks_since_intervention: np.ndarray  # Weeks since SOC
 
     # Per-manager AI adoption (length n_managers). True = manager uses
     # AI-directed targeting on the factual branch; False = manager
     # falls back to SOC only. Drawn once at population creation from
     # config.manager_adherence_rate. Used by Regime F (partial adoption).
-    manager_adopts_ai: np.ndarray   # dtype=bool, shape (n_managers,)
+    manager_adopts_ai: np.ndarray  # dtype=bool, shape (n_managers,)
 
     # Absorbing state
-    departed: np.ndarray         # Boolean: nurse has left
+    departed: np.ndarray  # Boolean: nurse has left
     departed_this_step: np.ndarray  # Boolean: departed THIS step
+
+    expected_departures: Optional[np.ndarray] = None
 
     # Cumulative counters (for metadata)
     total_departures: int = 0
@@ -178,9 +180,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         self.config = config or RetentionConfig()
         c = self.config
 
-        prediction_schedule = list(
-            range(0, c.n_weeks, c.prediction_interval)
-        )
+        prediction_schedule = list(range(0, c.n_weeks, c.prediction_interval))
         time_config = TimeConfig(
             n_timesteps=c.n_weeks,
             timestep_duration=1 / 52,
@@ -203,14 +203,13 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         self._fitted_auc: float = initial_auc
 
         # Precompute decay factor per week from half-life
-        self._decay_per_week = 0.5 ** (
-            1.0 / c.intervention_decay_halflife_weeks
-        )
+        self._decay_per_week = 0.5 ** (1.0 / c.intervention_decay_halflife_weeks)
 
     # ── Method 1: create_population ──────────────────────────
 
     def create_population(
-        self, n_entities: int,
+        self,
+        n_entities: int,
     ) -> NurseRetentionState:
         """Create nurse population with heterogeneous risk profiles.
 
@@ -230,9 +229,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         )
 
         # Tenure: new hires get 0-51 weeks, established get 52-260
-        is_new_hire = (
-            rng.random(n) < c.new_hire_fraction
-        ).astype(bool)
+        is_new_hire = (rng.random(n) < c.new_hire_fraction).astype(bool)
         tenure_weeks = np.where(
             is_new_hire,
             rng.integers(0, 52, n),
@@ -253,6 +250,12 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             base_risk += c.high_span_turnover_penalty
             base_risk = np.clip(base_risk, 0, 0.95)
 
+        # Model-quality specifications refer to the initial training population.
+        # Preserve that reference across drift refits; survivors and treatment
+        # change the deployed population's ceiling, not the training benchmark.
+        self._reference_risks = base_risk.copy()
+        self._reference_risks.setflags(write=False)
+
         # Per-manager AI adoption (Regime F: partial adoption).
         # At the default adherence rate of 1.0, we skip the RNG draw
         # and fill with True — this preserves RNG stream state for the
@@ -263,9 +266,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         if c.manager_adherence_rate >= 1.0:
             manager_adopts_ai = np.ones(n_managers, dtype=bool)
         else:
-            manager_adopts_ai = (
-                rng.random(n_managers) < c.manager_adherence_rate
-            )
+            manager_adopts_ai = rng.random(n_managers) < c.manager_adherence_rate
 
         state = NurseRetentionState(
             n_nurses=n,
@@ -292,7 +293,9 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
     # ── Method 2: step (PURE) ────────────────────────────────
 
     def step(
-        self, state: NurseRetentionState, t: int,
+        self,
+        state: NurseRetentionState,
+        t: int,
     ) -> NurseRetentionState:
         """Advance nurse risk by one week.
 
@@ -318,11 +321,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
 
         # 1. AR(1) temporal drift
         noise = rng.normal(0, c.ar1_sigma, n)
-        new_mods = (
-            c.ar1_rho * new.ar1_modifier
-            + (1 - c.ar1_rho) * 1.0
-            + noise
-        )
+        new_mods = c.ar1_rho * new.ar1_modifier + (1 - c.ar1_rho) * 1.0 + noise
         new.ar1_modifier = np.clip(new_mods, 0.5, 2.0)
 
         # 2. Advance tenure, update new-hire status
@@ -343,16 +342,16 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         k = int(resolve(c.max_interventions_per_manager_per_week, t))
         effectiveness = resolve(c.intervention_effectiveness, t)
         soc_count = 0
+        # One priority per nurse, including departed/ineligible nurses. A
+        # permutation of a state-dependent subset consumes different streams.
+        soc_priority = rng.random(n)
         for mgr_id in range(new.n_managers):
             team = np.where(
                 active
                 & (new.manager_id == mgr_id)
-                & (new.soc_weeks_since_intervention
-                   >= c.cooldown_weeks)
+                & (new.soc_weeks_since_intervention >= c.cooldown_weeks)
             )[0]
             if len(team) == 0:
-                # Consume fixed RNG to keep streams aligned
-                rng.random(1)
                 continue
 
             # New hires first
@@ -361,9 +360,9 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
 
             # Shuffle both groups (fixed RNG consumption)
             if len(new_hires) > 0:
-                new_hires = rng.permutation(new_hires)
+                new_hires = new_hires[np.argsort(soc_priority[new_hires])]
             if len(others) > 0:
-                others = rng.permutation(others)
+                others = others[np.argsort(soc_priority[others])]
 
             # Pick up to K: new hires first, then others
             selected = np.concatenate(
@@ -382,17 +381,19 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             new.intervention_effect,
             new.soc_intervention_effect,
         )
-        effective = (
-            new.base_risk * new.ar1_modifier * (1 - best_effect)
-        )
+        effective = new.base_risk * new.ar1_modifier * (1 - best_effect)
         new.current_risk = np.clip(effective, 0, 0.99)
 
         # 6. Realize departures (weekly probability from annual)
         hazards = annual_risk_to_hazard(new.current_risk)
         weekly_probs = hazard_to_timestep_probability(
-            hazards, 1 / 52,
+            hazards,
+            1 / 52,
         )
         weekly_probs[new.departed] = 0.0
+        # Oracle diagnostic only: probability governing this step's observed
+        # departure, before the absorbing state changes. Never fed to monitors.
+        new.expected_departures = weekly_probs.copy()
 
         departures = rng.random(n) < weekly_probs
         new.departed |= departures
@@ -404,7 +405,9 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
     # ── Method 3: predict ────────────────────────────────────
 
     def predict(
-        self, state: NurseRetentionState, t: int,
+        self,
+        state: NurseRetentionState,
+        t: int,
     ) -> Predictions:
         """Score active nurses for turnover risk.
 
@@ -428,9 +431,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             hazards,
             self.config.prediction_interval / 52,
         )
-        true_labels = (
-            self.rng.prediction.random(n) < window_probs
-        ).astype(int)
+        true_labels = (self.rng.prediction.random(n) < window_probs).astype(int)
         # Departed nurses: no prediction needed
         true_labels[~active] = 0
 
@@ -440,10 +441,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         # refit branch is never taken (bit-identical backward
         # compatibility).
         target_auc = resolve(self.config.model_auc, t)
-        if (
-            self._classifier_fitted
-            and abs(target_auc - self._fitted_auc) > 1e-9
-        ):
+        if self._classifier_fitted and abs(target_auc - self._fitted_auc) > 1e-9:
             self._classifier = ControlledMLModel(
                 mode="discrimination",
                 target_auc=target_auc,
@@ -453,12 +451,14 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
 
         # Fit model on first call (or after a drift-triggered reset)
         if not self._classifier_fitted:
-            active_mask = active & (risk_signal > 0)
-            self._classifier.fit(
-                true_labels[active_mask],
-                risk_signal[active_mask],
+            reference_probs = hazard_to_timestep_probability(
+                annual_risk_to_hazard(self._reference_risks),
+                self.config.prediction_interval / 52,
+            )
+            self._classifier.fit_reference(
+                self._reference_risks,
                 self.rng.prediction,
-                n_iterations=3,
+                label_probabilities=reference_probs,
             )
             self._classifier_fitted = True
 
@@ -489,7 +489,10 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
     # ── Method 4: intervene ──────────────────────────────────
 
     def intervene(
-        self, state: NurseRetentionState, predictions: Predictions, t: int,
+        self,
+        state: NurseRetentionState,
+        predictions: Predictions,
+        t: int,
     ) -> tuple[NurseRetentionState, Interventions]:
         """Managers check in with the top-K riskiest nurses per week.
 
@@ -511,10 +514,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
         effectiveness = resolve(c.intervention_effectiveness, t)
 
         active = ~new.departed
-        eligible = (
-            active
-            & (new.weeks_since_intervention >= c.cooldown_weeks)
-        )
+        eligible = active & (new.weeks_since_intervention >= c.cooldown_weeks)
 
         all_treated = []
         intervention_count = 0
@@ -549,9 +549,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             new.intervention_effect,
             new.soc_intervention_effect,
         )
-        effective = (
-            new.base_risk * new.ar1_modifier * (1 - best_effect)
-        )
+        effective = new.base_risk * new.ar1_modifier * (1 - best_effect)
         new.current_risk = np.clip(effective, 0, 0.99)
 
         treated_indices = np.array(all_treated, dtype=int)
@@ -568,7 +566,9 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
     # ── Method 5: measure ────────────────────────────────────
 
     def measure(
-        self, state: NurseRetentionState, t: int,
+        self,
+        state: NurseRetentionState,
+        t: int,
     ) -> Outcomes:
         """Record departures and retention metrics this week."""
         n = state.n_nurses
@@ -586,9 +586,7 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             median_risk = float(
                 np.median(state.current_risk[active]),
             )
-            new_hire_active = int(
-                (state.is_new_hire & active).sum()
-            )
+            new_hire_active = int((state.is_new_hire & active).sum())
         else:
             mean_risk = 0.0
             median_risk = 0.0
@@ -598,6 +596,11 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
             events=events,
             entity_ids=np.arange(n),
             secondary={
+                "expected_departures": (
+                    state.expected_departures.copy()
+                    if state.expected_departures is not None
+                    else np.zeros(n)
+                ),
                 "active_mask": active.astype(float),
                 "current_risk": state.current_risk.copy(),
             },
@@ -605,11 +608,11 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
                 "t": t,
                 "total_departures": state.total_departures,
                 "total_interventions": state.total_interventions,
-                "total_soc_interventions": (
-                    state.total_soc_interventions
-                ),
+                "total_soc_interventions": (state.total_soc_interventions),
                 "retention_rate": retention_rate,
                 "n_active": int(active.sum()),
+                "n_managers_adopting": int(state.manager_adopts_ai.sum()),
+                "n_managers_total": state.n_managers,
                 "n_new_hire_active": new_hire_active,
                 "mean_risk": mean_risk,
                 "median_risk": median_risk,
@@ -619,13 +622,15 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
     # ── Hooks ────────────────────────────────────────────────
 
     def clone_state(
-        self, state: NurseRetentionState,
+        self,
+        state: NurseRetentionState,
     ) -> NurseRetentionState:
         """Deep copy for counterfactual branching."""
         return copy.deepcopy(state)
 
     def validate_population(
-        self, state: NurseRetentionState,
+        self,
+        state: NurseRetentionState,
     ) -> Dict[str, Any]:
         """Domain-specific population validation."""
         n = state.n_nurses
@@ -645,7 +650,15 @@ class NurseRetentionScenario(BaseScenario[NurseRetentionState]):
 
         # Get final outcomes for both branches
         factual_meta = results.outcomes[final_t].metadata
-        cf_meta = results.counterfactual_outcomes[final_t].metadata
+        cf_out = results.counterfactual_outcomes.get(final_t)
+        if cf_out is None or results.counterfactual_mode != "branched":
+            return {
+                "results_valid": True,
+                "factual_departures": factual_meta["total_departures"],
+                "factual_retention_rate": factual_meta["retention_rate"],
+                "counterfactual_available": False,
+            }
+        cf_meta = cf_out.metadata
 
         factual_departures = factual_meta["total_departures"]
         cf_departures = cf_meta["total_departures"]

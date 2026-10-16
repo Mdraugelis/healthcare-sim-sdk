@@ -1,0 +1,5 @@
+# Fit on separate no-AI seeds 9000..9019; grade on seeds 1000..1029.
+h_candidates: [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128]
+max_horizon_alarm_probability: 0.10
+baseline_weeks: 8
+k_multiplier: 0.5

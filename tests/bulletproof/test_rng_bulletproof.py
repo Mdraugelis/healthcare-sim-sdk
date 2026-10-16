@@ -29,6 +29,7 @@ from .conftest import assert_no_nan_inf
 # 1. SEED DETERMINISM — same seed, same everything
 # =====================================================================
 
+
 class TestSeedDeterminism:
     """Same seed must produce bit-identical results."""
 
@@ -46,8 +47,7 @@ class TestSeedDeterminism:
                 draws1 = g1.random(1000)
                 draws2 = g2.random(1000)
                 np.testing.assert_array_equal(
-                    draws1, draws2,
-                    err_msg=f"seed={seed}, stream={name}: not identical"
+                    draws1, draws2, err_msg=f"seed={seed}, stream={name}: not identical"
                 )
 
     def test_different_seeds_different_draws(self):
@@ -68,25 +68,21 @@ class TestSeedDeterminism:
         results_list = []
         for _ in range(3):
             config = StrokeConfig(
-                n_patients=500, n_weeks=12,
+                allow_infeasible_model=True,
+                n_patients=500,
+                n_weeks=12,
                 prediction_interval=4,
             )
             sc = StrokePreventionScenario(config=config, seed=42)
-            results = BranchedSimulationEngine(
-                sc, CounterfactualMode.BRANCHED
-            ).run(500)
-            outcomes = np.array([
-                results.outcomes[t].events.sum() for t in range(12)
-            ])
+            results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(500)
+            outcomes = np.array([results.outcomes[t].events.sum() for t in range(12)])
             results_list.append(outcomes)
 
         np.testing.assert_array_equal(
-            results_list[0], results_list[1],
-            err_msg="Run 1 != Run 2"
+            results_list[0], results_list[1], err_msg="Run 1 != Run 2"
         )
         np.testing.assert_array_equal(
-            results_list[0], results_list[2],
-            err_msg="Run 1 != Run 3"
+            results_list[0], results_list[2], err_msg="Run 1 != Run 3"
         )
 
     def test_simulation_varies_with_seed(self):
@@ -94,16 +90,14 @@ class TestSeedDeterminism:
         trajectories = []
         for seed in [1, 2, 3]:
             config = StrokeConfig(
-                n_patients=500, n_weeks=12,
+                allow_infeasible_model=True,
+                n_patients=500,
+                n_weeks=12,
                 prediction_interval=4,
             )
             sc = StrokePreventionScenario(config=config, seed=seed)
-            results = BranchedSimulationEngine(
-                sc, CounterfactualMode.BRANCHED
-            ).run(500)
-            outcomes = np.array([
-                results.outcomes[t].events.sum() for t in range(12)
-            ])
+            results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(500)
+            outcomes = np.array([results.outcomes[t].events.sum() for t in range(12)])
             trajectories.append(outcomes)
 
         # At least one pair should differ
@@ -119,6 +113,7 @@ class TestSeedDeterminism:
 # =====================================================================
 # 2. STREAM INDEPENDENCE — the core guarantee
 # =====================================================================
+
 
 class TestStreamIndependence:
     """Consuming one stream must not affect any other stream."""
@@ -138,12 +133,13 @@ class TestStreamIndependence:
         p2 = RNGPartitioner(42)
         s2 = p2.create_streams()
         _ = s2.intervention.random(10000)  # consume a LOT
-        _ = s2.prediction.random(5000)     # consume another stream too
+        _ = s2.prediction.random(5000)  # consume another stream too
         dirty_temporal = s2.temporal.random(500)
 
         np.testing.assert_array_equal(
-            clean_temporal, dirty_temporal,
-            err_msg="Consuming intervention/prediction shifted temporal!"
+            clean_temporal,
+            dirty_temporal,
+            err_msg="Consuming intervention/prediction shifted temporal!",
         )
 
     def test_consuming_temporal_does_not_shift_outcomes(self):
@@ -158,13 +154,15 @@ class TestStreamIndependence:
         dirty_outcomes = s2.outcomes.random(500)
 
         np.testing.assert_array_equal(
-            clean_outcomes, dirty_outcomes,
-            err_msg="Consuming temporal shifted outcomes!"
+            clean_outcomes,
+            dirty_outcomes,
+            err_msg="Consuming temporal shifted outcomes!",
         )
 
-    @pytest.mark.parametrize("consumed_stream", [
-        "population", "temporal", "prediction", "intervention", "outcomes"
-    ])
+    @pytest.mark.parametrize(
+        "consumed_stream",
+        ["population", "temporal", "prediction", "intervention", "outcomes"],
+    )
     def test_exhaustive_independence(self, consumed_stream):
         """Burning any single stream should not shift any other stream."""
         for target_stream in RNGPartitioner.STREAM_NAMES:
@@ -183,16 +181,16 @@ class TestStreamIndependence:
             dirty = getattr(s2, target_stream).random(200)
 
             np.testing.assert_array_equal(
-                clean, dirty,
-                err_msg=(
-                    f"Consuming {consumed_stream} shifted {target_stream}!"
-                )
+                clean,
+                dirty,
+                err_msg=(f"Consuming {consumed_stream} shifted {target_stream}!"),
             )
 
 
 # =====================================================================
 # 3. FORK SYNCHRONIZATION — branches start identical
 # =====================================================================
+
 
 class TestForkSynchronization:
     """Forked partitioners must produce synchronized initial streams."""
@@ -211,8 +209,7 @@ class TestForkSynchronization:
             orig_draws = g_orig.random(500)
             fork_draws = g_fork.random(500)
             np.testing.assert_array_equal(
-                orig_draws, fork_draws,
-                err_msg=f"Fork desynchronized on stream {name}"
+                orig_draws, fork_draws, err_msg=f"Fork desynchronized on stream {name}"
             )
 
     def test_forked_streams_are_independent_objects(self):
@@ -233,8 +230,7 @@ class TestForkSynchronization:
         actual = s_original.temporal.random(100)
 
         np.testing.assert_array_equal(
-            expected, actual,
-            err_msg="Drawing from forked stream advanced original!"
+            expected, actual, err_msg="Drawing from forked stream advanced original!"
         )
 
     def test_fork_preserves_master_seed(self):
@@ -253,14 +249,14 @@ class TestForkSynchronization:
         for i in range(1, len(streams)):
             draws = streams[i].temporal.random(200)
             np.testing.assert_array_equal(
-                reference, draws,
-                err_msg=f"Fork {i} not synchronized with fork 0"
+                reference, draws, err_msg=f"Fork {i} not synchronized with fork 0"
             )
 
 
 # =====================================================================
 # 4. CROSS-STREAM STATISTICAL INDEPENDENCE
 # =====================================================================
+
 
 class TestCrossStreamCorrelation:
     """Streams should be statistically uncorrelated."""
@@ -293,16 +289,17 @@ class TestCrossStreamCorrelation:
             draws = getattr(s, name).random(100000)
             # KS test against uniform
             from scipy.stats import kstest
-            stat, pval = kstest(draws, 'uniform')
+
+            stat, pval = kstest(draws, "uniform")
             assert pval > 0.001, (
-                f"Stream {name} not uniform: KS stat={stat:.4f}, "
-                f"p={pval:.6f}"
+                f"Stream {name} not uniform: KS stat={stat:.4f}, p={pval:.6f}"
             )
 
 
 # =====================================================================
 # 5. SIMULATION-LEVEL RNG CORRECTNESS
 # =====================================================================
+
 
 class TestSimulationRNGCorrectness:
     """RNG behavior is correct at the simulation level."""
@@ -314,60 +311,55 @@ class TestSimulationRNGCorrectness:
         This is the integration-level version of stream independence.
         """
         config_b = StrokeConfig(
-            n_patients=500, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=500,
+            n_weeks=12,
             prediction_interval=12,  # predict once at end
             intervention_effectiveness=0.0,
         )
         sc_b = StrokePreventionScenario(config=config_b, seed=42)
-        results_b = BranchedSimulationEngine(
-            sc_b, CounterfactualMode.BRANCHED
-        ).run(500)
+        results_b = BranchedSimulationEngine(sc_b, CounterfactualMode.BRANCHED).run(500)
 
         config_n = StrokeConfig(
-            n_patients=500, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=500,
+            n_weeks=12,
             prediction_interval=12,
             intervention_effectiveness=0.0,
         )
         sc_n = StrokePreventionScenario(config=config_n, seed=42)
-        results_n = BranchedSimulationEngine(
-            sc_n, CounterfactualMode.NONE
-        ).run(500)
+        results_n = BranchedSimulationEngine(sc_n, CounterfactualMode.NONE).run(500)
 
         # Compare total events (not exact per-timestep since predict/intervene
         # advance RNG differently, but totals should be similar)
-        b_total = sum(
-            results_b.outcomes[t].events.sum() for t in range(12)
-        )
-        n_total = sum(
-            results_n.outcomes[t].events.sum() for t in range(12)
-        )
+        b_total = sum(results_b.outcomes[t].events.sum() for t in range(12))
+        n_total = sum(results_n.outcomes[t].events.sum() for t in range(12))
         # With 0% effectiveness, should be within 20%
         ratio = b_total / max(n_total, 1)
         assert 0.7 < ratio < 1.3, (
-            f"BRANCHED vs NONE: ratio={ratio:.3f} "
-            f"(B={b_total}, N={n_total})"
+            f"BRANCHED vs NONE: ratio={ratio:.3f} (B={b_total}, N={n_total})"
         )
 
     def test_seed_0_works(self):
         """Seed=0 should be valid and produce results."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=4,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=4,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=0)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(100)
         assert len(results.outcomes) == 4
 
     def test_large_seed_works(self):
         """Very large seed should not overflow."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=4,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=4,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=2**31 - 1)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(100)
         assert len(results.outcomes) == 4

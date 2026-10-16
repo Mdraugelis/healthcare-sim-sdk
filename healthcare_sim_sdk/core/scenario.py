@@ -19,6 +19,7 @@ S = TypeVar("S")
 @dataclass
 class TimeConfig:
     """Time configuration for the simulation."""
+
     n_timesteps: int
     timestep_duration: float  # Fraction of a year (e.g., 1/52 for weekly)
     timestep_unit: str = "week"
@@ -28,6 +29,7 @@ class TimeConfig:
 @dataclass
 class Predictions:
     """Container for ML model predictions at a single time point."""
+
     scores: np.ndarray
     labels: Optional[np.ndarray] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -36,6 +38,7 @@ class Predictions:
 @dataclass
 class Interventions:
     """Container for intervention assignments at a single time point."""
+
     treated_indices: np.ndarray
     intervention_type: Optional[np.ndarray] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -44,6 +47,7 @@ class Interventions:
 @dataclass
 class Outcomes:
     """Container for outcomes at a single time point."""
+
     events: np.ndarray
     entity_ids: Optional[np.ndarray] = None
     secondary: Dict[str, np.ndarray] = field(default_factory=dict)
@@ -74,18 +78,17 @@ class BaseScenario(ABC, Generic[S]):
     STEP PURITY CONTRACT:
     step() must be a pure function of (state, t, self.rng.temporal).
     It must not read or modify any external mutable state.
+    step() and measure() must consume a state-independent number of draws
+    from their shared streams. Draw full-population vectors, then mask.
+    Scenario objects are single-use. seed=None uses the reproducible seed 42.
     """
 
     unit_of_analysis: str = "entity"
 
-    def __init__(
-        self, time_config: TimeConfig, seed: Optional[int] = None
-    ):
+    def __init__(self, time_config: TimeConfig, seed: Optional[int] = None):
         self.time_config = time_config
         self.seed = seed
-        self._partitioner = RNGPartitioner(
-            seed if seed is not None else 42
-        )
+        self._partitioner = RNGPartitioner(seed if seed is not None else 42)
         self.rng: RNGStreams = self._partitioner.create_streams()
 
     # -- The Five Methods --------------------------------------------------
@@ -149,7 +152,8 @@ class BaseScenario(ABC, Generic[S]):
         return {"population_created": True}
 
     def validate_results(
-        self, results: Any  # SimulationResults (forward ref)
+        self,
+        results: Any,  # SimulationResults (forward ref)
     ) -> Dict[str, Any]:
         """Optional: Validate simulation results."""
         return {"results_valid": True}

@@ -216,8 +216,7 @@ def segmented_regression(
     n = len(y)
     if n < 4:
         raise ValueError(
-            f"segmented_regression requires at least 4 observations, "
-            f"got {n}"
+            f"segmented_regression requires at least 4 observations, got {n}"
         )
     if break_index < 2 or break_index > n - 2:
         raise ValueError(
@@ -226,9 +225,7 @@ def segmented_regression(
             f"got {break_index}"
         )
     if hac_maxlags < 0:
-        raise ValueError(
-            f"hac_maxlags must be non-negative, got {hac_maxlags}"
-        )
+        raise ValueError(f"hac_maxlags must be non-negative, got {hac_maxlags}")
 
     t = np.arange(n, dtype=float)
     post = (t >= break_index).astype(float)
@@ -238,7 +235,8 @@ def segmented_regression(
     model = sm.OLS(y, X)
     if hac_maxlags > 0:
         fit = model.fit(
-            cov_type="HAC", cov_kwds={"maxlags": hac_maxlags},
+            cov_type="HAC",
+            cov_kwds={"maxlags": hac_maxlags},
         )
     else:
         fit = model.fit()
@@ -326,13 +324,13 @@ def power_across_seeds(
     hits = 0
     for series in series_list:
         result = segmented_regression(
-            series, break_index, hac_maxlags=hac_maxlags,
+            series,
+            break_index,
+            hac_maxlags=hac_maxlags,
         )
         if result.level_change_pvalue >= alpha:
             continue
-        sign = (
-            "decrease" if result.level_change < 0 else "increase"
-        )
+        sign = "decrease" if result.level_change < 0 else "increase"
         if sign == expected_direction:
             hits += 1
     return hits / len(series_list)
@@ -342,6 +340,7 @@ def cits_with_control(
     treatment_series: np.ndarray,
     control_series: np.ndarray,
     *,
+    paired: bool = False,
     effect_timepoint: Optional[int] = None,
     z_critical: float = 1.96,
 ) -> CITSWithControlResult:
@@ -350,6 +349,9 @@ def cits_with_control(
     Lifted from ``tier3_cits._fit_cits_with_cf``. Fits
 
         Y = b0 + b1 * t + b2 * group + b3 * group * t
+
+    Set paired=True for an oracle counterfactual control; this is a benchmark,
+    never a deployable control. The default stacked OLS assumes independent groups.
 
     where ``group = 1`` for the treatment series and ``0`` for the
     control series. The program effect at ``effect_timepoint`` is
@@ -394,9 +396,33 @@ def cits_with_control(
         )
     n = len(y_t)
     if n < 3:
-        raise ValueError(
-            f"cits_with_control requires at least 3 observations, "
-            f"got {n}"
+        raise ValueError(f"cits_with_control requires at least 3 observations, got {n}")
+
+    if paired:
+        # Oracle F and C share stochastic shocks. Model their difference
+        # directly so the covariance is retained, with t-based inference.
+        delta = y_t - y_c
+        X_delta = np.column_stack([np.ones(n), np.arange(n, dtype=float)])
+        fit_delta = sm.OLS(delta, X_delta).fit()
+        timepoint = n - 1 if effect_timepoint is None else int(effect_timepoint)
+        contrast = np.array([1.0, timepoint])
+        effect = float(contrast @ fit_delta.params)
+        se = float(np.sqrt(max(contrast @ fit_delta.cov_params() @ contrast, 0)))
+        from scipy.stats import t as student_t
+
+        pvalue = (
+            float(2 * student_t.sf(abs(effect / se), n - 2))
+            if se > 1e-15
+            else float(effect == 0)
+        )
+        half = student_t.ppf(norm.cdf(z_critical), n - 2) * se
+        return CITSWithControlResult(
+            effect_estimate=effect,
+            effect_se=se,
+            ci_lower=float(effect - half),
+            ci_upper=float(effect + half),
+            p_value=pvalue,
+            n_observations=n,
         )
 
     t_vals = np.arange(n, dtype=float)
@@ -415,9 +441,7 @@ def cits_with_control(
     effect = beta2 + beta3 * T
 
     cov = fit.cov_params()
-    var_effect = (
-        cov[2, 2] + (T ** 2) * cov[3, 3] + 2.0 * T * cov[2, 3]
-    )
+    var_effect = cov[2, 2] + (T**2) * cov[3, 3] + 2.0 * T * cov[2, 3]
     se_effect = float(np.sqrt(max(var_effect, 0.0)))
 
     ci_half = z_critical * se_effect
@@ -469,10 +493,7 @@ def its_slope_only(
     y = np.asarray(series, dtype=float)
     n = len(y)
     if n < 3:
-        raise ValueError(
-            f"its_slope_only requires at least 3 observations, "
-            f"got {n}"
-        )
+        raise ValueError(f"its_slope_only requires at least 3 observations, got {n}")
 
     t_vals = np.arange(n, dtype=float)
     X = np.column_stack([np.ones(n), t_vals])

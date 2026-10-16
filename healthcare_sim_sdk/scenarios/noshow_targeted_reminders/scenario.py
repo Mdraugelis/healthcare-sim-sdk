@@ -57,6 +57,7 @@ DEFAULT_AGE_BAND: Dict[str, Dict[str, float]] = {
 @dataclass
 class CallerConfig:
     """Configuration for the reminder calling program."""
+
     name: str = "Outpatient Reminder Program"
     n_providers: int = 8
     slots_per_provider_per_day: int = 12
@@ -69,6 +70,7 @@ class CallerConfig:
 @dataclass
 class Patient:
     """Persistent patient state across appointments."""
+
     patient_id: int
     base_noshow_probability: float
     n_past_appointments: int = 0
@@ -93,6 +95,7 @@ class Patient:
 @dataclass
 class AppointmentSlot:
     """Single appointment slot."""
+
     slot_id: int
     day: int
     provider_id: int
@@ -109,6 +112,7 @@ class AppointmentSlot:
 @dataclass
 class ReminderState:
     """Complete scenario state."""
+
     day: int
     patients: Dict[int, Patient]
     schedule: List[AppointmentSlot]
@@ -226,9 +230,7 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
         patients: Dict[int, Patient] = {}
         for i in range(self.n_patients):
             past_appts = int(rng.poisson(8))
-            past_noshows = int(rng.binomial(
-                max(past_appts, 0), base_probs[i]
-            ))
+            past_noshows = int(rng.binomial(max(past_appts, 0), base_probs[i]))
             patients[i] = Patient(
                 patient_id=i,
                 base_noshow_probability=float(base_probs[i]),
@@ -241,7 +243,9 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
 
         # Initial schedule uses population RNG (not temporal)
         schedule = _generate_schedule(
-            patients, day=0, caller_config=cc,
+            patients,
+            day=0,
+            caller_config=cc,
             noshow_variability=self.noshow_variability,
             rng=rng,
         )
@@ -268,7 +272,7 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
                 continue
 
             # Use effective_noshow_prob — this is the intervention mechanism
-            slot.showed = (rng.random() >= slot.effective_noshow_prob)
+            slot.showed = rng.random() >= slot.effective_noshow_prob
 
             patient = state.patients[slot.patient_id]
             patient.n_past_appointments += 1
@@ -293,9 +297,10 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
         # Save resolved slots for measure() to report on
         state.resolved_slots = list(state.schedule)
 
-        state.day = t
+        state.day = t + 1
         state.schedule = _generate_schedule(
-            state.patients, day=t,
+            state.patients,
+            day=t + 1,
             caller_config=state.caller_config,
             noshow_variability=self.noshow_variability,
             rng=rng,
@@ -305,35 +310,29 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
 
     def predict(self, state: ReminderState, t: int) -> Predictions:
         """Generate predictions using configured model type."""
-        true_probs = np.array([
-            s.true_noshow_prob for s in state.schedule
-        ])
+        true_probs = np.array([s.true_noshow_prob for s in state.schedule])
 
         if self.model_type == "baseline":
-            predicted = np.array([
-                state.patients[s.patient_id].historical_noshow_rate
-                for s in state.schedule
-            ])
-            noise = self.rng.prediction.normal(
-                0, 0.02, len(predicted)
+            predicted = np.array(
+                [
+                    state.patients[s.patient_id].historical_noshow_rate
+                    for s in state.schedule
+                ]
             )
+            noise = self.rng.prediction.normal(0, 0.02, len(predicted))
             predicted = np.clip(predicted + noise, 0.01, 0.99)
         else:
             if not self._model_fitted:
-                true_labels = (
-                    self.rng.prediction.random(len(true_probs))
-                    < true_probs
-                ).astype(int)
-                assert self._model is not None
-                self._model.fit(
-                    true_labels, true_probs,
-                    self.rng.prediction, n_iterations=3,
+                reference_risks = np.array(
+                    [p.base_noshow_probability for p in state.patients.values()]
                 )
+                self._model.fit_reference(reference_risks, self.rng.prediction)
                 self._model_fitted = True
 
             assert self._model is not None
             predicted = self._model.predict(
-                true_probs, self.rng.prediction,
+                true_probs,
+                self.rng.prediction,
             )
 
         for i, slot in enumerate(state.schedule):
@@ -349,7 +348,10 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
         )
 
     def intervene(
-        self, state: ReminderState, predictions: Predictions, t: int,
+        self,
+        state: ReminderState,
+        predictions: Predictions,
+        t: int,
     ) -> tuple[ReminderState, Interventions]:
         """Call high-risk patients to reduce their no-show probability.
 
@@ -381,7 +383,8 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
             )
         elif self.targeting_mode == "threshold":
             n_above = sum(
-                1 for _, s in scored
+                1
+                for _, s in scored
                 if s.predicted_noshow_prob >= self.targeting_threshold
             )
             n_to_call = min(n_above, cc.call_capacity_per_day)
@@ -417,14 +420,20 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
                 n_reached += 1
 
                 # Apply reminder effect: multiplicative reduction
-                slot.effective_noshow_prob = float(np.clip(
-                    slot.true_noshow_prob * (1 - cc.reminder_effectiveness),
-                    0.01, 0.99,
-                ))
+                slot.effective_noshow_prob = float(
+                    np.clip(
+                        slot.true_noshow_prob * (1 - cc.reminder_effectiveness),
+                        0.01,
+                        0.99,
+                    )
+                )
 
         return state, Interventions(
             treated_indices=np.array(called_indices, dtype=int),
             metadata={
+                "treated_entity_ids": np.array(
+                    [state.schedule[i].slot_id for i in called_indices], dtype=int
+                ),
                 "n_called": calls_made,
                 "n_reached": n_reached,
                 "targeting_mode": self.targeting_mode,
@@ -439,38 +448,19 @@ class NoShowTargetedReminderScenario(BaseScenario["ReminderState"]):
         appointments). On day 0 before any resolution, reports
         from the current schedule (unresolved).
         """
-        slots = (
-            state.resolved_slots if state.resolved_slots
-            else state.schedule
-        )
+        slots = state.resolved_slots if state.resolved_slots else state.schedule
 
         slot_ids = np.array([s.slot_id for s in slots])
-        noshows = np.array([
-            0.0 if s.showed else 1.0
-            for s in slots
-        ])
+        noshows = np.array([0.0 if s.showed else 1.0 for s in slots])
 
-        was_called = np.array([
-            1.0 if s.was_called else 0.0
-            for s in slots
-        ])
-        was_reached = np.array([
-            1.0 if s.was_reached else 0.0
-            for s in slots
-        ])
+        was_called = np.array([1.0 if s.was_called else 0.0 for s in slots])
+        was_reached = np.array([1.0 if s.was_reached else 0.0 for s in slots])
 
-        race = np.array([
-            state.patients[s.patient_id].race_ethnicity
-            for s in slots
-        ])
-        insurance = np.array([
-            state.patients[s.patient_id].insurance_type
-            for s in slots
-        ])
-        age_band = np.array([
-            state.patients[s.patient_id].age_band
-            for s in slots
-        ])
+        race = np.array([state.patients[s.patient_id].race_ethnicity for s in slots])
+        insurance = np.array(
+            [state.patients[s.patient_id].insurance_type for s in slots]
+        )
+        age_band = np.array([state.patients[s.patient_id].age_band for s in slots])
 
         return Outcomes(
             events=noshows,
@@ -514,17 +504,17 @@ def _generate_schedule(
     schedule: List[AppointmentSlot] = []
     for i, pid in enumerate(patient_ids):
         patient = patients[pid]
-        appt_prob = patient.base_noshow_probability + rng.normal(
-            0, noshow_variability
-        )
+        appt_prob = patient.base_noshow_probability + rng.normal(0, noshow_variability)
         appt_prob = float(np.clip(appt_prob, 0.01, 0.80))
 
-        schedule.append(AppointmentSlot(
-            slot_id=day * 10000 + i,
-            day=day,
-            provider_id=i % cc.n_providers,
-            patient_id=pid,
-            true_noshow_prob=appt_prob,
-            effective_noshow_prob=appt_prob,  # No intervention yet
-        ))
+        schedule.append(
+            AppointmentSlot(
+                slot_id=day * 10000 + i,
+                day=day,
+                provider_id=i % cc.n_providers,
+                patient_id=pid,
+                true_noshow_prob=appt_prob,
+                effective_noshow_prob=appt_prob,  # No intervention yet
+            )
+        )
     return schedule

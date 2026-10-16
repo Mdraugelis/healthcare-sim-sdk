@@ -29,7 +29,7 @@ Key modeling choices:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 
 import numpy as np
 
@@ -45,21 +45,22 @@ from healthcare_sim_sdk.population.risk_distributions import beta_distributed_ri
 
 
 # State row indices
-ROW_BASE_RISK = 0         # Immutable baseline sepsis risk
-ROW_CURRENT_RISK = 1      # Current risk (with AR1 drift)
-ROW_AR1_MOD = 2           # AR(1) risk modifier
-ROW_STAGE = 3             # 0=at_risk, 1=sepsis, 2=severe, 3=shock, 4=deceased, 5=discharged
-ROW_STAGE_TIMER = 4       # Timesteps since entering current stage
-ROW_TREATED = 5           # 1 if treated this admission
-ROW_TREATMENT_TIMER = 6   # Timesteps since treatment
-ROW_DEMO_RACE = 7         # Race (0=White, 1=Black, 2=Hispanic, 3=Asian, 4=Other)
-ROW_DEMO_INSURANCE = 8    # Insurance (0=Commercial, 1=Medicare, 2=Medicaid, 3=Self-Pay)
-ROW_DEMO_AGE = 9          # Age band (0=18-44, 1=45-64, 2=65-79, 3=80+)
-ROW_DEMO_RISK_MULT = 10   # Demographic risk multiplier
-ROW_LOS_REMAINING = 11    # Timesteps remaining in admission
+ROW_BASE_RISK = 0  # Immutable baseline sepsis risk
+ROW_CURRENT_RISK = 1  # Current risk (with AR1 drift)
+ROW_AR1_MOD = 2  # AR(1) risk modifier
+ROW_STAGE = 3  # 0=at_risk, 1=sepsis, 2=severe, 3=shock, 4=deceased, 5=discharged
+ROW_STAGE_TIMER = 4  # Timesteps since entering current stage
+ROW_TREATED = 5  # 1 if treated this admission
+ROW_TREATMENT_TIMER = 6  # Timesteps since treatment
+ROW_DEMO_RACE = 7  # Race (0=White, 1=Black, 2=Hispanic, 3=Asian, 4=Other)
+ROW_DEMO_INSURANCE = 8  # Insurance (0=Commercial, 1=Medicare, 2=Medicaid, 3=Self-Pay)
+ROW_DEMO_AGE = 9  # Age band (0=18-44, 1=45-64, 2=65-79, 3=80+)
+ROW_DEMO_RISK_MULT = 10  # Demographic risk multiplier
+ROW_LOS_REMAINING = 11  # Timesteps remaining in admission
 ROW_CUMULATIVE_ALERTS = 12
 ROW_FALSE_ALERTS = 13
-N_ROWS = 14
+ROW_INCIDENT_ONSET = 14
+N_ROWS = 15
 
 STAGE_AT_RISK = 0
 STAGE_SEPSIS = 1
@@ -79,58 +80,71 @@ class EpicESMConfig:
 
     Assumptions flagged with [ASSUMED] vs paper-reported values.
     """
+
     # Population
     n_patients: int = 5000
-    sepsis_prevalence: float = 0.035          # [ASSUMED] back-calculated from PPV=0.12, sens=0.33, alert_rate=0.18
-    risk_concentration: float = 0.5          # [ASSUMED] beta distribution shape
+    sepsis_prevalence: float = (
+        0.035  # [ASSUMED] back-calculated from PPV=0.12, sens=0.33, alert_rate=0.18
+    )
+    risk_concentration: float = 0.5  # [ASSUMED] beta distribution shape
 
     # Demographics — Michigan Medicine approximate mix
     race_proportions: List[float] = field(
-        default_factory=lambda: [0.72, 0.14, 0.06, 0.05, 0.03]  # [ASSUMED] Michigan Medicine estimate
+        default_factory=lambda: [
+            0.72,
+            0.14,
+            0.06,
+            0.05,
+            0.03,
+        ]  # [ASSUMED] Michigan Medicine estimate
     )
     insurance_proportions: List[float] = field(
-        default_factory=lambda: [0.38, 0.32, 0.18, 0.12]        # [ASSUMED]
+        default_factory=lambda: [0.38, 0.32, 0.18, 0.12]  # [ASSUMED]
     )
     age_proportions: List[float] = field(
-        default_factory=lambda: [0.20, 0.35, 0.30, 0.15]        # [ASSUMED]
+        default_factory=lambda: [0.20, 0.35, 0.30, 0.15]  # [ASSUMED]
     )
     race_risk_multipliers: List[float] = field(
-        default_factory=lambda: [1.0, 1.8, 0.9, 0.8, 1.0]       # [ASSUMED] from literature
+        default_factory=lambda: [1.0, 1.8, 0.9, 0.8, 1.0]  # [ASSUMED] from literature
     )
     age_risk_multipliers: List[float] = field(
-        default_factory=lambda: [0.5, 1.0, 1.8, 2.5]            # [ASSUMED] from literature
+        default_factory=lambda: [0.5, 1.0, 1.8, 2.5]  # [ASSUMED] from literature
     )
 
     # LOS
-    mean_los_timesteps: int = 35   # ~6 days at 4h timesteps [ASSUMED] typical inpatient
-    los_std_timesteps: int = 15    # [ASSUMED]
+    mean_los_timesteps: int = 35  # ~6 days at 4h timesteps [ASSUMED] typical inpatient
+    los_std_timesteps: int = 15  # [ASSUMED]
 
     # Temporal dynamics
-    ar1_rho: float = 0.90          # [ASSUMED]
-    ar1_sigma: float = 0.06        # [ASSUMED]
+    ar1_rho: float = 0.90  # [ASSUMED]
+    ar1_sigma: float = 0.06  # [ASSUMED]
 
     # ML model — calibrated to paper's reported metrics
-    model_auc: float = 0.63                   # Paper-reported external AUC
+    model_auc: float = 0.63  # Paper-reported external AUC
     alert_threshold_percentile: float = 82.0  # Calibrated to produce ~18% alert rate
-    target_sensitivity: float = 0.33          # Paper-reported
-    target_ppv: float = 0.12                  # Paper-reported
+    target_sensitivity: float = 0.33  # Paper-reported
+    target_ppv: float = 0.12  # Paper-reported
 
     # Alert fatigue — HIGH due to 88% FPR
-    initial_response_rate: float = 0.55       # [ASSUMED] degraded by poor PPV
-    fatigue_coefficient: float = 0.003        # [ASSUMED] faster fatigue than TREWS due to FP burden
-    floor_response_rate: float = 0.20         # [ASSUMED] floor clinician compliance
+    initial_response_rate: float = 0.55  # [ASSUMED] degraded by poor PPV
+    fatigue_coefficient: float = (
+        0.003  # [ASSUMED] faster fatigue than TREWS due to FP burden
+    )
+    floor_response_rate: float = 0.20  # [ASSUMED] floor clinician compliance
 
     # Intervention effectiveness — modest (early antibiotics for true positives)
-    treatment_effectiveness: float = 0.20     # [ASSUMED] reduced vs. ideal; real-world limitations
-    rapid_response_capacity: int = 12         # [ASSUMED] alerts per 4-hr block
+    treatment_effectiveness: float = (
+        0.20  # [ASSUMED] reduced vs. ideal; real-world limitations
+    )
+    rapid_response_capacity: int = 12  # [ASSUMED] alerts per 4-hr block
 
     # Stage transition probabilities (per 4-hr block)
-    prog_at_risk: float = 0.006    # [ASSUMED] calibrated to 3.5% sepsis incidence
-    prog_sepsis: float = 0.022     # [ASSUMED]
-    prog_severe: float = 0.038     # [ASSUMED]
-    mort_sepsis: float = 0.002     # [ASSUMED]
-    mort_severe: float = 0.007     # [ASSUMED]
-    mort_shock: float = 0.022      # [ASSUMED]
+    prog_at_risk: float = 0.006  # [ASSUMED] calibrated to 3.5% sepsis incidence
+    prog_sepsis: float = 0.022  # [ASSUMED]
+    prog_severe: float = 0.038  # [ASSUMED]
+    mort_sepsis: float = 0.002  # [ASSUMED]
+    mort_severe: float = 0.007  # [ASSUMED]
+    mort_shock: float = 0.022  # [ASSUMED]
 
 
 class EpicESMScenario(BaseScenario[np.ndarray]):
@@ -178,6 +192,8 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
         self._cumulative_false_alerts = 0
 
     def create_population(self, n_entities: int) -> np.ndarray:
+        self._model_fitted = False
+        self._cumulative_false_alerts = 0
         rng = self.rng.population
         n = n_entities
         state = np.zeros((N_ROWS, n))
@@ -200,13 +216,18 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
             len(AGE_LABELS), size=n, p=self.cfg.age_proportions
         ).astype(float)
 
-        race_mult = np.array(self.cfg.race_risk_multipliers)[state[ROW_DEMO_RACE].astype(int)]
-        age_mult = np.array(self.cfg.age_risk_multipliers)[state[ROW_DEMO_AGE].astype(int)]
+        race_mult = np.array(self.cfg.race_risk_multipliers)[
+            state[ROW_DEMO_RACE].astype(int)
+        ]
+        age_mult = np.array(self.cfg.age_risk_multipliers)[
+            state[ROW_DEMO_AGE].astype(int)
+        ]
         state[ROW_DEMO_RISK_MULT] = race_mult * age_mult
 
         state[ROW_CURRENT_RISK] = np.clip(
             state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
-            0.001, 0.99,
+            0.001,
+            0.99,
         )
         state[ROW_STAGE] = STAGE_AT_RISK
         state[ROW_STAGE_TIMER] = 0
@@ -229,20 +250,25 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
 
         noise = rng.normal(0, self.cfg.ar1_sigma, n)
         new_mods = (
-            self.cfg.ar1_rho * state[ROW_AR1_MOD]
-            + (1 - self.cfg.ar1_rho) * 1.0
-            + noise
+            self.cfg.ar1_rho * state[ROW_AR1_MOD] + (1 - self.cfg.ar1_rho) * 1.0 + noise
         )
         new_state[ROW_AR1_MOD] = np.clip(new_mods, 0.5, 2.0)
         new_state[ROW_CURRENT_RISK] = np.clip(
             state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
-            0.001, 0.99,
+            0.001,
+            0.99,
         )
 
         draws = rng.random(n)
-        tx_factor = np.where(state[ROW_TREATED] == 1, 1.0 - self.cfg.treatment_effectiveness, 1.0)
-        mean_risk = float(new_state[ROW_CURRENT_RISK][active].mean()) if active.any() else 0.035
-        risk_scale = np.clip(new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0)
+        tx_factor = np.where(
+            state[ROW_TREATED] == 1, 1.0 - self.cfg.treatment_effectiveness, 1.0
+        )
+        mean_risk = (
+            float(new_state[ROW_CURRENT_RISK][active].mean()) if active.any() else 0.035
+        )
+        risk_scale = np.clip(
+            new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0
+        )
 
         at_risk_mask = active & (state[ROW_STAGE] == STAGE_AT_RISK)
         prog_prob = self.cfg.prog_at_risk * risk_scale * tx_factor
@@ -267,13 +293,18 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
         mort_draws = rng.random(n)
         mort_sepsis = sepsis_mask & ~progressed2 & (mort_draws < self.cfg.mort_sepsis)
         mort_severe = severe_mask & ~progressed3 & (mort_draws < self.cfg.mort_severe)
-        mort_shock = active & (state[ROW_STAGE] == STAGE_SHOCK) & (mort_draws < self.cfg.mort_shock)
+        mort_shock = (
+            active
+            & (state[ROW_STAGE] == STAGE_SHOCK)
+            & (mort_draws < self.cfg.mort_shock)
+        )
         deceased = mort_sepsis | mort_severe | mort_shock
         new_state[ROW_STAGE, deceased] = STAGE_DECEASED
 
         new_state[ROW_LOS_REMAINING] = np.maximum(state[ROW_LOS_REMAINING] - 1, 0)
         discharge_eligible = (
-            active & ~deceased
+            active
+            & ~deceased
             & (new_state[ROW_LOS_REMAINING] <= 0)
             & (state[ROW_STAGE] < STAGE_SEVERE)
         )
@@ -288,11 +319,13 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
             state[ROW_TREATMENT_TIMER] + 1,
             state[ROW_TREATMENT_TIMER],
         )
+        # Record the actual transition, including a same-step discharge.
+        new_state[ROW_INCIDENT_ONSET] = progressed.astype(float)
         return new_state
 
     def predict(self, state: np.ndarray, t: int) -> Predictions:
         rng = self.rng.prediction
-        n = state.shape[1]
+        state.shape[1]
 
         true_labels = (
             (state[ROW_STAGE] >= STAGE_SEPSIS) & (state[ROW_STAGE] < STAGE_DECEASED)
@@ -300,7 +333,7 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
         true_risks = state[ROW_CURRENT_RISK]
 
         if not self._model_fitted:
-            self._model.fit(true_labels, true_risks, rng, n_iterations=3)
+            self._model.fit_reference(true_risks, rng)
             self._model_fitted = True
 
         scores = self._model.predict(true_risks, rng)
@@ -309,7 +342,9 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
 
         active_scores = scores[active]
         if len(active_scores) > 0:
-            threshold = np.percentile(active_scores, self.cfg.alert_threshold_percentile)
+            threshold = np.percentile(
+                active_scores, self.cfg.alert_threshold_percentile
+            )
         else:
             threshold = 1.0
         labels = (scores >= threshold).astype(int)
@@ -323,7 +358,9 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
                 "n_active": int(active.sum()),
                 "n_flagged": int(labels.sum()),
                 "alert_rate": float(labels[active].mean()) if active.any() else 0.0,
-                "prevalence": float(true_labels[active].mean()) if active.any() else 0.0,
+                "prevalence": float(true_labels[active].mean())
+                if active.any()
+                else 0.0,
             },
         )
 
@@ -349,9 +386,13 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
         if len(responded_indices) > self.cfg.rapid_response_capacity:
             scores_of_responded = predictions.scores[responded_indices]
             priority_order = np.argsort(-scores_of_responded)
-            responded_indices = responded_indices[priority_order[: self.cfg.rapid_response_capacity]]
+            responded_indices = responded_indices[
+                priority_order[: self.cfg.rapid_response_capacity]
+            ]
 
-        newly_treated = responded_indices[new_state[ROW_TREATED, responded_indices] == 0]
+        newly_treated = responded_indices[
+            new_state[ROW_TREATED, responded_indices] == 0
+        ]
         new_state[ROW_TREATED, newly_treated] = 1
         new_state[ROW_TREATMENT_TIMER, newly_treated] = 0
 
@@ -373,19 +414,27 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
         )
 
     def measure(self, state: np.ndarray, t: int) -> Outcomes:
+        """Measure occupancy (patient-time), not cases.
+
+        secondary['incident_onset'] counts new onsets this step. Mortality
+        is cumulative occupancy: read its final count rather than summing it.
+        """
         n = state.shape[1]
         events = (
             (state[ROW_STAGE] >= STAGE_SEPSIS) & (state[ROW_STAGE] < STAGE_DECEASED)
         ).astype(float)
         mortality = (state[ROW_STAGE] == STAGE_DECEASED).astype(float)
         race_labels = np.array(RACE_LABELS)[state[ROW_DEMO_RACE].astype(int)]
-        insurance_labels = np.array(INSURANCE_LABELS)[state[ROW_DEMO_INSURANCE].astype(int)]
+        insurance_labels = np.array(INSURANCE_LABELS)[
+            state[ROW_DEMO_INSURANCE].astype(int)
+        ]
         age_labels = np.array(AGE_LABELS)[state[ROW_DEMO_AGE].astype(int)]
 
         return Outcomes(
             events=events,
             entity_ids=np.arange(n),
             secondary={
+                "incident_onset": state[ROW_INCIDENT_ONSET].copy(),
                 "mortality": mortality,
                 "stage": state[ROW_STAGE].copy(),
                 "treated": state[ROW_TREATED].copy(),
@@ -395,7 +444,9 @@ class EpicESMScenario(BaseScenario[np.ndarray]):
             },
             metadata={
                 "deceased": int((state[ROW_STAGE] == STAGE_DECEASED).sum()),
-                "mortality_rate": round(float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4),
+                "mortality_rate": round(
+                    float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4
+                ),
                 "active": int((state[ROW_STAGE] < STAGE_DECEASED).sum()),
             },
         )

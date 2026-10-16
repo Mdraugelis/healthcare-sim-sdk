@@ -17,7 +17,13 @@ STEP PURITY CHECKLIST:
 - step() uses ONLY (state, t, self.rng.temporal)
 - step() does NOT read/write self.* attributes
 - step() does NOT use self.rng.intervention or self.rng.prediction
-- Run assert_purity(MyScenario) to verify
+- Run assert_purity(MyScenario) to verify non-interference
+- Run audit_coupling(scenario, n) from test_all_scenario_contracts.py to compare
+  temporal and outcomes generator positions after every timestep
+- Add zero-effect and never-treated entity identity checks; if capacity/SOC
+  spillovers exist, state the interference boundary before asserting identity
+- Add the new scenario to the SCENARIOS contract-test matrix
+- Draw full-size vectors before selecting eligible entities with a mask
 """
 
 from typing import Optional
@@ -69,7 +75,10 @@ class CoinFlipScenario(BaseScenario[np.ndarray]):
         return Predictions(scores=scores)
 
     def intervene(
-        self, state: np.ndarray, predictions: Predictions, t: int,
+        self,
+        state: np.ndarray,
+        predictions: Predictions,
+        t: int,
     ) -> tuple[np.ndarray, Interventions]:
         """Reduce probability for high-risk entities.
 
@@ -82,16 +91,14 @@ class CoinFlipScenario(BaseScenario[np.ndarray]):
         """
         treated = predictions.scores > self.treatment_threshold
         state = state.copy()
-        state[treated] *= (1 - self.intervention_reduction)
+        state[treated] *= 1 - self.intervention_reduction
         return state, Interventions(
             treated_indices=np.where(treated)[0],
         )
 
     def measure(self, state: np.ndarray, t: int) -> Outcomes:
         """Flip coins and record results."""
-        flips = (
-            self.rng.outcomes.random(len(state)) < state
-        ).astype(float)
+        flips = (self.rng.outcomes.random(len(state)) < state).astype(float)
         return Outcomes(
             events=flips,
             entity_ids=np.arange(len(state)),

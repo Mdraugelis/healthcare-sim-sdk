@@ -52,6 +52,7 @@ from .conftest import (
 # 1. POPULATION GENERATION — distribution shape matches parameters
 # =====================================================================
 
+
 class TestPopulationDistributions:
     """Verify generated populations match specified distributions."""
 
@@ -66,8 +67,7 @@ class TestPopulationDistributions:
             rng=rng,
         )
         assert_mean_in_range(
-            risks, rate, tolerance_sigma=4.0,
-            name=f"beta_risks(rate={rate})"
+            risks, rate, tolerance_sigma=4.0, name=f"beta_risks(rate={rate})"
         )
 
     @pytest.mark.parametrize("concentration", [0.1, 0.5, 1.0, 2.0])
@@ -109,7 +109,7 @@ class TestPopulationDistributions:
         # Variance should be non-increasing
         for i in range(1, len(variances)):
             assert variances[i] <= variances[i - 1] * 1.05, (
-                f"Variance not decreasing: conc[{i-1}]->var={variances[i-1]:.6f}, "
+                f"Variance not decreasing: conc[{i - 1}]->var={variances[i - 1]:.6f}, "
                 f"conc[{i}]->var={variances[i]:.6f}"
             )
 
@@ -117,6 +117,7 @@ class TestPopulationDistributions:
 # =====================================================================
 # 2. HAZARD / PROBABILITY CONVERSIONS — known identities
 # =====================================================================
+
 
 class TestHazardConversions:
     """Survival analysis conversion identities that must hold exactly."""
@@ -129,9 +130,7 @@ class TestHazardConversions:
         """
         for annual_risk in [0.01, 0.05, 0.10, 0.25, 0.50]:
             hazard = annual_risk_to_hazard(np.array([annual_risk]))[0]
-            weekly_prob = hazard_to_timestep_probability(
-                np.array([hazard]), 1 / 52
-            )[0]
+            weekly_prob = hazard_to_timestep_probability(np.array([hazard]), 1 / 52)[0]
             # P(at least one event in 52 weeks) = 1 - (1-p)^52
             annual_from_weekly = 1 - (1 - weekly_prob) ** 52
             assert abs(annual_from_weekly - annual_risk) < 0.001, (
@@ -152,7 +151,7 @@ class TestHazardConversions:
         hazards = annual_risk_to_hazard(risks)
         for i in range(1, len(hazards)):
             assert hazards[i] > hazards[i - 1], (
-                f"Hazard not monotone: risk[{i-1}]={risks[i-1]:.3f}->h={hazards[i-1]:.6f}, "
+                f"Hazard not monotone: risk[{i - 1}]={risks[i - 1]:.3f}->h={hazards[i - 1]:.6f}, "
                 f"risk[{i}]={risks[i]:.3f}->h={hazards[i]:.6f}"
             )
 
@@ -171,14 +170,14 @@ class TestHazardConversions:
         small_risks = np.array([0.001, 0.005, 0.01])
         hazards = annual_risk_to_hazard(small_risks)
         np.testing.assert_allclose(
-            hazards, small_risks, rtol=0.01,
-            err_msg="Small risk approximation failed"
+            hazards, small_risks, rtol=0.01, err_msg="Small risk approximation failed"
         )
 
 
 # =====================================================================
 # 3. AR(1) PROCESS — stationary distribution properties
 # =====================================================================
+
 
 class TestAR1StatisticalProperties:
     """Verify AR(1) process converges to correct stationary distribution."""
@@ -206,14 +205,15 @@ class TestAR1StatisticalProperties:
         """Stationary variance should be sigma^2 / (1 - rho^2)."""
         rng = np.random.default_rng(42)
         rho, sigma = 0.9, 0.05
-        ar1 = AR1Process(n_entities=10000, rho=rho, sigma=sigma, mu=1.0,
-                         bounds=(-10, 10))  # wide bounds so they don't clip
+        ar1 = AR1Process(
+            n_entities=10000, rho=rho, sigma=sigma, mu=1.0, bounds=(-10, 10)
+        )  # wide bounds so they don't clip
 
         for _ in range(500):
             ar1.step(rng)
 
         samples = np.concatenate([ar1.step(rng) for _ in range(200)])
-        expected_var = sigma ** 2 / (1 - rho ** 2)
+        expected_var = sigma**2 / (1 - rho**2)
         observed_var = np.var(samples)
         assert abs(observed_var - expected_var) < expected_var * 0.5, (
             f"AR1 stationary variance: expected~{expected_var:.6f}, "
@@ -224,8 +224,7 @@ class TestAR1StatisticalProperties:
         """Lag-1 autocorrelation should be close to rho."""
         rng = np.random.default_rng(42)
         rho = 0.9
-        ar1 = AR1Process(n_entities=1, rho=rho, sigma=0.05, mu=1.0,
-                         bounds=(-10, 10))
+        ar1 = AR1Process(n_entities=1, rho=rho, sigma=0.05, mu=1.0, bounds=(-10, 10))
 
         for _ in range(200):
             ar1.step(rng)
@@ -235,7 +234,7 @@ class TestAR1StatisticalProperties:
 
         x = series[:-1] - np.mean(series)
         y = series[1:] - np.mean(series)
-        acf1 = np.sum(x * y) / np.sqrt(np.sum(x ** 2) * np.sum(y ** 2))
+        acf1 = np.sum(x * y) / np.sqrt(np.sum(x**2) * np.sum(y**2))
         assert abs(acf1 - rho) < 0.10, (
             f"Lag-1 autocorrelation should be ~{rho}, got {acf1:.3f}"
         )
@@ -245,7 +244,10 @@ class TestAR1StatisticalProperties:
         rng = np.random.default_rng(42)
         lo, hi = 0.5, 2.0
         ar1 = AR1Process(
-            n_entities=5000, rho=0.9, sigma=0.5, mu=1.0,
+            n_entities=5000,
+            rho=0.9,
+            sigma=0.5,
+            mu=1.0,
             bounds=(lo, hi),
         )
         for _ in range(100):
@@ -258,6 +260,7 @@ class TestAR1StatisticalProperties:
 # 4. SIMULATION-LEVEL STATISTICS — event rates match expectations
 # =====================================================================
 
+
 class TestSimulationEventRates:
     """Verify aggregate event rates are consistent with parameters."""
 
@@ -269,19 +272,17 @@ class TestSimulationEventRates:
         """
         rate = 0.05
         config = StrokeConfig(
-            n_patients=10000, n_weeks=52,
+            allow_infeasible_model=True,
+            n_patients=10000,
+            n_weeks=52,
             annual_incident_rate=rate,
             prediction_interval=52,  # predict once (minimal intervention)
             intervention_effectiveness=0.0,  # no treatment effect
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(10000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(10000)
 
-        total_events = sum(
-            results.outcomes[t].events.sum() for t in range(52)
-        )
+        total_events = sum(results.outcomes[t].events.sum() for t in range(52))
         person_years = 10000 * 1.0
         observed_rate = total_events / person_years
         assert 0.02 < observed_rate < 0.12, (
@@ -297,21 +298,20 @@ class TestSimulationEventRates:
         successes = 0
         for seed in range(5):
             config = StrokeConfig(
-                n_patients=5000, n_weeks=26,
+                allow_infeasible_model=True,
+                n_patients=5000,
+                n_weeks=26,
                 prediction_interval=4,
                 intervention_effectiveness=0.50,
             )
             sc = StrokePreventionScenario(config=config, seed=seed)
-            results = BranchedSimulationEngine(
-                sc, CounterfactualMode.BRANCHED
-            ).run(5000)
-
-            f_total = sum(
-                results.outcomes[t].events.sum() for t in range(26)
+            results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(
+                5000
             )
+
+            f_total = sum(results.outcomes[t].events.sum() for t in range(26))
             cf_total = sum(
-                results.counterfactual_outcomes[t].events.sum()
-                for t in range(26)
+                results.counterfactual_outcomes[t].events.sum() for t in range(26)
             )
             if cf_total >= f_total:
                 successes += 1
@@ -348,6 +348,7 @@ class TestSimulationEventRates:
 # 5. ML MODEL — achieved metrics match targets
 # =====================================================================
 
+
 class TestMLModelStatistics:
     """Verify ML model produces metrics in expected range."""
 
@@ -362,9 +363,7 @@ class TestMLModelStatistics:
         risks = np.clip(risks, 0.01, 0.99)
         labels = (rng.random(n) < risks).astype(int)
 
-        model = ControlledMLModel(
-            mode="discrimination", target_auc=target_auc
-        )
+        model = ControlledMLModel(mode="discrimination", target_auc=target_auc)
         report = model.fit(labels, risks, rng, n_iterations=5)
         delivered = auc_exact(labels, model.predict(risks, rng))
         assert abs(delivered - target_auc) < 0.03, (
@@ -419,9 +418,7 @@ class TestMLModelStatistics:
             target_ppv=0.25,
         )
         report = model.fit(labels, risks, rng, n_iterations=5)
-        scores, binary_labels = model.predict_binary(
-            risks, rng, true_labels=labels
-        )
+        scores, binary_labels = model.predict_binary(risks, rng, true_labels=labels)
 
         metrics = confusion_matrix_metrics(labels, scores, report["threshold"])
         if metrics["sensitivity"] > 0 and metrics["specificity"] < 1:
@@ -439,6 +436,7 @@ class TestMLModelStatistics:
 # =====================================================================
 # 6. CROSS-BRANCH CONSISTENCY — factual vs counterfactual
 # =====================================================================
+
 
 class TestCrossBranchConsistency:
     """Verify factual/counterfactual branches are internally consistent."""
@@ -470,22 +468,18 @@ class TestCrossBranchConsistency:
     def test_no_intervention_means_identical_branches(self):
         """With 0% effectiveness, branches should produce ~identical events."""
         config = StrokeConfig(
-            n_patients=5000, n_weeks=26,
+            allow_infeasible_model=True,
+            n_patients=5000,
+            n_weeks=26,
             prediction_interval=4,
             intervention_effectiveness=0.0,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(5000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(5000)
 
-        f_total = sum(
-            results.outcomes[t].events.sum()
-            for t in range(26)
-        )
+        f_total = sum(results.outcomes[t].events.sum() for t in range(26))
         cf_total = sum(
-            results.counterfactual_outcomes[t].events.sum()
-            for t in range(26)
+            results.counterfactual_outcomes[t].events.sum() for t in range(26)
         )
         ratio = f_total / max(cf_total, 1)
         assert 0.80 < ratio < 1.20, (
