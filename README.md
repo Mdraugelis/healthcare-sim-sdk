@@ -290,6 +290,8 @@ flake8 healthcare_sim_sdk/       # Lint
 
 See [`docs/design_principles.md`](docs/design_principles.md) for the design principles document — why the SDK is built the way it is, what it enables, what it deliberately excludes, and the lessons learned validating it against 30 published healthcare AI deployment papers.
 
+See [`docs/paper_based_validation.md`](docs/paper_based_validation.md) for the proposed approach to sourced parameters, explicit assumptions, blinded paper-outcome validation, and quasi-experimental tests against hidden simulator effects.
+
 ## Contributing
 
 Contributions are welcome — bug reports, new scenarios, documentation, tests. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development setup, invariant rules, and PR checklist.
