@@ -74,9 +74,10 @@ class ITSResult:
     slope_change_pvalue : float
         Two-sided p-value for ``beta3 = 0``.
     pre_slope : float
-        ``beta1`` — pre-period time trend. Used as a validity check;
-        if this is significantly non-zero, the pre-period has a
-        confounding trend and the ITS interpretation is compromised.
+        ``beta1`` — modeled pre-period time trend. A non-zero trend
+        is compatible with ITS. Validity depends on whether its
+        post-period projection is credible without intervention;
+        concurrent changes or misspecified trends can compromise it.
     pre_slope_se : float
         Standard error of ``beta1``.
     pre_slope_pvalue : float
@@ -166,7 +167,9 @@ def segmented_regression(
     where ``post_t`` is 1 for ``t >= break_index`` and 0 otherwise,
     and ``T*`` is the break index. ``beta2`` is the instantaneous
     level change at the break; ``beta3`` is the change in slope after
-    the break; ``beta1`` is the pre-period trend (a validity check).
+    the break; ``beta1`` is the modeled pre-period trend. Its
+    significance alone neither establishes nor invalidates the ITS
+    interpretation.
 
     Default is plain OLS (``hac_maxlags=0``), which is correctly
     sized under iid residuals (empirical Type I rate 0.0505 at

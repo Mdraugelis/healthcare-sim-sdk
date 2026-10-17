@@ -4,6 +4,10 @@
 
 **Status:** Proposed approach
 
+See [Methodological foundations and validation alignment](validation_methodology_alignment.md)
+for the supporting papers, inspected SDK evidence, resolved methodological
+questions, and requirements still pending implementation.
+
 The SDK should be allowed to predict a different outcome from a published study
 when the discrepancy is explainable within independently justified assumptions.
 The simulation must still be internally consistent and numerically faithful to
@@ -133,6 +137,11 @@ and every statistic or coefficient that reconstructs it. Check existing scenario
 code, comments, reports, and configuration files for outcome-derived values;
 separating files alone does not remove leakage.
 
+[Eddy et al.](https://doi.org/10.1016/j.jval.2012.04.012) explicitly discuss
+independent and blinded validation. Record source dependence separately from
+outcome access: concealing an outcome does not undo its source's prior use to
+develop or calibrate mechanisms.
+
 If control-arm outcomes establish the baseline, label the exercise a conditional
 prediction of the intervention arm. If observed contact or adoption rates are
 inputs, identify the prediction as conditional on that delivery process.
@@ -172,6 +181,13 @@ predictive distribution of the same statistic the paper reports from studies of
 the corresponding size. Account for sampling uncertainty once; do not add the
 paper's sampling error again if the simulated study design already represents it.
 
+Following the uncertainty distinctions in
+[Briggs et al.](https://doi.org/10.1016/j.jval.2012.04.014), preserve dependencies
+among uncertain inputs and distinguish parameter uncertainty from alternative
+structures. If scenario ranges have no justified probability weights, report
+separate scenario predictions and an envelope; do not label that envelope a
+95% predictive interval.
+
 After internal verification passes, reveal the published result once. Report
 its discrepancy from the prediction and the prediction's width. Any subsequent
 tuning produces a new calibrated model requiring a fresh holdout.
@@ -194,6 +210,12 @@ controlled interrupted time series or an appropriate staggered-rollout
 difference-in-differences analysis as a separate candidate design. Give each
 analysis the observed-data packet while keeping latent states and paired
 counterfactuals in the grading packet.
+
+Use [Lopez Bernal et al.](https://doi.org/10.1093/ije/dyw098) for ITS design and
+time-series threats, and [Callaway and Sant'Anna](https://doi.org/10.1016/j.jeconom.2020.12.001)
+when staggered observational rollout and heterogeneous effects require a
+group/time analysis. Preserve randomized cluster assignment for stepped-wedge
+trials; these are not interchangeable designs.
 
 Test at least these conditions:
 
@@ -233,6 +255,12 @@ inconsistent cohort definitions, or violation of a declared resource budget.
 These checks should preserve the SDK's existing five-method scenario contract,
 opaque engine state, and five RNG streams. Put domain assumptions and checks in
 scenario configuration, scenario logic, and validation infrastructure.
+
+The distinction between implementation verification and application validity
+follows [Sargent](https://doi.org/10.1057/jos.2012.20). With shared staffing,
+define policy-level effects and spillovers explicitly, consistent with the
+interference framework of [Hudgens and Halloran](https://doi.org/10.1198/016214508000000292).
+An untreated entity need not be unaffected by deployment.
 
 ## 6. Choose repetitions by the required precision
 
@@ -275,6 +303,12 @@ An explanation for a mismatch should identify the assumptions responsible,
 their sensitivity, and whether agreement would require values outside the
 prespecified evidence bounds. It can motivate a revised model without converting
 the original unsuccessful prediction into a successful one.
+
+Prespecify a predictive score and a simple comparison forecast. The proper-scoring
+framework of [Gneiting and Raftery](https://doi.org/10.1198/016214506000001437)
+provides interval scores that account for both width and misses, or CRPS for a
+full predictive distribution. Merely containing the published result is
+insufficient evidence of a useful forecast.
 
 ## 8. Start with two complementary benchmarks
 
