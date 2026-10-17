@@ -5,6 +5,8 @@ with optional seasonal effects. The AR(1) process maintains
 realistic autocorrelation (>0.8) in risk trajectories.
 """
 
+import warnings
+
 import numpy as np
 
 
@@ -57,6 +59,12 @@ class AR1Process:
         mu: float = 1.0,
         bounds: tuple[float, float] = (0.5, 2.0),
     ):
+        warnings.warn(
+            "AR1Process is mutable and deprecated; store values in scenario "
+            "state and use ar1_step instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.n_entities = n_entities
         self.rho = rho
         self.sigma = sigma
@@ -74,11 +82,7 @@ class AR1Process:
             Array of risk modifiers, shape (n_entities,).
         """
         noise = rng.normal(0, self.sigma, self.n_entities)
-        self.current = (
-            self.rho * self.current
-            + (1 - self.rho) * self.mu
-            + noise
-        )
+        self.current = self.rho * self.current + (1 - self.rho) * self.mu + noise
         self.current = np.clip(self.current, *self.bounds)
         return self.current.copy()
 
@@ -97,10 +101,18 @@ class AR1Process:
             2 * np.pi * t / seasonal_period + np.pi / 2
         )
         noise = rng.normal(0, self.sigma, self.n_entities)
-        self.current = (
-            self.rho * self.current
-            + (1 - self.rho) * seasonal
-            + noise
-        )
+        self.current = self.rho * self.current + (1 - self.rho) * seasonal + noise
         self.current = np.clip(self.current, *self.bounds)
         return self.current.copy()
+
+
+def ar1_step(current, rng, rho=0.9, sigma=0.1, mu=1.0, bounds=(0.5, 2.0)):
+    """Functional AR(1) update. Store the returned vector in branch state.
+
+    If mu is a seasonal target, its amplitude is attenuated by
+    (1-rho)/abs(1-rho*exp(-i*2*pi/period)); it is not risk amplitude.
+    """
+    values = np.asarray(current)
+    return np.clip(
+        rho * values + (1 - rho) * mu + rng.normal(0, sigma, values.shape), *bounds
+    )

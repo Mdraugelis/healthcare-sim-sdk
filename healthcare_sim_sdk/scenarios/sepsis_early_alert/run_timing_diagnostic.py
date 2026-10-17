@@ -24,13 +24,6 @@ from healthcare_sim_sdk.core.engine import (
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
 from healthcare_sim_sdk.scenarios.sepsis_early_alert.scenario import (
-    N_STATE_ROWS,
-    ROW_ONSET_TIMESTEP,
-    ROW_STAGE,
-    ROW_TREATED,
-    ROW_TREATMENT_TIMER,
-    STAGE_SEPSIS,
-    STAGE_DECEASED,
     SepsisConfig,
     SepsisEarlyAlertScenario,
 )
@@ -72,7 +65,8 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
         treatment_effectiveness=raw["treatment_effectiveness"],
         kumar_half_life_hours=raw.get("kumar_half_life_hours", 0.0),
         max_treatment_effectiveness=raw.get(
-            "max_treatment_effectiveness", 0.50,
+            "max_treatment_effectiveness",
+            0.50,
         ),
         rapid_response_capacity=capacity,
         prog_at_risk=raw["prog_at_risk"],
@@ -88,10 +82,13 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
     )
 
     sc = SepsisEarlyAlertScenario(
-        time_config=tc, seed=seed, config=cfg,
+        time_config=tc,
+        seed=seed,
+        config=cfg,
     )
     engine = BranchedSimulationEngine(
-        sc, CounterfactualMode.BRANCHED,
+        sc,
+        CounterfactualMode.BRANCHED,
     )
     results = engine.run(n_patients)
 
@@ -101,15 +98,14 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
     f_out = results.outcomes[final_t]
     cf_out = results.counterfactual_outcomes[final_t]
 
-    f_treated = f_out.secondary["treated"]
-    cf_treated = cf_out.secondary["treated"]
+    f_out.secondary["treated"]
+    cf_out.secondary["treated"]
     f_onset = f_out.secondary["onset_timestep"]
     cf_onset = cf_out.secondary["onset_timestep"]
 
     # Find patients who developed sepsis on either branch
     # Use CF onset as the "natural" onset (no ML influence)
     cf_septic = cf_onset >= 0
-    f_septic = f_onset >= 0
 
     # For treatment timing, we need treatment_timer from the final
     # timestep. treatment_start_t = final_t - treatment_timer.
@@ -139,7 +135,8 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
     logger.info("=" * 70)
     logger.info(
         "TIMING DIAGNOSTIC: max_hours=%d, capacity=%d",
-        max_hours, capacity,
+        max_hours,
+        capacity,
     )
     logger.info("=" * 70)
     logger.info("Total patients: %d", n_patients)
@@ -152,7 +149,7 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
 
     # Onset times (should be similar on both branches for most patients)
     onset_cf = cf_onset[septic_mask]
-    onset_f = f_onset[septic_mask]
+    f_onset[septic_mask]
 
     # Treatment times for septic patients
     f_tt = f_first_treat_t[septic_mask]
@@ -165,12 +162,14 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
     logger.info("TREATMENT COVERAGE (among septic patients):")
     logger.info(
         "  Factual:        %d / %d (%.1f%%)",
-        f_ever_treated.sum(), n_septic,
+        f_ever_treated.sum(),
+        n_septic,
         f_ever_treated.sum() / n_septic * 100,
     )
     logger.info(
         "  Counterfactual: %d / %d (%.1f%%)",
-        cf_ever_treated.sum(), n_septic,
+        cf_ever_treated.sum(),
+        n_septic,
         cf_ever_treated.sum() / n_septic * 100,
     )
     logger.info("")
@@ -186,42 +185,48 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
         timing_advantage = cf_delay - f_delay  # positive = ML was earlier
 
         logger.info(
-            "ONSET-TO-TREATMENT DELAY "
-            "(among %d patients treated on both branches):",
+            "ONSET-TO-TREATMENT DELAY (among %d patients treated on both branches):",
             n_both,
         )
         logger.info("  Factual (ML + baseline):")
         logger.info(
             "    Mean:   %.1f timesteps (%.1f hours)",
-            f_delay.mean(), f_delay.mean() * 4,
+            f_delay.mean(),
+            f_delay.mean() * 4,
         )
         logger.info(
             "    Median: %.1f timesteps (%.1f hours)",
-            np.median(f_delay), np.median(f_delay) * 4,
+            np.median(f_delay),
+            np.median(f_delay) * 4,
         )
         logger.info(
             "    Min/Max: %.0f / %.0f timesteps",
-            f_delay.min(), f_delay.max(),
+            f_delay.min(),
+            f_delay.max(),
         )
         logger.info("")
         logger.info("  Counterfactual (baseline only):")
         logger.info(
             "    Mean:   %.1f timesteps (%.1f hours)",
-            cf_delay.mean(), cf_delay.mean() * 4,
+            cf_delay.mean(),
+            cf_delay.mean() * 4,
         )
         logger.info(
             "    Median: %.1f timesteps (%.1f hours)",
-            np.median(cf_delay), np.median(cf_delay) * 4,
+            np.median(cf_delay),
+            np.median(cf_delay) * 4,
         )
         logger.info(
             "    Min/Max: %.0f / %.0f timesteps",
-            cf_delay.min(), cf_delay.max(),
+            cf_delay.min(),
+            cf_delay.max(),
         )
         logger.info("")
         logger.info("  ML TIMING ADVANTAGE (CF delay - F delay):")
         logger.info(
             "    Mean:   %.1f timesteps (%.1f hours)",
-            timing_advantage.mean(), timing_advantage.mean() * 4,
+            timing_advantage.mean(),
+            timing_advantage.mean() * 4,
         )
         logger.info(
             "    Median: %.1f timesteps (%.1f hours)",
@@ -237,15 +242,18 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
         logger.info("  Distribution:")
         logger.info(
             "    ML earlier: %d (%.1f%%)",
-            earlier, earlier / n_both * 100,
+            earlier,
+            earlier / n_both * 100,
         )
         logger.info(
             "    Same time:  %d (%.1f%%)",
-            same, same / n_both * 100,
+            same,
+            same / n_both * 100,
         )
         logger.info(
             "    ML later:   %d (%.1f%%)",
-            later, later / n_both * 100,
+            later,
+            later / n_both * 100,
         )
         logger.info("")
 
@@ -257,8 +265,10 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
             bar = "#" * min(counts[i], 50)
             logger.info(
                 "    [%3d,%3d): %4d %s",
-                int(edges[i]), int(edges[i + 1]),
-                counts[i], bar,
+                int(edges[i]),
+                int(edges[i + 1]),
+                counts[i],
+                bar,
             )
 
     # --- Patients treated ONLY on factual (ML-only benefit) ---
@@ -271,14 +281,15 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
     )
 
     # --- Patients treated BEFORE onset on factual ---
-    f_before_onset = f_ever_treated & (f_tt[..., ] < onset_cf)
+    f_ever_treated & (f_tt[...,] < onset_cf)
     # Need to handle this carefully with the mask
     f_tt_septic = f_tt[f_ever_treated]
     onset_septic = onset_cf[f_ever_treated]
     before_onset = (f_tt_septic < onset_septic) & (f_tt_septic >= 0)
     logger.info(
         "Patients treated BEFORE sepsis onset (factual): %d / %d",
-        before_onset.sum(), f_ever_treated.sum(),
+        before_onset.sum(),
+        f_ever_treated.sum(),
     )
 
     # --- Kumar effectiveness comparison ---
@@ -292,12 +303,12 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
             cf_delay_hrs = np.maximum(cf_delay, 0) * 4.0
             f_eff = max_eff * np.power(0.5, f_delay_hrs / half_life)
             cf_eff = max_eff * np.power(
-                0.5, cf_delay_hrs / half_life,
+                0.5,
+                cf_delay_hrs / half_life,
             )
             logger.info("")
             logger.info(
-                "KUMAR EFFECTIVENESS "
-                "(among %d patients treated on both):",
+                "KUMAR EFFECTIVENESS (among %d patients treated on both):",
                 n_both,
             )
             logger.info(

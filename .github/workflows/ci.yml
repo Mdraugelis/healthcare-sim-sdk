@@ -1,0 +1,17 @@
+name: SDK validation
+on: [push, pull_request]
+jobs:
+  tests-and-notebooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: python scripts/check_invariants.py
+      - run: git ls-files '*.py' | xargs python scripts/check_no_bare_random.py
+      - run: flake8 healthcare_sim_sdk/
+      - run: pytest tests/ -q
+      - run: python scripts/execute_notebooks.py

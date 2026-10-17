@@ -15,15 +15,25 @@ import sys
 from pathlib import Path
 
 EXPECTED_ABSTRACT = {
-    "create_population", "step", "predict", "intervene", "measure",
+    "create_population",
+    "step",
+    "predict",
+    "intervene",
+    "measure",
 }
 EXPECTED_STREAMS = {
-    "population", "temporal", "prediction", "intervention", "outcomes",
+    "population",
+    "temporal",
+    "prediction",
+    "intervention",
+    "outcomes",
 }
 
 STATE_NAMES = {
-    "state_factual", "state_counterfactual",
-    "state", "state_snapshot",
+    "state_factual",
+    "state_counterfactual",
+    "state",
+    "state_snapshot",
 }
 
 
@@ -34,8 +44,7 @@ def find_abstract_methods(filepath: Path) -> set:
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
             for dec in node.decorator_list:
-                if (isinstance(dec, ast.Name)
-                        and dec.id == "abstractmethod"):
+                if isinstance(dec, ast.Name) and dec.id == "abstractmethod":
                     methods.add(node.name)
     return methods
 
@@ -44,8 +53,7 @@ def find_dataclass_fields(filepath: Path, class_name: str) -> set:
     """Find annotated fields in a dataclass."""
     tree = ast.parse(filepath.read_text())
     for node in ast.walk(tree):
-        if (isinstance(node, ast.ClassDef)
-                and node.name == class_name):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
             fields = set()
             for item in node.body:
                 if isinstance(item, ast.AnnAssign):
@@ -68,9 +76,7 @@ def check_scenario_contract():
     if abstract != EXPECTED_ABSTRACT:
         added = abstract - EXPECTED_ABSTRACT
         removed = EXPECTED_ABSTRACT - abstract
-        msg = (
-            "INVARIANT VIOLATION: 5-method scenario contract\n"
-        )
+        msg = "INVARIANT VIOLATION: 5-method scenario contract\n"
         if added:
             msg += f"  Added: {added}\n"
         if removed:
@@ -104,16 +110,12 @@ def check_rng_streams():
     # Also check STREAM_NAMES list
     tree = ast.parse(path.read_text())
     for node in ast.walk(tree):
-        if (isinstance(node, ast.Assign)
-                and any(
-                    isinstance(t, ast.Name)
-                    and t.id == "STREAM_NAMES"
-                    for t in (
-                        node.targets if isinstance(
-                            node.targets, list
-                        ) else [node.targets]
-                    )
-                )):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "STREAM_NAMES"
+            for t in (
+                node.targets if isinstance(node.targets, list) else [node.targets]
+            )
+        ):
             if isinstance(node.value, ast.List):
                 names = set()
                 for elt in node.value.elts:
@@ -144,23 +146,29 @@ def check_engine_state_opacity():
 
     violations = []
     for node in ast.walk(tree):
+        if isinstance(node, (ast.Attribute, ast.Subscript)):
+            if isinstance(node.value, ast.Name) and node.value.id in STATE_NAMES:
+                violations.append(f"  Line {node.lineno}: state internals accessed")
         if isinstance(node, ast.Call):
             fn = node.func
-            if (isinstance(fn, ast.Name)
-                    and fn.id in (
-                        "getattr", "isinstance", "hasattr",
-                    )
-                    and node.args
-                    and isinstance(node.args[0], ast.Name)
-                    and node.args[0].id in STATE_NAMES):
+            if (
+                isinstance(fn, ast.Name)
+                and fn.id
+                in (
+                    "getattr",
+                    "isinstance",
+                    "hasattr",
+                )
+                and node.args
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id in STATE_NAMES
+            ):
                 violations.append(
-                    f"  Line {node.lineno}: "
-                    f"{fn.id}({node.args[0].id}, ...)"
+                    f"  Line {node.lineno}: {fn.id}({node.args[0].id}, ...)"
                 )
     if violations:
         print(
-            "INVARIANT VIOLATION: engine inspects state\n"
-            + "\n".join(violations),
+            "INVARIANT VIOLATION: engine inspects state\n" + "\n".join(violations),
             file=sys.stderr,
         )
         return False

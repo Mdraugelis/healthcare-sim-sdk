@@ -6,6 +6,7 @@ RNGPartitioner streams. Only core/rng.py may reference
 np.random directly.
 """
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -47,16 +48,48 @@ def is_allowed(path: Path) -> bool:
 
 
 def check_file(path: Path) -> list:
+    """Check imports and calls with AST so aliases cannot bypass the hook.
+
+    Generator/SeedSequence names are allowed as annotations. RNG construction
+    and use outside the partitioner remain forbidden. Comments/docstrings
+    are not code.
+    """
+    tree = ast.parse(path.read_text())
     violations = []
-    for i, line in enumerate(path.read_text().splitlines(), 1):
-        stripped = line.lstrip()
-        if stripped.startswith("#"):
-            continue
-        for pattern in PATTERNS:
-            if pattern.search(line):
-                violations.append(
-                    f"  {path}:{i}: {stripped}"
+    numpy_names = {"np", "numpy"}
+    random_names = set()
+    for node in ast.walk(tree):
+        bad = False
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "numpy":
+                    numpy_names.add(alias.asname or alias.name)
+                if alias.name in ("numpy.random", "random"):
+                    bad = True
+                    random_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "random" or node.module == "numpy.random":
+                bad = any(
+                    a.name not in ("Generator", "SeedSequence") for a in node.names
                 )
+            elif node.module == "numpy":
+                for alias in node.names:
+                    if alias.name == "random":
+                        bad = True
+                        random_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Call):
+            fn = node.func
+            if isinstance(fn, ast.Attribute):
+                value = fn.value
+                bad = (
+                    isinstance(value, ast.Attribute)
+                    and value.attr == "random"
+                    and isinstance(value.value, ast.Name)
+                    and value.value.id in numpy_names
+                )
+                bad |= isinstance(value, ast.Name) and value.id in random_names
+        if bad:
+            violations.append(f"  {path}:{node.lineno}: unpartitioned randomness")
     return violations
 
 
@@ -75,8 +108,7 @@ if __name__ == "__main__":
             "\n"
             "All randomness must flow through RNGPartitioner.\n"
             "Use self.rng.temporal, self.rng.population, etc.\n"
-            "\n"
-            + "\n".join(violations),
+            "\n" + "\n".join(violations),
             file=sys.stderr,
         )
         sys.exit(1)

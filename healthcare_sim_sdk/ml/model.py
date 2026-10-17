@@ -84,10 +84,10 @@ class ControlledMLModel:
         self,
         mode: str = "discrimination",
         target_auc: Optional[float] = None,
-        target_sensitivity: float = 0.80,
-        target_ppv: float = 0.30,
+        target_sensitivity: Optional[float] = None,
+        target_ppv: Optional[float] = None,
         operating_threshold: Optional[float] = None,
-        target_calibration_slope: float = 1.0,
+        target_calibration_slope: Optional[float] = None,
         prevalence: Optional[float] = None,
         binding: Optional[str] = None,
         binding_value: Optional[float] = None,
@@ -98,13 +98,46 @@ class ControlledMLModel:
         min_positives_for_gate: int = 30,
     ):
         valid_modes = (
-            "discrimination", "classification", "threshold_ppv",
+            "discrimination",
+            "classification",
+            "threshold_ppv",
             "operating_point",
         )
         if mode not in valid_modes:
-            raise ValueError(
-                f"mode must be one of {valid_modes}, got '{mode}'"
-            )
+            raise ValueError(f"mode must be one of {valid_modes}, got '{mode}'")
+        unused = []
+        if mode != "operating_point":
+            unused += [
+                name
+                for name, value in (
+                    ("binding", binding),
+                    ("binding_value", binding_value),
+                    ("goal_value", goal_value),
+                )
+                if value is not None
+            ]
+        if mode in ("discrimination", "operating_point"):
+            unused += [
+                name
+                for name, value in (
+                    ("target_sensitivity", target_sensitivity),
+                    ("target_ppv", target_ppv),
+                )
+                if value is not None
+            ]
+        if mode == "threshold_ppv" and target_sensitivity is not None:
+            unused.append("target_sensitivity")
+        if mode == "classification" and target_auc is not None:
+            unused.append("target_auc")
+        if (
+            mode in ("classification", "operating_point")
+            and operating_threshold is not None
+        ):
+            unused.append("operating_threshold")
+        if target_calibration_slope is not None:
+            unused.append("target_calibration_slope")
+        if unused:
+            raise ValueError(f"Unused arguments for {mode}: {', '.join(unused)}")
         self.mode = mode
         self.binding = binding
         self.binding_value = binding_value
@@ -126,17 +159,22 @@ class ControlledMLModel:
             self.target_auc = target_auc
         else:
             self.target_auc = 0.83 if target_auc is None else target_auc
-        self.target_sensitivity = target_sensitivity
-        self.target_ppv = target_ppv
+        self.target_sensitivity = (
+            0.80 if target_sensitivity is None else target_sensitivity
+        )
+        self.target_ppv = 0.30 if target_ppv is None else target_ppv
         self.operating_threshold = operating_threshold
         self.target_calibration_slope = target_calibration_slope
+        self._configured_prevalence = prevalence
         self.prevalence = prevalence
 
         # Optimized parameters (set by fit())
         self.noise_correlation: float = 0.7
         self.noise_scale: float = 0.3
         self.label_noise_strength: float = 1.0
-        self.threshold: float = operating_threshold or 0.5
+        self.threshold: float = (
+            0.5 if operating_threshold is None else operating_threshold
+        )
         self._fitted = False
         self._fit_report: Optional[Dict] = None
         self._last_correlation_grid: Optional[np.ndarray] = None
@@ -151,7 +189,8 @@ class ControlledMLModel:
         self._platt_b: float = 0.0
 
     def _validate_operating_point_config(
-        self, target_auc: Optional[float],
+        self,
+        target_auc: Optional[float],
     ) -> None:
         """Enforce the degrees-of-freedom rule for operating_point mode.
 
@@ -179,8 +218,7 @@ class ControlledMLModel:
             )
         if not 0.0 < self.binding_value < 1.0:
             raise ValueError(
-                f"binding_value must lie in (0, 1); got "
-                f"{self.binding_value}"
+                f"binding_value must lie in (0, 1); got {self.binding_value}"
             )
 
         has_goal = self.goal_value is not None
@@ -201,12 +239,12 @@ class ControlledMLModel:
                 f"target_auc OR goal_value (the {other} goal)."
             )
         if has_goal and not 0.0 < self.goal_value < 1.0:
-            raise ValueError(
-                f"goal_value must lie in (0, 1); got {self.goal_value}"
-            )
+            raise ValueError(f"goal_value must lie in (0, 1); got {self.goal_value}")
 
     def _place_threshold_for_binding(
-        self, true_labels: np.ndarray, scores: np.ndarray,
+        self,
+        true_labels: np.ndarray,
+        scores: np.ndarray,
         binding: Optional[str] = None,
         binding_value: Optional[float] = None,
     ) -> Tuple[float, Dict[str, float]]:
@@ -219,9 +257,7 @@ class ControlledMLModel:
         Returns (threshold, metrics_at_that_threshold).
         """
         binding = binding or self.binding
-        binding_value = (
-            self.binding_value if binding_value is None else binding_value
-        )
+        binding_value = self.binding_value if binding_value is None else binding_value
         order = np.argsort(-scores)
         y = true_labels[order]
         s = scores[order]
@@ -245,9 +281,7 @@ class ControlledMLModel:
         # `scores >= threshold` reproduces this exact flagged set.
         cut = float(s[idx])
         below = s[s < cut]
-        threshold = (
-            float((cut + below[0]) / 2.0) if len(below) else cut
-        )
+        threshold = float((cut + below[0]) / 2.0) if len(below) else cut
         return threshold, {
             "ppv": float(ppv_curve[idx]),
             "sensitivity": float(sens_curve[idx]),
@@ -282,8 +316,11 @@ class ControlledMLModel:
                 stacklevel=2,
             )
         raw = self._generate_scores(
-            risk_scores, rng, None,
-            self.noise_correlation, self.noise_scale,
+            risk_scores,
+            rng,
+            None,
+            self.noise_correlation,
+            self.noise_scale,
         )
         return self._apply_platt(raw)
 
@@ -297,9 +334,7 @@ class ControlledMLModel:
         eps = 1e-7
         clipped = np.clip(raw_scores, eps, 1 - eps)
         raw_logits = np.log(clipped / (1 - clipped))
-        calibrated_logits = (
-            self._platt_a * raw_logits + self._platt_b
-        )
+        calibrated_logits = self._platt_a * raw_logits + self._platt_b
         calibrated = 1.0 / (1.0 + np.exp(-calibrated_logits))
         return np.clip(calibrated, 0, 1)
 
@@ -369,8 +404,16 @@ class ControlledMLModel:
         self._last_scale_grid = np.asarray(scale_grid)
 
         true_labels = np.asarray(true_labels)
-        prev = self.prevalence or float(true_labels.mean())
+        prev = (
+            self._configured_prevalence
+            if self._configured_prevalence is not None
+            else float(true_labels.mean())
+        )
+        self._gate_underpowered = False
         self.prevalence = prev
+        self._fitted = False
+        self._fit_report = None
+        self._classification_unreachable = False
 
         # The population's Bayes ceiling: the AUC of an oracle that knows
         # every entity's TRUE risk. Labels are stochastic draws from those
@@ -378,9 +421,7 @@ class ControlledMLModel:
         # A model that sees only risk can match this at best; noise only
         # lowers it. Exact rank AUC, so narrow low-risk bands are not
         # under-resolved.
-        self._population_auc_ceiling = float(
-            auc_exact(true_labels, risk_scores)
-        )
+        self._population_auc_ceiling = float(auc_exact(true_labels, risk_scores))
         self._n_positives = int(np.sum(true_labels))
         self._n_entities = int(len(true_labels))
 
@@ -400,29 +441,40 @@ class ControlledMLModel:
             self._required_auc = op_plan["required_auc"]
         elif self.mode == "classification":
             feasibility = check_target_feasibility(
-                prev, self.target_ppv, self.target_sensitivity,
+                prev,
+                self.target_ppv,
+                self.target_sensitivity,
             )
             self._required_auc = self._plan_classification(prev)
         else:  # discrimination, threshold_ppv
             if self.mode == "threshold_ppv":
                 feasibility = check_target_feasibility(
-                    prev, self.target_ppv, self.target_sensitivity,
+                    prev,
+                    self.target_ppv,
+                    self.target_sensitivity,
                 )
             self._required_auc = float(self.target_auc)
             self._check_population_ceiling(self._required_auc)
 
         # Search the label-free generator for the required AUC.
         best = self._search_curve(
-            true_labels, risk_scores, rng, n_iterations,
-            correlation_grid, scale_grid,
+            true_labels,
+            risk_scores,
+            rng,
+            n_iterations,
+            correlation_grid,
+            scale_grid,
         )
         self.noise_correlation, self.noise_scale = best
-        self.label_noise_strength = 0.0   # retained attribute; unused
+        self.label_noise_strength = 0.0  # retained attribute; unused
 
         # Platt scaling on one draw of label-free scores.
         fit_raw = self._generate_scores(
-            risk_scores, rng, None,
-            self.noise_correlation, self.noise_scale,
+            risk_scores,
+            rng,
+            None,
+            self.noise_correlation,
+            self.noise_scale,
         )
         self._fit_platt_scaling(fit_raw, true_labels)
         self._fitted = True
@@ -432,24 +484,55 @@ class ControlledMLModel:
         # scale predict()/predict_binary() return.
         if self.mode == "operating_point":
             self.threshold, _ = self._place_threshold_for_binding(
-                true_labels, fit_scores, self.binding, self.binding_value,
+                true_labels,
+                fit_scores,
+                self.binding,
+                self.binding_value,
             )
         elif self.mode == "classification":
             self.threshold, _ = self._place_threshold_for_binding(
-                true_labels, fit_scores, "ppv", self.target_ppv,
+                true_labels,
+                fit_scores,
+                "ppv",
+                self.target_ppv,
             )
         else:
-            self.threshold = self.operating_threshold or 0.5
+            self.threshold = (
+                0.5 if self.operating_threshold is None else self.operating_threshold
+            )
 
         # Report on an independent draw: what predict() will deliver.
-        report_scores = self._apply_platt(self._generate_scores(
-            risk_scores, rng, None,
-            self.noise_correlation, self.noise_scale,
-        ))
+        report_scores = self._apply_platt(
+            self._generate_scores(
+                risk_scores,
+                rng,
+                None,
+                self.noise_correlation,
+                self.noise_scale,
+            )
+        )
         report = self._build_report(
-            true_labels, report_scores, feasibility,
+            true_labels,
+            report_scores,
+            feasibility,
         )
         report["required_auc"] = self._required_auc
+        report["fit_target_auc"] = self._search_target_auc()
+        report["configured_ppv"] = (
+            self.target_ppv if self.mode == "classification" else None
+        )
+        report["configured_sensitivity"] = (
+            self.target_sensitivity if self.mode == "classification" else None
+        )
+        report["population_ceiling_exceeded"] = bool(
+            self._required_auc > self._population_auc_ceiling + self.tolerance_abs
+        )
+        if self.mode == "classification" and self._classification_unreachable:
+            # No finite requirement was solved. The ceiling is a search target,
+            # never a replacement for a configured operating point.
+            report["required_auc"] = None
+            report["required_auc_source"] = "unreachable_operating_point"
+            report["operating_point_unreachable"] = True
         report["report_basis"] = "independent_noise_draw"
         report["label_free"] = True
         if op_plan is not None:
@@ -471,8 +554,84 @@ class ControlledMLModel:
             self._enforce_operating_point(report)
         else:
             self._check_auc_delivered(report)
+            self._check_classification_delivered(report)
 
         return report
+
+    def fit_reference(
+        self,
+        risk_scores,
+        rng,
+        label_probabilities=None,
+        min_events=200,
+        max_entities=100000,
+    ):
+        """Fit on an independent bootstrap reference cohort, not a handful
+        of first-step outcomes. The label horizon is explicit. This models
+        training on a larger site with the same empirical risk distribution;
+        it cannot invent missing population heterogeneity.
+        """
+        risks = np.asarray(risk_scores)
+        probs = (
+            risks if label_probabilities is None else np.asarray(label_probabilities)
+        )
+        if risks.ndim != 1 or probs.shape != risks.shape or not len(risks):
+            raise ValueError(
+                "Reference risks and probabilities must be nonempty vectors"
+            )
+        mean_prob = float(probs.mean())
+        n = min(max_entities, max(5000, int(min_events / max(mean_prob, 1e-6))))
+        indices = rng.integers(0, len(risks), n)
+        labels = (rng.random(n) < probs[indices]).astype(int)
+        if min(labels.sum(), n - labels.sum()) < self.min_positives_for_gate:
+            raise ValueError(
+                "Reference cohort has too few events; increase max_entities"
+            )
+        attempts = 1
+        try:
+            report = self.fit(labels, risks[indices], rng, n_iterations=5)
+        except OperatingPointError as error:
+            # A finite reference can put its empirical ceiling several SE
+            # below the population value. Collect more independent evidence
+            # before declaring infeasibility; retain the original gate and
+            # requirement, and let a confirmed failure propagate unchanged.
+            if "population_auc_ceiling" not in error.report or n >= max_entities:
+                raise
+            n = min(max_entities, 4 * n)
+            indices = rng.integers(0, len(risks), n)
+            labels = (rng.random(n) < probs[indices]).astype(int)
+            attempts = 2
+            report = self.fit(labels, risks[indices], rng, n_iterations=5)
+        report["reference_cohort_size"] = n
+        report["reference_attempts"] = attempts
+        report["reference_expected_events"] = float(probs[indices].sum())
+        return report
+
+    def _check_classification_delivered(self, report):
+        """Verify threshold metrics on the independent score draw."""
+        targets = {}
+        if self.mode == "classification":
+            targets = {"sensitivity": self.target_sensitivity, "ppv": self.target_ppv}
+        elif self.mode == "threshold_ppv":
+            targets = {"ppv": self.target_ppv}
+        misses = []
+        for metric, target in targets.items():
+            ok = abs(report[f"achieved_{metric}"] - target) <= gate_tolerance(
+                target, self.tolerance_rel, self.tolerance_abs
+            )
+            report[f"{metric}_within_tolerance"] = ok
+            if not ok:
+                misses.append(
+                    f"{metric}: required {target:.4f}, delivered "
+                    f"{report[f'achieved_{metric}']:.4f}"
+                )
+        if misses:
+            report["gate_misses"] = misses
+            report["accepted_infeasible"] = self.allow_infeasible
+            message = "Classification metrics not achieved: " + "; ".join(misses)
+            if self.mode == "classification" and not self.allow_infeasible:
+                raise OperatingPointError(message, report)
+            warnings.warn(message, UserWarning, stacklevel=3)
 
     def _fit_degenerate(
         self,
@@ -492,19 +651,28 @@ class ControlledMLModel:
         self._required_auc = None
         self.label_noise_strength = 0.0
         self._platt_a, self._platt_b = 1.0, 0.0
-        self.threshold = self.operating_threshold or 0.5
+        self.threshold = (
+            0.5 if self.operating_threshold is None else self.operating_threshold
+        )
         self._fitted = True
-        scores = self._apply_platt(self._generate_scores(
-            risk_scores, rng, None,
-            self.noise_correlation, self.noise_scale,
-        ))
+        scores = self._apply_platt(
+            self._generate_scores(
+                risk_scores,
+                rng,
+                None,
+                self.noise_correlation,
+                self.noise_scale,
+            )
+        )
         report = self._build_report(true_labels, scores, None)
-        report.update({
-            "required_auc": None,
-            "report_basis": "independent_noise_draw",
-            "label_free": True,
-            "degenerate_population": True,
-        })
+        report.update(
+            {
+                "required_auc": None,
+                "report_basis": "independent_noise_draw",
+                "label_free": True,
+                "degenerate_population": True,
+            }
+        )
         self._fit_report = report
         return report
 
@@ -519,7 +687,8 @@ class ControlledMLModel:
         solve = None
         if check["valid"]:
             solve = required_auc_for_operating_point(
-                prevalence=prev, binding="ppv",
+                prevalence=prev,
+                binding="ppv",
                 binding_value=self.target_ppv,
                 goal_value=self.target_sensitivity,
             )
@@ -537,12 +706,10 @@ class ControlledMLModel:
                     report={"solve": solve},
                 )
             warnings.warn(msg, UserWarning, stacklevel=3)
+            self._classification_unreachable = True
             return self._population_auc_ceiling
         required = float(solve["required_auc"])
         self._check_population_ceiling(required)
-        if (self.allow_infeasible and self._population_auc_ceiling
-                is not None and required > self._population_auc_ceiling):
-            return self._population_auc_ceiling
         return required
 
     def _search_curve(
@@ -560,7 +727,7 @@ class ControlledMLModel:
         correlation: AUC falls monotonically as scale grows, so the
         grid's step size no longer limits accuracy.
         """
-        target = float(self._required_auc)
+        target = self._search_target_auc()
         n = len(risk_scores)
         # Common random numbers: one fixed set of draws for every
         # candidate, so differences between candidates are signal.
@@ -573,7 +740,11 @@ class ControlledMLModel:
             total = 0.0
             for z_corr, z_ind in draws:
                 s = self._scores_from_noise(
-                    risk_scores, z_corr, z_ind, corr, scale,
+                    risk_scores,
+                    z_corr,
+                    z_ind,
+                    corr,
+                    scale,
                 )
                 total += auc_exact(true_labels, s)
             return total / len(draws)
@@ -603,8 +774,7 @@ class ControlledMLModel:
                         lo, auc_lo = mid, auc_mid
                     else:
                         hi, auc_hi = mid, auc_mid
-                scale = lo if abs(auc_lo - target) <= abs(
-                    auc_hi - target) else hi
+                scale = lo if abs(auc_lo - target) <= abs(auc_hi - target) else hi
         return corr, scale
 
     def _check_auc_delivered(self, report: Dict) -> None:
@@ -622,7 +792,7 @@ class ControlledMLModel:
             int(self._n_positives or 0) < self.min_positives_for_gate
         )
         if report["gate_underpowered"]:
-            return      # already warned; a miss on so few events is noise
+            return  # already warned; a miss on so few events is noise
         if not report["auc_within_tolerance"]:
             warnings.warn(
                 f"ControlledMLModel ({self.mode}) delivered AUC "
@@ -636,10 +806,7 @@ class ControlledMLModel:
 
     def _plan_operating_point(self, prev: float) -> Dict:
         """Translate (binding, goal) into the AUC the curve must reach."""
-        ppv_value = (
-            self.binding_value if self.binding == "ppv"
-            else self.goal_value
-        )
+        ppv_value = self.binding_value if self.binding == "ppv" else self.goal_value
         if ppv_value is not None:
             check = validate_operating_point(prev, ppv_value)
             if not check["valid"]:
@@ -696,6 +863,15 @@ class ControlledMLModel:
         ceiling = self._population_auc_ceiling
         if ceiling is None:
             return
+        if self.allow_infeasible and required_auc > ceiling:
+            warnings.warn(
+                f"Required AUC {required_auc:.4f} exceeds population Bayes "
+                f"ceiling {ceiling:.4f}; fitting best available curve. "
+                "The configured requirement is retained in the report.",
+                UserWarning,
+                stacklevel=3,
+            )
+            return
         # The ceiling is ESTIMATED from finite data, so it carries
         # sampling noise -- with few positives its standard error can
         # reach several points of AUC. Refuse only when the requirement
@@ -706,7 +882,14 @@ class ControlledMLModel:
         if required_auc <= ceiling + margin:
             return
         if self.allow_infeasible:
-            return          # the gate will record it after fitting
+            warnings.warn(
+                f"Required AUC {required_auc:.4f} exceeds population Bayes "
+                f"ceiling {ceiling:.4f}; fitting best available curve. "
+                "The configured requirement is retained in the report.",
+                UserWarning,
+                stacklevel=3,
+            )
+            return
         n_pos = int(self._n_positives or 0)
         if n_pos < self.min_positives_for_gate:
             # One or ten positives cannot pin a ceiling; refusing to run
@@ -723,14 +906,12 @@ class ControlledMLModel:
             )
             self._gate_underpowered = True
             return
-        relax = (
-            f", relax the binding {self.binding} target"
-            if self.binding else ""
-        )
+        relax = f", relax the binding {self.binding} target" if self.binding else ""
         noise_note = (
             f"\n(Ceiling estimated from {n_pos} positive cases; with few "
             f"positives this estimate is itself noisy.)"
-            if n_pos and n_pos < 100 else ""
+            if n_pos and n_pos < 100
+            else ""
         )
         raise OperatingPointError(
             f"Mode '{self.mode}' requires AUC {required_auc:.4f}, which "
@@ -752,6 +933,12 @@ class ControlledMLModel:
             },
         )
 
+    def _search_target_auc(self) -> float:
+        """An explicit infeasibility override may cap the search, not the requirement."""
+        if self.allow_infeasible:
+            return min(float(self._required_auc), float(self._population_auc_ceiling))
+        return float(self._required_auc)
+
     def _ceiling_standard_error(self) -> float:
         """Hanley-McNeil standard error of the estimated ceiling AUC."""
         a = self._population_auc_ceiling
@@ -761,12 +948,15 @@ class ControlledMLModel:
             return 0.0
         q1 = a / (2 - a)
         q2 = 2 * a * a / (1 + a)
-        var = (a * (1 - a) + (n1 - 1) * (q1 - a * a)
-               + (n0 - 1) * (q2 - a * a)) / (n1 * n0)
+        var = (a * (1 - a) + (n1 - 1) * (q1 - a * a) + (n0 - 1) * (q2 - a * a)) / (
+            n1 * n0
+        )
         return float(np.sqrt(max(var, 0.0)))
 
     def _operating_point_report(
-        self, op_plan: Dict, report: Dict,
+        self,
+        op_plan: Dict,
+        report: Dict,
     ) -> Dict:
         """Operating-point specific fields appended to the fit report."""
         other = "sensitivity" if self.binding == "ppv" else "ppv"
@@ -781,18 +971,15 @@ class ControlledMLModel:
             "achieved_goal_metric": achieved_other,
             "required_auc": op_plan["required_auc"],
             "required_auc_source": op_plan["required_auc_source"],
-            "binding_within_tolerance": abs(
-                achieved_binding - self.binding_value
-            ) <= gate_tolerance(
+            "binding_within_tolerance": abs(achieved_binding - self.binding_value)
+            <= gate_tolerance(
                 self.binding_value, self.tolerance_rel, self.tolerance_abs
             ),
         }
         if self.goal_value is not None:
             extra["goal_within_tolerance"] = abs(
                 achieved_other - self.goal_value
-            ) <= gate_tolerance(
-                self.goal_value, self.tolerance_rel, self.tolerance_abs
-            )
+            ) <= gate_tolerance(self.goal_value, self.tolerance_rel, self.tolerance_abs)
         # A search that stops on its own grid edge has not converged --
         # the optimum is probably outside the box. Check BOTH ends of
         # BOTH grids: chasing a high AUC pins correlation at its maximum
@@ -800,8 +987,7 @@ class ControlledMLModel:
         # half the cases.
         pinned = []
         for name, value, grid in (
-            ("noise_correlation", self.noise_correlation,
-             self._last_correlation_grid),
+            ("noise_correlation", self.noise_correlation, self._last_correlation_grid),
             ("noise_scale", self.noise_scale, self._last_scale_grid),
         ):
             if grid is None or len(grid) < 2:
@@ -850,9 +1036,7 @@ class ControlledMLModel:
                 # entire useful range). Use the absolute floor.
                 tol = self.tolerance_abs
             else:
-                tol = gate_tolerance(
-                    target, self.tolerance_rel, self.tolerance_abs
-                )
+                tol = gate_tolerance(target, self.tolerance_rel, self.tolerance_abs)
             if abs(achieved - target) > tol:
                 misses.append(
                     f"  {role} {metric}: configured {target:.4f}, "
@@ -881,9 +1065,10 @@ class ControlledMLModel:
         # amount of fitting reaches the requirement. This outranks a
         # pinned grid -- the search pins BECAUSE it is chasing something
         # unreachable, so widening the grid would waste the user's time.
-        if (ceiling is not None
-                and report["required_auc"]
-                > ceiling + self.tolerance_abs):
+        if (
+            ceiling is not None
+            and report["required_auc"] > ceiling + self.tolerance_abs
+        ):
             cause += (
                 f"\nThat requirement exceeds this population's Bayes "
                 f"ceiling of {ceiling:.4f} -- the AUC of an oracle that "
@@ -914,9 +1099,7 @@ class ControlledMLModel:
             )
 
         message = (
-            "Operating point not achieved.\n"
-            + "\n".join(misses)
-            + f"\n{cause}\n"
+            "Operating point not achieved.\n" + "\n".join(misses) + f"\n{cause}\n"
             "Set allow_infeasible=True to proceed anyway; the accepted "
             "gap is recorded in the fit report."
         )
@@ -951,7 +1134,11 @@ class ControlledMLModel:
         z_corr = rng.normal(0, 1, n)
         z_ind = rng.normal(0, 1, n)
         return self._scores_from_noise(
-            risk_scores, z_corr, z_ind, correlation, scale,
+            risk_scores,
+            z_corr,
+            z_ind,
+            correlation,
+            scale,
         )
 
     @staticmethod
@@ -999,20 +1186,19 @@ class ControlledMLModel:
             a, b = params
             p = 1.0 / (1.0 + np.exp(-(a * raw_logits + b)))
             p = np.clip(p, eps, 1 - eps)
-            return -np.mean(
-                true_labels * np.log(p)
-                + (1 - true_labels) * np.log(1 - p)
-            )
+            return -np.mean(true_labels * np.log(p) + (1 - true_labels) * np.log(1 - p))
 
         result = minimize(
-            neg_log_likelihood, [1.0, 0.0],
+            neg_log_likelihood,
+            [1.0, 0.0],
             method="Nelder-Mead",
         )
         self._platt_a = float(result.x[0])
         self._platt_b = float(result.x[1])
         logger.debug(
             "Platt scaling: a=%.3f, b=%.3f",
-            self._platt_a, self._platt_b,
+            self._platt_a,
+            self._platt_b,
         )
 
     def _build_report(
@@ -1046,12 +1232,8 @@ class ControlledMLModel:
         }
 
         if feasibility:
-            report["theoretical_max_ppv_at_spec_95"] = (
-                feasibility["max_ppv_at_spec_95"]
-            )
-            report["required_specificity"] = (
-                feasibility["required_specificity"]
-            )
+            report["theoretical_max_ppv_at_spec_95"] = feasibility["max_ppv_at_spec_95"]
+            report["required_specificity"] = feasibility["required_specificity"]
             report["target_feasible"] = feasibility["feasible"]
 
         return report

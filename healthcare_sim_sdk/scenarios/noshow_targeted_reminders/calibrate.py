@@ -106,23 +106,18 @@ def run_simulation(
 
     sc = NoShowTargetedReminderScenario(**kwargs)
     results = BranchedSimulationEngine(
-        sc, CounterfactualMode.BRANCHED,
+        sc,
+        CounterfactualMode.BRANCHED,
     ).run(n_patients)
 
     # Compute rates
-    f_noshows = sum(
-        results.outcomes[t].events.sum() for t in range(n_days)
-    )
-    f_total = sum(
-        len(results.outcomes[t].events) for t in range(n_days)
-    )
+    f_noshows = sum(results.outcomes[t].events.sum() for t in range(n_days))
+    f_total = sum(len(results.outcomes[t].events) for t in range(n_days))
     cf_noshows = sum(
-        results.counterfactual_outcomes[t].events.sum()
-        for t in range(n_days)
+        results.counterfactual_outcomes[t].events.sum() for t in range(n_days)
     )
     cf_total = sum(
-        len(results.counterfactual_outcomes[t].events)
-        for t in range(n_days)
+        len(results.counterfactual_outcomes[t].events) for t in range(n_days)
     )
 
     f_rate = f_noshows / max(f_total, 1)
@@ -139,10 +134,7 @@ def run_simulation(
                 all_act.append(a)
     pred_arr = np.concatenate(all_pred) if all_pred else np.array([])
     act_arr = np.concatenate(all_act) if all_act else np.array([])
-    achieved_auc = (
-        float(auc_score(act_arr, pred_arr))
-        if len(pred_arr) > 0 else 0.0
-    )
+    achieved_auc = float(auc_score(act_arr, pred_arr)) if len(pred_arr) > 0 else 0.0
 
     # Race-level rates
     race_rates = {}
@@ -151,9 +143,7 @@ def run_simulation(
             ("factual", results.outcomes[t]),
             ("counterfactual", results.counterfactual_outcomes[t]),
         ]:
-            races = outcomes.secondary.get(
-                "race_ethnicity", np.array([])
-            )
+            races = outcomes.secondary.get("race_ethnicity", np.array([]))
             events = outcomes.events
             for race in np.unique(races):
                 mask = races == race
@@ -164,8 +154,7 @@ def run_simulation(
                 race_rates[key]["total"] += mask.sum()
 
     race_rate_pcts = {
-        k: v["noshows"] / max(v["total"], 1)
-        for k, v in race_rates.items()
+        k: v["noshows"] / max(v["total"], 1) for k, v in race_rates.items()
     }
 
     return float(f_rate), float(cf_rate), achieved_auc, race_rate_pcts
@@ -186,9 +175,11 @@ def calibrate(
     print(f"Search range: [{eff_low:.2f}, {eff_high:.2f}]")
     print(f"Tolerance: {tolerance_pp:.1f} pp")
     print()
-    print(f"{'Iter':>4s}  {'Eff':>6s}  {'F-rate':>7s}  "
-          f"{'CF-rate':>7s}  {'Abs red':>8s}  {'Gap pp':>7s}  "
-          f"{'AUC':>6s}  {'Time':>5s}")
+    print(
+        f"{'Iter':>4s}  {'Eff':>6s}  {'F-rate':>7s}  "
+        f"{'CF-rate':>7s}  {'Abs red':>8s}  {'Gap pp':>7s}  "
+        f"{'AUC':>6s}  {'Time':>5s}"
+    )
     print("-" * 65)
 
     best_eff = None
@@ -198,16 +189,20 @@ def calibrate(
         eff_mid = (eff_low + eff_high) / 2
         t0 = time.time()
         f_rate, cf_rate, auc, _ = run_simulation(
-            settings, eff_mid, seed=seed,
+            settings,
+            eff_mid,
+            seed=seed,
         )
         elapsed = time.time() - t0
 
         gap_pp = (f_rate - target) * 100
         abs_red_pp = (cf_rate - f_rate) * 100
 
-        print(f"{i+1:>4d}  {eff_mid:>6.3f}  {f_rate:>6.1%}  "
-              f"{cf_rate:>6.1%}  {abs_red_pp:>7.1f}pp  "
-              f"{gap_pp:>+6.1f}pp  {auc:>6.3f}  {elapsed:>4.0f}s")
+        print(
+            f"{i + 1:>4d}  {eff_mid:>6.3f}  {f_rate:>6.1%}  "
+            f"{cf_rate:>6.1%}  {abs_red_pp:>7.1f}pp  "
+            f"{gap_pp:>+6.1f}pp  {auc:>6.3f}  {elapsed:>4.0f}s"
+        )
 
         if abs(gap_pp) < tolerance_pp:
             print(f"\n  Converged at effectiveness={eff_mid:.4f}")
@@ -223,8 +218,10 @@ def calibrate(
         else:
             eff_high = eff_mid
 
-    print(f"\n  Best after {max_iterations} iterations: "
-          f"effectiveness={best_eff:.4f} (gap={best_gap:.1f}pp)")
+    print(
+        f"\n  Best after {max_iterations} iterations: "
+        f"effectiveness={best_eff:.4f} (gap={best_gap:.1f}pp)"
+    )
     return best_eff
 
 
@@ -233,16 +230,22 @@ def main():
         description="Calibrate reminder effectiveness",
     )
     parser.add_argument(
-        "--setting", type=str, required=True,
+        "--setting",
+        type=str,
+        required=True,
         choices=["chong", "rosen"],
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--tolerance", type=float, default=0.5,
+        "--tolerance",
+        type=float,
+        default=0.5,
         help="Tolerance in percentage points",
     )
     parser.add_argument(
-        "--capacity", type=int, default=None,
+        "--capacity",
+        type=int,
+        default=None,
         help="Override call_capacity_per_day",
     )
     args = parser.parse_args()
@@ -263,36 +266,38 @@ def main():
     )
     total = time.time() - t0
 
-    print(f"\n{'='*65}")
+    print(f"\n{'=' * 65}")
     print(f"CALIBRATION RESULT ({args.setting.upper()})")
-    print(f"{'='*65}")
+    print(f"{'=' * 65}")
     print(f"  reminder_effectiveness: {best_eff:.4f}")
     print(f"  Total time: {total:.0f}s")
 
     # Final validation run with calibrated value
-    print(f"\nFinal validation run...")
+    print("\nFinal validation run...")
     f_rate, cf_rate, auc, race_rates = run_simulation(
-        settings, best_eff, seed=args.seed,
+        settings,
+        best_eff,
+        seed=args.seed,
     )
     print(f"  Factual no-show rate:        {f_rate:.1%}")
     print(f"  Counterfactual no-show rate:  {cf_rate:.1%}")
-    print(f"  Absolute reduction:           "
-          f"{(cf_rate - f_rate)*100:.1f} pp")
-    print(f"  Relative reduction:           "
-          f"{(cf_rate - f_rate)/cf_rate*100:.1f}%")
+    print(f"  Absolute reduction:           {(cf_rate - f_rate) * 100:.1f} pp")
+    print(f"  Relative reduction:           {(cf_rate - f_rate) / cf_rate * 100:.1f}%")
     print(f"  Achieved AUC:                 {auc:.3f}")
 
     if args.setting == "rosen":
-        print(f"\n  Race-level rates:")
+        print("\n  Race-level rates:")
         for race in ["White", "Black", "Hispanic"]:
             f_key = f"factual_{race}"
             cf_key = f"counterfactual_{race}"
             if f_key in race_rates and cf_key in race_rates:
                 f_r = race_rates[f_key]
                 cf_r = race_rates[cf_key]
-                print(f"    {race:>10s}: factual={f_r:.1%}, "
-                      f"CF={cf_r:.1%}, "
-                      f"reduction={(cf_r - f_r)*100:.1f}pp")
+                print(
+                    f"    {race:>10s}: factual={f_r:.1%}, "
+                    f"CF={cf_r:.1%}, "
+                    f"reduction={(cf_r - f_r) * 100:.1f}pp"
+                )
 
 
 if __name__ == "__main__":

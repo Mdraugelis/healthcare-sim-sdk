@@ -36,19 +36,20 @@ from .conftest import assert_no_nan_inf
 # 1. POPULATION SIZE EXTREMES
 # =====================================================================
 
+
 class TestPopulationSizeExtremes:
     """Simulation must work correctly at population extremes."""
 
     def test_n_equals_1(self):
         """Single-entity simulation should complete without error."""
         config = StrokeConfig(
-            n_patients=1, n_weeks=8,
+            allow_infeasible_model=True,
+            n_patients=1,
+            n_weeks=8,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(1)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(1)
         assert results.n_entities == 1
         for t in range(8):
             assert results.outcomes[t].events.shape == (1,)
@@ -56,25 +57,25 @@ class TestPopulationSizeExtremes:
     def test_n_equals_2(self):
         """Two-entity simulation: minimal population for statistics."""
         config = StrokeConfig(
-            n_patients=2, n_weeks=8,
+            allow_infeasible_model=True,
+            n_patients=2,
+            n_weeks=8,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(2)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(2)
         assert results.n_entities == 2
 
     def test_large_population(self):
         """Large population (20k) should work and take reasonable time."""
         config = StrokeConfig(
-            n_patients=20000, n_weeks=4,
+            allow_infeasible_model=True,
+            n_patients=20000,
+            n_weeks=4,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(20000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(20000)
         assert results.n_entities == 20000
         assert results.outcomes[0].events.shape == (20000,)
 
@@ -83,19 +84,20 @@ class TestPopulationSizeExtremes:
 # 2. TIME HORIZON EXTREMES
 # =====================================================================
 
+
 class TestTimeHorizonExtremes:
     """Simulation must handle extreme time configurations."""
 
     def test_single_timestep(self):
         """n_timesteps=1 with prediction at t=0."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=1,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=1,
             prediction_interval=1,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(100)
         assert len(results.outcomes) == 1
         assert 0 in results.predictions
 
@@ -107,13 +109,13 @@ class TestTimeHorizonExtremes:
         Verify engine handles this gracefully.
         """
         config = StrokeConfig(
-            n_patients=100, n_weeks=10,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=10,
             prediction_interval=100,  # effectively once at t=0
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(100)
         # Only 1 prediction (at t=0) since range(0, 10, 100) = [0]
         assert len(results.predictions) == 1
         assert 0 in results.predictions
@@ -123,13 +125,13 @@ class TestTimeHorizonExtremes:
     def test_prediction_every_timestep(self):
         """Predict at every single timestep (maximum intervention frequency)."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=12,
             prediction_interval=1,  # predict every week
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(200)
         assert len(results.predictions) == 12
         assert len(results.interventions) == 12
 
@@ -138,28 +140,26 @@ class TestTimeHorizonExtremes:
 # 3. PARAMETER EXTREMES
 # =====================================================================
 
+
 class TestParameterExtremes:
     """Test scenarios at parameter boundaries."""
 
     def test_100pct_effectiveness_maximum_reduction(self):
         """100% effectiveness should produce maximum event reduction."""
         config = StrokeConfig(
-            n_patients=5000, n_weeks=26,
+            allow_infeasible_model=True,
+            n_patients=5000,
+            n_weeks=26,
             prediction_interval=4,
             intervention_effectiveness=1.0,
             annual_incident_rate=0.10,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(5000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(5000)
 
-        f_total = sum(
-            results.outcomes[t].events.sum() for t in range(26)
-        )
+        f_total = sum(results.outcomes[t].events.sum() for t in range(26))
         cf_total = sum(
-            results.counterfactual_outcomes[t].events.sum()
-            for t in range(26)
+            results.counterfactual_outcomes[t].events.sum() for t in range(26)
         )
         # With 100% effectiveness, treated patients should have zero risk
         # So factual should be strictly less
@@ -171,48 +171,41 @@ class TestParameterExtremes:
     def test_very_high_incident_rate(self):
         """Very high incidence (50%/year) should produce many events."""
         config = StrokeConfig(
-            n_patients=1000, n_weeks=52,
+            allow_infeasible_model=True,
+            n_patients=1000,
+            n_weeks=52,
             annual_incident_rate=0.50,
             prediction_interval=52,
             intervention_effectiveness=0.0,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(1000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(1000)
 
-        total = sum(
-            results.outcomes[t].events.sum() for t in range(52)
-        )
+        total = sum(results.outcomes[t].events.sum() for t in range(52))
         # At 50% annual rate, expect ~500 events
-        assert total > 100, (
-            f"High incidence should produce many events, got {total}"
-        )
+        assert total > 100, f"High incidence should produce many events, got {total}"
 
     def test_very_low_incident_rate(self):
         """Very low incidence (0.1%/year) should produce very few events."""
         config = StrokeConfig(
-            n_patients=1000, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=1000,
+            n_weeks=12,
             annual_incident_rate=0.001,
             prediction_interval=12,
             intervention_effectiveness=0.0,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(1000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(1000)
 
-        total = sum(
-            results.outcomes[t].events.sum() for t in range(12)
-        )
-        assert total < 20, (
-            f"Very low incidence should produce few events, got {total}"
-        )
+        total = sum(results.outcomes[t].events.sum() for t in range(12))
+        assert total < 20, f"Very low incidence should produce few events, got {total}"
 
 
 # =====================================================================
 # 4. ANALYSIS EXPORT EDGE CASES
 # =====================================================================
+
 
 class TestAnalysisExportEdgeCases:
     """Analysis exports must handle edge cases gracefully."""
@@ -221,17 +214,18 @@ class TestAnalysisExportEdgeCases:
         """to_panel() should raise ValueError if entity_ids is None."""
         # Create results with None entity_ids
         from healthcare_sim_sdk.core.scenario import Outcomes
+
         results = SimulationResults(
             n_entities=5,
             time_config=TimeConfig(
-                n_timesteps=1, timestep_duration=1 / 52,
+                n_timesteps=1,
+                timestep_duration=1 / 52,
                 prediction_schedule=[],
             ),
             counterfactual_mode="none",
         )
         results.record_outcomes(
-            0, Outcomes(events=np.array([0, 1, 0, 1, 0]),
-                        entity_ids=None)
+            0, Outcomes(events=np.array([0, 1, 0, 1, 0]), entity_ids=None)
         )
         analysis = results.to_analysis()
         with pytest.raises(ValueError, match="entity_ids"):
@@ -240,13 +234,13 @@ class TestAnalysisExportEdgeCases:
     def test_entity_snapshots_invalid_timestep(self):
         """to_entity_snapshots() at non-existent timestep should raise."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=4,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=4,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.NONE
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.NONE).run(100)
         analysis = results.to_analysis()
 
         with pytest.raises(ValueError, match="No outcomes"):
@@ -255,13 +249,13 @@ class TestAnalysisExportEdgeCases:
     def test_time_series_correct_length(self):
         """Time series should have exactly n_timesteps entries."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(100)
         analysis = results.to_analysis()
 
         ts = analysis.to_time_series()
@@ -272,20 +266,19 @@ class TestAnalysisExportEdgeCases:
     def test_panel_data_dimensions(self):
         """Panel data should have n_entities * n_timesteps rows."""
         config = StrokeConfig(
-            n_patients=50, n_weeks=8,
+            allow_infeasible_model=True,
+            n_patients=50,
+            n_weeks=8,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(50)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(50)
         analysis = results.to_analysis()
 
         panel = analysis.to_panel()
         expected_rows = 50 * 8
         assert len(panel["entity_ids"]) == expected_rows, (
-            f"Panel should have {expected_rows} rows, "
-            f"got {len(panel['entity_ids'])}"
+            f"Panel should have {expected_rows} rows, got {len(panel['entity_ids'])}"
         )
         assert len(panel["outcomes"]) == expected_rows
         assert len(panel["treated"]) == expected_rows
@@ -293,13 +286,13 @@ class TestAnalysisExportEdgeCases:
     def test_treatment_indicator_binary(self):
         """Treatment indicator should be strictly 0 or 1."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(200)
 
         indicator = results.get_treatment_indicator()
         unique = np.unique(indicator)
@@ -310,13 +303,13 @@ class TestAnalysisExportEdgeCases:
     def test_counterfactual_time_series_export(self):
         """Counterfactual branch time series should export correctly."""
         config = StrokeConfig(
-            n_patients=200, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=200,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(200)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(200)
         analysis = results.to_analysis()
 
         cf_ts = analysis.to_time_series(branch="counterfactual")
@@ -327,6 +320,7 @@ class TestAnalysisExportEdgeCases:
 # =====================================================================
 # 5. ML MODEL BOUNDARY CONDITIONS
 # =====================================================================
+
 
 class TestMLModelBoundaries:
     """ML model must handle extreme operating conditions."""
@@ -352,8 +346,9 @@ class TestMLModelBoundaries:
         # Labels are unrelated to these risks (ceiling ~0.5), so 0.75 is
         # unreachable; this test is about numerical stability, so fit
         # anyway and let the gap be recorded.
-        model = ControlledMLModel(mode="discrimination", target_auc=0.75,
-                                  allow_infeasible=True)
+        model = ControlledMLModel(
+            mode="discrimination", target_auc=0.75, allow_infeasible=True
+        )
         report = model.fit(labels, risks, rng, n_iterations=3)
         assert np.isfinite(report["achieved_auc"])
 

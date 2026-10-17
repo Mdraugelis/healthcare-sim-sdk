@@ -41,6 +41,7 @@ from .conftest import assert_no_nan_inf, assert_in_unit_interval
 # 1. HAZARD CONVERSION EDGE CASES
 # =====================================================================
 
+
 class TestHazardNumericalStability:
     """Hazard conversions must not produce NaN/Inf at extremes."""
 
@@ -91,6 +92,7 @@ class TestHazardNumericalStability:
 # 2. ML MODEL NUMERICAL STABILITY
 # =====================================================================
 
+
 class TestMLModelNumericalStability:
     """ML model score generation must not produce NaN/Inf."""
 
@@ -110,16 +112,10 @@ class TestMLModelNumericalStability:
             (0.5, 5.0, 5.0),
         ]
         for corr, scale, lns in extreme_params:
-            scores = model._generate_scores(
-                risks, rng, labels, corr, scale, lns
-            )
-            assert_no_nan_inf(
-                scores,
-                f"scores(corr={corr}, scale={scale}, lns={lns})"
-            )
+            scores = model._generate_scores(risks, rng, labels, corr, scale, lns)
+            assert_no_nan_inf(scores, f"scores(corr={corr}, scale={scale}, lns={lns})")
             assert_in_unit_interval(
-                scores,
-                f"scores(corr={corr}, scale={scale}, lns={lns})"
+                scores, f"scores(corr={corr}, scale={scale}, lns={lns})"
             )
 
     def test_scores_with_constant_risks(self):
@@ -130,9 +126,7 @@ class TestMLModelNumericalStability:
             risks = np.full(n, const)
             labels = (rng.random(n) > 0.5).astype(int)
             model = ControlledMLModel(mode="discrimination")
-            scores = model._generate_scores(
-                risks, rng, labels, 0.8, 0.1, 1.0
-            )
+            scores = model._generate_scores(risks, rng, labels, 0.8, 0.1, 1.0)
             assert_no_nan_inf(scores, f"constant risk={const}")
             assert_in_unit_interval(scores, f"constant risk={const}")
 
@@ -145,9 +139,7 @@ class TestMLModelNumericalStability:
         for label_val in [0, 1]:
             labels = np.full(n, label_val)
             model = ControlledMLModel(mode="discrimination")
-            scores = model._generate_scores(
-                risks, rng, labels, 0.8, 0.1, 1.0
-            )
+            scores = model._generate_scores(risks, rng, labels, 0.8, 0.1, 1.0)
             assert_no_nan_inf(scores, f"single class={label_val}")
             assert_in_unit_interval(scores, f"single class={label_val}")
 
@@ -184,6 +176,7 @@ class TestMLModelNumericalStability:
 # =====================================================================
 # 3. CALIBRATION & HOSMER-LEMESHOW EDGE CASES
 # =====================================================================
+
 
 class TestCalibrationNumericalStability:
     """Calibration metrics must handle edge cases without NaN/Inf."""
@@ -222,28 +215,26 @@ class TestCalibrationNumericalStability:
 # 4. SCENARIO-LEVEL NUMERICAL STABILITY
 # =====================================================================
 
+
 class TestScenarioNumericalStability:
     """Full scenarios must not produce NaN/Inf in any output."""
 
     def test_stroke_no_nan_inf_in_outcomes(self):
         """All stroke scenario outcomes should be finite."""
         config = StrokeConfig(
-            n_patients=1000, n_weeks=26,
+            allow_infeasible_model=True,
+            n_patients=1000,
+            n_weeks=26,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(1000)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(1000)
 
         for t in range(26):
-            assert_no_nan_inf(
-                results.outcomes[t].events,
-                f"factual events t={t}"
-            )
+            assert_no_nan_inf(results.outcomes[t].events, f"factual events t={t}")
             assert_no_nan_inf(
                 results.counterfactual_outcomes[t].events,
-                f"counterfactual events t={t}"
+                f"counterfactual events t={t}",
             )
 
         for t, pred in results.predictions.items():
@@ -252,13 +243,13 @@ class TestScenarioNumericalStability:
     def test_stroke_no_nan_in_analysis_exports(self):
         """Analysis dataset exports should have no NaN/Inf."""
         config = StrokeConfig(
-            n_patients=500, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=500,
+            n_weeks=12,
             prediction_interval=4,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(500)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(500)
         analysis = results.to_analysis()
 
         ts = analysis.to_time_series()
@@ -272,39 +263,42 @@ class TestScenarioNumericalStability:
     def test_noshow_no_nan_inf_in_outcomes(self):
         """All no-show scenario outcomes should be finite."""
         tc = TimeConfig(
-            n_timesteps=10, timestep_duration=1 / 365,
+            n_timesteps=10,
+            timestep_duration=1 / 365,
             timestep_unit="day",
             prediction_schedule=list(range(10)),
         )
-        cc = ClinicConfig(n_providers=3, slots_per_provider_per_day=8,
-                          max_overbook_per_provider=2)
+        cc = ClinicConfig(
+            n_providers=3, slots_per_provider_per_day=8, max_overbook_per_provider=2
+        )
         sc = NoShowOverbookingScenario(
-            time_config=tc, seed=42, n_patients=300,
-            base_noshow_rate=0.13, overbooking_threshold=0.30,
-            model_type="predictor", model_auc=0.80,
+            time_config=tc,
+            seed=42,
+            n_patients=300,
+            base_noshow_rate=0.13,
+            overbooking_threshold=0.30,
+            model_type="predictor",
+            model_auc=0.80,
             clinic_config=cc,
         )
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(300)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(300)
 
         for t in range(10):
             assert_no_nan_inf(
-                results.outcomes[t].events,
-                f"noshow factual events t={t}"
+                results.outcomes[t].events, f"noshow factual events t={t}"
             )
 
     def test_single_entity_simulation(self):
         """Simulation with n=1 should not crash or produce NaN."""
         config = StrokeConfig(
-            n_patients=1, n_weeks=12,
+            allow_infeasible_model=True,
+            n_patients=1,
+            n_weeks=12,
             prediction_interval=4,
             annual_incident_rate=0.30,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(1)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(1)
 
         for t in range(12):
             assert results.outcomes[t].events.shape == (1,)
@@ -313,13 +307,13 @@ class TestScenarioNumericalStability:
     def test_very_short_simulation(self):
         """Single-timestep simulation should work."""
         config = StrokeConfig(
-            n_patients=100, n_weeks=1,
+            allow_infeasible_model=True,
+            n_patients=100,
+            n_weeks=1,
             prediction_interval=1,
         )
         sc = StrokePreventionScenario(config=config, seed=42)
-        results = BranchedSimulationEngine(
-            sc, CounterfactualMode.BRANCHED
-        ).run(100)
+        results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(100)
 
         assert 0 in results.outcomes
         assert_no_nan_inf(results.outcomes[0].events, "single step")
@@ -329,6 +323,7 @@ class TestScenarioNumericalStability:
 # 5. AR(1) PROCESS EDGE CASES
 # =====================================================================
 
+
 class TestAR1NumericalStability:
     """AR(1) process must stay finite under stress."""
 
@@ -336,8 +331,11 @@ class TestAR1NumericalStability:
         """Very high innovation sigma should be caught by bounds clipping."""
         rng = np.random.default_rng(42)
         ar1 = AR1Process(
-            n_entities=1000, rho=0.9, sigma=10.0,
-            mu=1.0, bounds=(0.5, 2.0),
+            n_entities=1000,
+            rho=0.9,
+            sigma=10.0,
+            mu=1.0,
+            bounds=(0.5, 2.0),
         )
         for _ in range(100):
             vals = ar1.step(rng)
@@ -349,8 +347,11 @@ class TestAR1NumericalStability:
         """rho=1.0 (random walk) should still stay bounded."""
         rng = np.random.default_rng(42)
         ar1 = AR1Process(
-            n_entities=1000, rho=1.0, sigma=0.1,
-            mu=1.0, bounds=(0.1, 5.0),
+            n_entities=1000,
+            rho=1.0,
+            sigma=0.1,
+            mu=1.0,
+            bounds=(0.1, 5.0),
         )
         for _ in range(500):
             vals = ar1.step(rng)
@@ -362,8 +363,11 @@ class TestAR1NumericalStability:
         """rho=0 should produce i.i.d. draws (no memory)."""
         rng = np.random.default_rng(42)
         ar1 = AR1Process(
-            n_entities=1000, rho=0.0, sigma=0.1,
-            mu=1.0, bounds=(-10, 10),
+            n_entities=1000,
+            rho=0.0,
+            sigma=0.1,
+            mu=1.0,
+            bounds=(-10, 10),
         )
         for _ in range(50):
             vals = ar1.step(rng)

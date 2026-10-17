@@ -72,7 +72,7 @@ class ExperimentConfig:
     prediction_interval: int = 2
 
     # Model
-    model_auc: float = 0.80
+    model_auc: float = 0.75
 
     # Policy
     max_interventions_per_manager_per_week: int = 4
@@ -88,7 +88,7 @@ class ExperimentConfig:
         if not self.timestamp:
             self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if self.auc_grid is None:
-            self.auc_grid = [0.60, 0.70, 0.80, 0.85]
+            self.auc_grid = [0.60, 0.65, 0.70, 0.75]
         if self.capacity_grid is None:
             self.capacity_grid = [2, 4, 6, 8]
 

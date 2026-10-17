@@ -32,13 +32,14 @@ from healthcare_sim_sdk.population.temporal_dynamics import (
 # State array row indices
 BASE_RISKS = 0
 AR1_MODS = 1
-TX_EFFECT = 2   # multiplicative treatment effect (1.0 = no treatment)
+TX_EFFECT = 2  # multiplicative treatment effect (1.0 = no treatment)
 CURRENT_RISKS = 3
 
 
 @dataclass
 class StrokeConfig:
     """Configuration for the stroke prevention scenario."""
+
     n_patients: int = 10_000
     n_weeks: int = 52
     annual_incident_rate: float = 0.05
@@ -46,20 +47,20 @@ class StrokeConfig:
     prediction_interval: int = 4
     ar1_rho: float = 0.95
     ar1_sigma: float = 0.05
+    # Amplitude of the AR(1) TARGET, not realized risk: defaults produce
+    # +/-3.9% after smoothing, lagging the configured peak by 9 weeks.
     seasonal_amplitude: float = 0.1
     target_sensitivity: float = 0.80
     target_ppv: float = 0.15
-    # At the 4-week-window event rate the model is fit on, sensitivity
-    # 0.80 at PPV 0.15 needs an AUC (~0.98) far above what the risk
-    # distribution can host (~0.83 Bayes ceiling). Until the targets are
-    # revisited, fit the best attainable curve and record the gap
-    # (the model warns) instead of stopping the scenario.
-    allow_infeasible_model: bool = True
+    # These legacy targets require AUC ~0.98 at a four-week horizon.
+    # Fail explicitly by default. Exploratory callers must opt into the
+    # infeasible fit and will receive warnings and a report of each miss.
+    allow_infeasible_model: bool = False
     intervention_effectiveness: float = 0.50
     # Who gets treated. None (default) = the model's own operating point,
     # i.e. the threshold fit() chose to hit target_sensitivity/target_ppv.
     # A float overrides that with a raw-score cutoff — note the scores are
-    # calibrated ANNUAL RISKS (typically <0.05), not classifier
+    # calibrated prediction-window probabilities (typically <0.05), not classifier
     # probabilities, so a value like 0.5 treats almost nobody.
     treatment_threshold: Optional[float] = None
 
@@ -87,9 +88,7 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
         self.config = config or StrokeConfig()
         c = self.config
 
-        prediction_schedule = list(
-            range(0, c.n_weeks, c.prediction_interval)
-        )
+        prediction_schedule = list(range(0, c.n_weeks, c.prediction_interval))
         time_config = TimeConfig(
             n_timesteps=c.n_weeks,
             timestep_duration=1 / 52,
@@ -132,15 +131,9 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
         new_state = state.copy()
 
         # AR(1) process: X_t = rho * X_{t-1} + (1-rho) * seasonal + noise
-        seasonal = 1.0 + c.seasonal_amplitude * np.sin(
-            2 * np.pi * t / 52 + np.pi / 2
-        )
+        seasonal = 1.0 + c.seasonal_amplitude * np.sin(2 * np.pi * t / 52 + np.pi / 2)
         noise = self.rng.temporal.normal(0, c.ar1_sigma, n)
-        new_mods = (
-            c.ar1_rho * state[AR1_MODS]
-            + (1 - c.ar1_rho) * seasonal
-            + noise
-        )
+        new_mods = c.ar1_rho * state[AR1_MODS] + (1 - c.ar1_rho) * seasonal + noise
         new_mods = np.clip(new_mods, 0.5, 2.0)
 
         new_state[AR1_MODS] = new_mods
@@ -156,19 +149,23 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
         window_probs = hazard_to_timestep_probability(
             hazards, self.config.prediction_interval / 52
         )
-        true_labels = (
-            self.rng.prediction.random(len(risks)) < window_probs
-        ).astype(int)
+        true_labels = (self.rng.prediction.random(len(risks)) < window_probs).astype(
+            int
+        )
 
         if not self._classifier_fitted:
             self._classifier.fit(
-                true_labels, risks, self.rng.prediction,
+                true_labels,
+                risks,
+                self.rng.prediction,
                 n_iterations=3,
             )
             self._classifier_fitted = True
 
         scores, labels = self._classifier.predict_binary(
-            risks, self.rng.prediction, true_labels,
+            risks,
+            self.rng.prediction,
+            true_labels,
         )
         return Predictions(
             scores=scores,
@@ -196,9 +193,9 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
             treated = predictions.scores >= c.treatment_threshold
         state = state.copy()
         # Set persistent treatment effect (survives through future steps)
-        state[TX_EFFECT, treated] = (1 - c.intervention_effectiveness)
+        state[TX_EFFECT, treated] = 1 - c.intervention_effectiveness
         # Also apply immediately to current risks
-        state[CURRENT_RISKS, treated] *= (1 - c.intervention_effectiveness)
+        state[CURRENT_RISKS, treated] *= 1 - c.intervention_effectiveness
         return state, Interventions(
             treated_indices=np.where(treated)[0],
             metadata={
@@ -212,9 +209,9 @@ class StrokePreventionScenario(BaseScenario[np.ndarray]):
         risks = state[CURRENT_RISKS]
         hazards = annual_risk_to_hazard(risks)
         timestep_probs = hazard_to_timestep_probability(hazards, 1 / 52)
-        incidents = (
-            self.rng.outcomes.random(len(risks)) < timestep_probs
-        ).astype(float)
+        incidents = (self.rng.outcomes.random(len(risks)) < timestep_probs).astype(
+            float
+        )
         return Outcomes(
             events=incidents,
             entity_ids=np.arange(len(risks)),

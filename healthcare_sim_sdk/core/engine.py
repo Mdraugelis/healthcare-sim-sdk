@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class CounterfactualMode(Enum):
     """How the engine handles counterfactual generation."""
+
     NONE = "none"
     SNAPSHOT = "snapshot"
     BRANCHED = "branched"
@@ -46,7 +47,16 @@ class BranchedSimulationEngine:
         self.results: Optional[SimulationResults] = None
 
     def run(self, n_entities: int) -> SimulationResults:
-        """Execute the full simulation pipeline."""
+        """Execute once; construct a fresh scenario for each replicate.
+
+        Streams and scenario caches are consumed even if a run fails. Reuse
+        is rejected across engine instances as well as on this engine.
+        """
+        if getattr(self.scenario, "_has_run", False):
+            raise RuntimeError(
+                "Scenario objects are single-use; create a new scenario."
+            )
+        self.scenario._has_run = True
         if self.counterfactual_mode == CounterfactualMode.BRANCHED:
             return self._run_branched(n_entities)
         elif self.counterfactual_mode == CounterfactualMode.SNAPSHOT:
@@ -78,9 +88,7 @@ class BranchedSimulationEngine:
         cf_partitioner = sc._partitioner.fork()
         cf_rng = cf_partitioner.create_streams()
 
-        logger.info(
-            "Population created: %d entities, mode=branched", n_entities
-        )
+        logger.info("Population created: %d entities, mode=branched", n_entities)
 
         # 2. Temporal loop
         for t in range(tc.n_timesteps):
@@ -127,7 +135,12 @@ class BranchedSimulationEngine:
         return results
 
     def _run_snapshot(self, n_entities: int) -> SimulationResults:
-        """Same-step snapshot counterfactuals (v1 compatible)."""
+        """Legacy same-step comparison, recorded only at prediction times.
+
+        Sequential measure calls consume different outcome draws. These
+        counterfactuals are uncoupled and do not propagate downstream effects.
+        Use BRANCHED for paired causal contrasts.
+        """
         sc = self.scenario
         tc = sc.time_config
         results = SimulationResults(
@@ -151,16 +164,12 @@ class BranchedSimulationEngine:
                 # Snapshot before intervention
                 state_snapshot = sc.clone_state(state)
 
-                state, interventions = sc.intervene(
-                    state, predictions, t
-                )
+                state, interventions = sc.intervene(state, predictions, t)
                 results.record_interventions(t, interventions)
 
                 # Measure counterfactual (same-step only)
                 cf_outcomes = sc.measure(state_snapshot, t)
-                results.record_outcomes(
-                    t, cf_outcomes, counterfactual=True
-                )
+                results.record_outcomes(t, cf_outcomes, counterfactual=True)
 
             outcomes = sc.measure(state, t)
             results.record_outcomes(t, outcomes, counterfactual=False)
@@ -192,9 +201,7 @@ class BranchedSimulationEngine:
                 predictions = sc.predict(state, t)
                 results.record_predictions(t, predictions)
 
-                state, interventions = sc.intervene(
-                    state, predictions, t
-                )
+                state, interventions = sc.intervene(state, predictions, t)
                 results.record_interventions(t, interventions)
 
             outcomes = sc.measure(state, t)

@@ -3,15 +3,11 @@
 Based on Page (1954). Two-sided CUSUM with reference value k and
 decision interval h.
 
-The expected detection profile:
-
-- **Gradual decay** (Regime C): turnover rate drifts upward as the
-  intervention effect decays. CUSUM accumulates the drift and crosses
-  h within ~12 weeks of the ramp midpoint.
-- **Capacity collapse** (Regime D): turnover rate jumps after capacity
-  is cut at week 30. CUSUM crosses h within ~8-12 weeks.
-- **Null / calibrated**: turnover stays at baseline, CUSUM hovers
-  near zero. No detection.
+This is a generic chart. A no-effect AI regime is not necessarily stationary:
+a closed cohort loses high-risk nurses first, so raw turnover declines. The
+monitoring harness uses prospective observed-minus-predicted departure residuals
+and a decision interval calibrated by simulation (currently h=96 at n=1000).
+The defaults below are textbook examples, not deployment operating guarantees.
 
 CUSUM basics (Page 1954, Montgomery 7th ed., Ch. 9):
 
@@ -27,8 +23,7 @@ At each new observation ``x_i``:
 - Upper CUSUM: ``C_upper_i = max(0, C_upper_{i-1} + (x_i - mu0) - k)``
 - Lower CUSUM: ``C_lower_i = max(0, C_lower_{i-1} - (x_i - mu0) - k)``
 
-A detection fires when either exceeds ``h``. After detection, both
-arms are reset to zero (standard practice).
+A detection fires when either exceeds ``h``. After detection, only the arm that fired is reset to zero.
 
 Note on direction semantics for turnover rate:
 - **Upper CUSUM** detects an INCREASE in turnover (bad — program
@@ -65,7 +60,7 @@ class Tier2CUSUM:
     h_multiplier : float
         Decision interval as a fraction of sigma (default 4.0).
     reset_on_detection : bool
-        Whether to reset both CUSUM arms after a detection (default
+        Whether to reset the firing CUSUM arm after a detection (default
         True). Standard practice.
 
     Internal state
@@ -175,3 +170,53 @@ class Tier2CUSUM:
             self.sigma = 1e-6
         self.k = self.k_multiplier * self.sigma
         self.h = self.h_multiplier * self.sigma
+
+
+def calibrate_h(
+    residual_series,
+    candidates,
+    max_alarm_probability=0.10,
+    baseline_weeks=8,
+    k_multiplier=0.5,
+):
+    """Choose the smallest decision interval meeting a simulated horizon target.
+
+    Supply independent no-AI calibration runs. Report holdout false-alarm rates
+    separately; the observed calibration fraction is not a guarantee about ARL.
+    """
+    if not residual_series or not candidates:
+        raise ValueError("Calibration requires residual series and h candidates")
+    rates = {}
+    upper_bounds = {}
+    for h in sorted(candidates):
+        alarms = 0
+        for series in residual_series:
+            chart = Tier2CUSUM(
+                "risk_adjusted_departures", baseline_weeks, k_multiplier, float(h)
+            )
+            alarm = False
+            for week, value in enumerate(series):
+                if value is not None:
+                    alarm |= bool(chart.update(week, float(value)))
+            alarms += alarm
+        rates[float(h)] = alarms / len(residual_series)
+        # Wilson 95% upper confidence bound: selecting on a noisy point
+        # estimate alone underestimates the false-alarm risk.
+        n_runs = len(residual_series)
+        z = 1.959963984540054
+        rate = rates[float(h)]
+        upper = (
+            rate
+            + z * z / (2 * n_runs)
+            + z * np.sqrt(rate * (1 - rate) / n_runs + z * z / (4 * n_runs * n_runs))
+        ) / (1 + z * z / n_runs)
+        upper_bounds[float(h)] = float(upper)
+        if upper <= max_alarm_probability:
+            return {
+                "h": float(h),
+                "calibration_rates": rates,
+                "calibration_upper_95": upper_bounds,
+                "n_calibration_runs": len(residual_series),
+                "target_horizon_alarm_probability": max_alarm_probability,
+            }
+    raise ValueError(f"No h candidate met the target; calibration rates: {rates}")

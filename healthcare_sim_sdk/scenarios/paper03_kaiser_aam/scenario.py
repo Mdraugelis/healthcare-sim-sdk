@@ -18,14 +18,19 @@ Design choices:
 
 import numpy as np
 
-from healthcare_sim_sdk.core.scenario import BaseScenario, Predictions, Interventions, Outcomes
+from healthcare_sim_sdk.core.scenario import (
+    BaseScenario,
+    Predictions,
+    Interventions,
+    Outcomes,
+)
 from healthcare_sim_sdk.ml.model import ControlledMLModel
 from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
 
 ROW_BASE_RISK = 0
 ROW_CURRENT_RISK = 1
 ROW_AR1_MOD = 2
-ROW_STAGE = 3          # 0=stable, 1=deteriorating, 2=critical, 3=deceased, 4=discharged
+ROW_STAGE = 3  # 0=stable, 1=deteriorating, 2=critical, 3=deceased, 4=discharged
 ROW_STAGE_TIMER = 4
 ROW_TREATED = 5
 ROW_TREATMENT_TIMER = 6
@@ -34,9 +39,10 @@ ROW_DEMO_INSURANCE = 8
 ROW_DEMO_AGE = 9
 ROW_DEMO_RISK_MULT = 10
 ROW_LOS_REMAINING = 11
-ROW_VQNC_REVIEWED = 12   # VQNC reviewed this patient this admission
-ROW_HOSPITAL_ID = 13      # Hospital in staggered deployment (0-20)
-N_ROWS = 14
+ROW_VQNC_REVIEWED = 12  # VQNC reviewed this patient this admission
+ROW_HOSPITAL_ID = 13  # Hospital in staggered deployment (0-20)
+ROW_INCIDENT_ONSET = 14
+N_ROWS = 15
 
 STAGE_STABLE = 0
 STAGE_DETERIORATING = 1
@@ -64,26 +70,36 @@ class KaiserAAMScenario(BaseScenario):
 
     unit_of_analysis = "patient_admission"
 
-    def __init__(self, time_config, seed=None,
-                 model_auc=0.845,
-                 alert_threshold_percentile=90.0,
-                 treatment_effectiveness=0.32,
-                 vqnc_review_rate=0.90,
-                 vqnc_action_rate=0.60,
-                 deterioration_prevalence=0.08,
-                 n_hospitals=21,):
+    def __init__(
+        self,
+        time_config,
+        seed=None,
+        model_auc=0.845,
+        alert_threshold_percentile=90.0,
+        treatment_effectiveness=0.32,
+        vqnc_review_rate=0.90,
+        vqnc_action_rate=0.60,
+        deterioration_prevalence=0.08,
+        n_hospitals=21,
+    ):
         super().__init__(time_config=time_config, seed=seed)
 
         self.model_auc = model_auc
         self.alert_threshold_percentile = alert_threshold_percentile
         self.treatment_effectiveness = treatment_effectiveness
-        self.vqnc_review_rate = vqnc_review_rate       # VQNC reviews the score
-        self.vqnc_action_rate = vqnc_action_rate       # VQNC triggers RRT call
+        self.vqnc_review_rate = vqnc_review_rate  # VQNC reviews the score
+        self.vqnc_action_rate = vqnc_action_rate  # VQNC triggers RRT call
         self.deterioration_prevalence = deterioration_prevalence
         self.n_hospitals = n_hospitals
 
         # Kaiser KPNC demographics
-        self.race_proportions = [0.42, 0.07, 0.30, 0.17, 0.04]  # [ASSUMED] KPNC Northern CA
+        self.race_proportions = [
+            0.42,
+            0.07,
+            0.30,
+            0.17,
+            0.04,
+        ]  # [ASSUMED] KPNC Northern CA
         self.insurance_proportions = [0.38, 0.30, 0.18, 0.14]
         self.age_proportions = [0.15, 0.28, 0.35, 0.22]
         self.race_risk_multipliers = [1.0, 1.8, 0.9, 0.8, 1.0]
@@ -91,11 +107,11 @@ class KaiserAAMScenario(BaseScenario):
 
         self.ar1_rho = 0.92
         self.ar1_sigma = 0.05
-        self.mean_los_timesteps = 30    # ~5 days
+        self.mean_los_timesteps = 30  # ~5 days
         self.los_std_timesteps = 12
 
         # Stage transition probabilities (per timestep = 4 hours)
-        self.prog_stable = 0.010       # calibrated to 8% deterioration prevalence
+        self.prog_stable = 0.010  # calibrated to 8% deterioration prevalence
         self.prog_deteriorating = 0.055
         self.mort_deteriorating = 0.003
         self.mort_critical = 0.030
@@ -111,6 +127,8 @@ class KaiserAAMScenario(BaseScenario):
         self._cumulative_false_alerts = 0
 
     def create_population(self, n_entities):
+        self._model_fitted = False
+        self._cumulative_false_alerts = 0
         rng = self.rng.population
         n = n_entities
         state = np.zeros((N_ROWS, n))
@@ -123,16 +141,26 @@ class KaiserAAMScenario(BaseScenario):
         )
         state[ROW_AR1_MOD] = 1.0
 
-        state[ROW_DEMO_RACE] = rng.choice(len(RACE_LABELS), size=n, p=self.race_proportions).astype(float)
-        state[ROW_DEMO_INSURANCE] = rng.choice(len(INSURANCE_LABELS), size=n, p=self.insurance_proportions).astype(float)
-        state[ROW_DEMO_AGE] = rng.choice(len(AGE_LABELS), size=n, p=self.age_proportions).astype(float)
+        state[ROW_DEMO_RACE] = rng.choice(
+            len(RACE_LABELS), size=n, p=self.race_proportions
+        ).astype(float)
+        state[ROW_DEMO_INSURANCE] = rng.choice(
+            len(INSURANCE_LABELS), size=n, p=self.insurance_proportions
+        ).astype(float)
+        state[ROW_DEMO_AGE] = rng.choice(
+            len(AGE_LABELS), size=n, p=self.age_proportions
+        ).astype(float)
 
-        race_mult = np.array(self.race_risk_multipliers)[state[ROW_DEMO_RACE].astype(int)]
+        race_mult = np.array(self.race_risk_multipliers)[
+            state[ROW_DEMO_RACE].astype(int)
+        ]
         age_mult = np.array(self.age_risk_multipliers)[state[ROW_DEMO_AGE].astype(int)]
         state[ROW_DEMO_RISK_MULT] = race_mult * age_mult
 
         state[ROW_CURRENT_RISK] = np.clip(
-            state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT], 0.001, 0.99
+            state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
+            0.001,
+            0.99,
         )
         state[ROW_STAGE] = STAGE_STABLE
         state[ROW_STAGE_TIMER] = 0
@@ -157,12 +185,20 @@ class KaiserAAMScenario(BaseScenario):
         new_mods = self.ar1_rho * state[ROW_AR1_MOD] + (1 - self.ar1_rho) * 1.0 + noise
         new_state[ROW_AR1_MOD] = np.clip(new_mods, 0.5, 2.0)
         new_state[ROW_CURRENT_RISK] = np.clip(
-            state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT], 0.001, 0.99
+            state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
+            0.001,
+            0.99,
         )
 
-        tx_factor = np.where(state[ROW_TREATED] == 1, 1.0 - self.treatment_effectiveness, 1.0)
-        mean_risk = float(new_state[ROW_CURRENT_RISK][active].mean()) if active.any() else 0.08
-        risk_scale = np.clip(new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0)
+        tx_factor = np.where(
+            state[ROW_TREATED] == 1, 1.0 - self.treatment_effectiveness, 1.0
+        )
+        mean_risk = (
+            float(new_state[ROW_CURRENT_RISK][active].mean()) if active.any() else 0.08
+        )
+        risk_scale = np.clip(
+            new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001), 0.1, 5.0
+        )
 
         draws = rng.random(n)
         stable_mask = active & (state[ROW_STAGE] == STAGE_STABLE)
@@ -172,43 +208,56 @@ class KaiserAAMScenario(BaseScenario):
 
         draws2 = rng.random(n)
         det_mask = active & (state[ROW_STAGE] == STAGE_DETERIORATING)
-        progressed2 = det_mask & (draws2 < self.prog_deteriorating * risk_scale * tx_factor)
+        progressed2 = det_mask & (
+            draws2 < self.prog_deteriorating * risk_scale * tx_factor
+        )
         new_state[ROW_STAGE, progressed2] = STAGE_CRITICAL
         new_state[ROW_STAGE_TIMER, progressed2] = 0
 
         mort_draws = rng.random(n)
         deceased = (
-            (det_mask & ~progressed2 & (mort_draws < self.mort_deteriorating)) |
-            (active & (state[ROW_STAGE] == STAGE_CRITICAL) & (mort_draws < self.mort_critical))
+            det_mask & ~progressed2 & (mort_draws < self.mort_deteriorating)
+        ) | (
+            active
+            & (state[ROW_STAGE] == STAGE_CRITICAL)
+            & (mort_draws < self.mort_critical)
         )
         new_state[ROW_STAGE, deceased] = STAGE_DECEASED
 
         new_state[ROW_LOS_REMAINING] = np.maximum(state[ROW_LOS_REMAINING] - 1, 0)
         discharge_eligible = (
-            active & ~deceased
+            active
+            & ~deceased
             & (new_state[ROW_LOS_REMAINING] <= 0)
             & (state[ROW_STAGE] == STAGE_STABLE)
         )
         new_state[ROW_STAGE, discharge_eligible] = STAGE_DISCHARGED
 
         still_active = new_state[ROW_STAGE] < STAGE_DECEASED
-        new_state[ROW_STAGE_TIMER] = np.where(still_active, new_state[ROW_STAGE_TIMER] + 1, state[ROW_STAGE_TIMER])
-        new_state[ROW_TREATMENT_TIMER] = np.where(
-            (state[ROW_TREATED] == 1) & still_active, state[ROW_TREATMENT_TIMER] + 1, state[ROW_TREATMENT_TIMER]
+        new_state[ROW_STAGE_TIMER] = np.where(
+            still_active, new_state[ROW_STAGE_TIMER] + 1, state[ROW_STAGE_TIMER]
         )
+        new_state[ROW_TREATMENT_TIMER] = np.where(
+            (state[ROW_TREATED] == 1) & still_active,
+            state[ROW_TREATMENT_TIMER] + 1,
+            state[ROW_TREATMENT_TIMER],
+        )
+        # Record the actual transition, including a same-step discharge.
+        new_state[ROW_INCIDENT_ONSET] = progressed.astype(float)
         return new_state
 
     def predict(self, state, t):
         rng = self.rng.prediction
-        n = state.shape[1]
+        state.shape[1]
 
         true_labels = (
-            (state[ROW_STAGE] >= STAGE_DETERIORATING) & (state[ROW_STAGE] < STAGE_DECEASED)
+            (state[ROW_STAGE] >= STAGE_DETERIORATING)
+            & (state[ROW_STAGE] < STAGE_DECEASED)
         ).astype(int)
         true_risks = state[ROW_CURRENT_RISK]
 
         if not self._model_fitted:
-            self._model.fit(true_labels, true_risks, rng, n_iterations=3)
+            self._model.fit_reference(true_risks, rng)
             self._model_fitted = True
 
         scores = self._model.predict(true_risks, rng)
@@ -231,7 +280,9 @@ class KaiserAAMScenario(BaseScenario):
                 "n_active": int(active.sum()),
                 "n_flagged": int(labels.sum()),
                 "alert_rate": float(labels[active].mean()) if active.any() else 0.0,
-                "prevalence": float(true_labels[active].mean()) if active.any() else 0.0,
+                "prevalence": float(true_labels[active].mean())
+                if active.any()
+                else 0.0,
             },
         )
 
@@ -250,7 +301,9 @@ class KaiserAAMScenario(BaseScenario):
 
         # VQNC reviews all flagged patients (high coverage, no fatigue)
         vqnc_reviews = rng.random(len(flagged_indices)) < self.vqnc_review_rate
-        vqnc_actions = vqnc_reviews & (rng.random(len(flagged_indices)) < self.vqnc_action_rate)
+        vqnc_actions = vqnc_reviews & (
+            rng.random(len(flagged_indices)) < self.vqnc_action_rate
+        )
         acted_indices = flagged_indices[vqnc_actions]
 
         new_state[ROW_VQNC_REVIEWED, flagged_indices[vqnc_reviews]] = 1
@@ -275,9 +328,15 @@ class KaiserAAMScenario(BaseScenario):
         )
 
     def measure(self, state, t):
+        """Measure occupancy (patient-time), not cases.
+
+        secondary['incident_onset'] counts new onsets this step. Mortality
+        is cumulative occupancy: read its final count rather than summing it.
+        """
         n = state.shape[1]
         events = (
-            (state[ROW_STAGE] >= STAGE_DETERIORATING) & (state[ROW_STAGE] < STAGE_DECEASED)
+            (state[ROW_STAGE] >= STAGE_DETERIORATING)
+            & (state[ROW_STAGE] < STAGE_DECEASED)
         ).astype(float)
         mortality = (state[ROW_STAGE] == STAGE_DECEASED).astype(float)
         race_labels = np.array(RACE_LABELS)[state[ROW_DEMO_RACE].astype(int)]
@@ -286,6 +345,7 @@ class KaiserAAMScenario(BaseScenario):
             events=events,
             entity_ids=np.arange(n),
             secondary={
+                "incident_onset": state[ROW_INCIDENT_ONSET].copy(),
                 "mortality": mortality,
                 "stage": state[ROW_STAGE].copy(),
                 "treated": state[ROW_TREATED].copy(),
@@ -294,7 +354,9 @@ class KaiserAAMScenario(BaseScenario):
             },
             metadata={
                 "deceased": int((state[ROW_STAGE] == STAGE_DECEASED).sum()),
-                "mortality_rate": round(float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4),
+                "mortality_rate": round(
+                    float((state[ROW_STAGE] == STAGE_DECEASED).sum()) / max(1, n), 4
+                ),
             },
         )
 

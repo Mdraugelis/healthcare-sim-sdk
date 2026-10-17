@@ -19,12 +19,12 @@
 #
 # Or via multirun:
 #   python scenarios/nurse_retention/run_evaluation.py --multirun \
-#     model.auc=0.60,0.70,0.80,0.85 \
+#     model.auc=0.60,0.65,0.70,0.75 \
 #     policy.max_interventions_per_week=2,4,6,8
 #
 # Span-of-control sweep (adds nurses_per_manager):
 #   python scenarios/nurse_retention/run_evaluation.py --multirun \
-#     model.auc=0.70,0.80 \
+#     model.auc=0.70,0.75 \
 #     policy.max_interventions_per_week=4,6 \
 #     population.nurses_per_manager=50,75,100
 
@@ -50,7 +50,7 @@ prediction_interval: 2   # score nurses every 2 weeks
 
 # ── Model ──
 model:
-  auc: 0.80
+  auc: 0.75
 
 # ── Policy (manager intervention) ──
 policy:

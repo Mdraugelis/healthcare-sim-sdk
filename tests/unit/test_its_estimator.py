@@ -51,15 +51,13 @@ class TestSegmentedRegressionPlantedEffects:
         n_pre, n_post = 36, 36
         noise = 0.0002
         pre = 0.02 + rng.normal(0, noise, n_pre)
-        post = (
-            0.02
-            - 0.0003 * np.arange(n_post)
-            + rng.normal(0, noise, n_post)
-        )
+        post = 0.02 - 0.0003 * np.arange(n_post) + rng.normal(0, noise, n_post)
         series = np.concatenate([pre, post])
 
         result = segmented_regression(
-            series, break_index=n_pre, hac_maxlags=0,
+            series,
+            break_index=n_pre,
+            hac_maxlags=0,
         )
 
         assert result.slope_change < 0
@@ -71,16 +69,8 @@ class TestSegmentedRegressionPlantedEffects:
         n_pre, n_post = 36, 24
         noise = 0.0005
         trend = 0.0005
-        pre = (
-            0.02
-            + trend * np.arange(n_pre)
-            + rng.normal(0, noise, n_pre)
-        )
-        post = (
-            0.02
-            + trend * n_pre
-            + rng.normal(0, noise, n_post)
-        )
+        pre = 0.02 + trend * np.arange(n_pre) + rng.normal(0, noise, n_pre)
+        post = 0.02 + trend * n_pre + rng.normal(0, noise, n_post)
         series = np.concatenate([pre, post])
 
         result = segmented_regression(series, break_index=n_pre)
@@ -135,7 +125,8 @@ class TestSegmentedRegressionInputValidation:
     def test_short_series_rejected(self):
         with pytest.raises(ValueError, match="at least 4"):
             segmented_regression(
-                np.array([0.01, 0.02, 0.03]), break_index=1,
+                np.array([0.01, 0.02, 0.03]),
+                break_index=1,
             )
 
     def test_break_index_too_small(self):
@@ -149,7 +140,9 @@ class TestSegmentedRegressionInputValidation:
     def test_negative_hac_maxlags_rejected(self):
         with pytest.raises(ValueError, match="hac_maxlags"):
             segmented_regression(
-                np.zeros(10), break_index=5, hac_maxlags=-1,
+                np.zeros(10),
+                break_index=5,
+                hac_maxlags=-1,
             )
 
 
@@ -175,9 +168,7 @@ class TestPowerAcrossSeeds:
         """Null effect → power near alpha (permitting generous noise)."""
         rng = np.random.default_rng(42)
         n = 60
-        series_list = [
-            0.02 + rng.normal(0, 0.001, n) for _ in range(100)
-        ]
+        series_list = [0.02 + rng.normal(0, 0.001, n) for _ in range(100)]
         power = power_across_seeds(
             series_list,
             break_index=36,
@@ -193,7 +184,9 @@ class TestPowerAcrossSeeds:
         post = 0.025 + rng.normal(0, 0.0005, 30)
         series = np.concatenate([pre, post])
         power = power_across_seeds(
-            [series], break_index=30, expected_direction="decrease",
+            [series],
+            break_index=30,
+            expected_direction="decrease",
         )
         assert power == 0.0
 
@@ -261,11 +254,7 @@ class TestSlopeOnly:
     def test_detects_upward_trend(self):
         rng = np.random.default_rng(42)
         n = 52
-        series = (
-            0.01
-            + 0.0002 * np.arange(n)
-            + rng.normal(0, 0.0005, n)
-        )
+        series = 0.01 + 0.0002 * np.arange(n) + rng.normal(0, 0.0005, n)
         result = its_slope_only(series)
         assert isinstance(result, SlopeOnlyResult)
         assert result.slope > 0
@@ -309,10 +298,7 @@ class TestStatisticalValidation:
         rng = np.random.default_rng(2024)
         n = 60
         n_reps = 2000
-        series_list = [
-            0.048 + rng.normal(0, 0.004, n)
-            for _ in range(n_reps)
-        ]
+        series_list = [0.048 + rng.normal(0, 0.004, n) for _ in range(n_reps)]
         rate = power_across_seeds(
             series_list,
             break_index=36,
@@ -367,8 +353,7 @@ class TestStatisticalValidation:
         se_of_mean = float(arr.std(ddof=1) / np.sqrt(n_reps))
         # 4-sigma band on the sample mean
         assert abs(mean_est) <= 4.0 * se_of_mean + 1e-6, (
-            f"Null bias {mean_est:.6f} outside 4-sigma band "
-            f"(±{4.0 * se_of_mean:.6f})"
+            f"Null bias {mean_est:.6f} outside 4-sigma band (±{4.0 * se_of_mean:.6f})"
         )
 
     def test_se_calibration_matches_empirical_variability(self):
@@ -411,18 +396,20 @@ class TestStatisticalValidation:
                 pre = 0.048 + rng.normal(0, noise_sd, 36)
                 post = 0.048 + eff + rng.normal(0, noise_sd, 24)
                 series_list.append(np.concatenate([pre, post]))
-            powers.append(power_across_seeds(
-                series_list,
-                break_index=36,
-                expected_direction="decrease",
-            ))
+            powers.append(
+                power_across_seeds(
+                    series_list,
+                    break_index=36,
+                    expected_direction="decrease",
+                )
+            )
         # Monotone non-decreasing with small MC slack
         slack = 0.03
         for i in range(len(powers) - 1):
             assert powers[i + 1] >= powers[i] - slack, (
                 f"Power not monotone in effect size: "
                 f"{effects[i]}={powers[i]:.3f} -> "
-                f"{effects[i+1]}={powers[i+1]:.3f}"
+                f"{effects[i + 1]}={powers[i + 1]:.3f}"
             )
         # Sanity: strongest effect >> null
         assert powers[-1] - powers[0] > 0.5
@@ -439,22 +426,21 @@ class TestStatisticalValidation:
             series_list = []
             for _ in range(n_reps):
                 pre = 0.048 + rng.normal(0, noise_sd, 36)
-                post = (
-                    0.048 + planted
-                    + rng.normal(0, noise_sd, n_post)
-                )
+                post = 0.048 + planted + rng.normal(0, noise_sd, n_post)
                 series_list.append(np.concatenate([pre, post]))
-            powers.append(power_across_seeds(
-                series_list,
-                break_index=36,
-                expected_direction="decrease",
-            ))
+            powers.append(
+                power_across_seeds(
+                    series_list,
+                    break_index=36,
+                    expected_direction="decrease",
+                )
+            )
         slack = 0.05
         for i in range(len(powers) - 1):
             assert powers[i + 1] >= powers[i] - slack, (
                 f"Power not monotone in n_post: "
                 f"{n_posts[i]}={powers[i]:.3f} -> "
-                f"{n_posts[i+1]}={powers[i+1]:.3f}"
+                f"{n_posts[i + 1]}={powers[i + 1]:.3f}"
             )
 
     def test_hac_reduces_type_i_inflation_under_ar1(self):
@@ -475,15 +461,17 @@ class TestStatisticalValidation:
             eps = np.empty(n)
             eps[0] = rng.normal(0, innov_sd)
             for i in range(1, n):
-                eps[i] = (
-                    rho * eps[i - 1] + rng.normal(0, innov_sd)
-                )
+                eps[i] = rho * eps[i - 1] + rng.normal(0, innov_sd)
             series = 0.048 + eps
             ols = segmented_regression(
-                series, break_index=36, hac_maxlags=0,
+                series,
+                break_index=36,
+                hac_maxlags=0,
             )
             hac = segmented_regression(
-                series, break_index=36, hac_maxlags=4,
+                series,
+                break_index=36,
+                hac_maxlags=4,
             )
             if ols.level_change_pvalue < 0.05:
                 ols_rejects += 1
@@ -536,7 +524,7 @@ class TestLiftedFunctionsMatchTier3:
             )
         tier3_est = tier3.estimates[-1]
 
-        lifted = cits_with_control(factual, cf)
+        lifted = cits_with_control(factual, cf, paired=True)
 
         assert abs(tier3_est.effect_estimate - lifted.effect_estimate) < 1e-12
         assert abs(tier3_est.ci_lower - lifted.ci_lower) < 1e-12
@@ -550,16 +538,13 @@ class TestLiftedFunctionsMatchTier3:
 
         rng = np.random.default_rng(42)
         n = 30
-        series = (
-            0.01
-            + 0.0002 * np.arange(n)
-            + rng.normal(0, 0.0005, n)
-        )
+        series = 0.01 + 0.0002 * np.arange(n) + rng.normal(0, 0.0005, n)
 
         tier3 = Tier3CITS(mode="its_only", min_observations=n)
         for week in range(n):
             tier3.update(
-                week=week, factual_turnover=float(series[week]),
+                week=week,
+                factual_turnover=float(series[week]),
             )
         tier3_est = tier3.estimates[-1]
 

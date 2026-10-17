@@ -1,0 +1,5 @@
+[flake8]
+max-line-length = 88
+# Equations, URLs, and the historical paper runners contain long prose strings.
+# Keep behavioral and correctness checks enabled throughout the package.
+extend-ignore = E501

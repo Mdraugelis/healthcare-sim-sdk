@@ -83,10 +83,9 @@ class Tier3CITS:
     estimates: List[Tier3Estimate] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        if self.mode not in ("cits_with_cf", "its_only"):
+        if self.mode not in ("cits_with_cf", "cits_with_control", "its_only"):
             raise ValueError(
-                f"mode must be cits_with_cf or its_only, "
-                f"got {self.mode!r}"
+                f"mode must be cits_with_cf or its_only, got {self.mode!r}"
             )
 
     def update(
@@ -116,9 +115,7 @@ class Tier3CITS:
         """
         self.factual_history.append(float(factual_turnover))
         if counterfactual_turnover is not None:
-            self.counterfactual_history.append(
-                float(counterfactual_turnover)
-            )
+            self.counterfactual_history.append(float(counterfactual_turnover))
 
         events: List[DetectionEvent] = []
 
@@ -130,8 +127,7 @@ class Tier3CITS:
 
         is_refit_week = (
             n == self.min_observations
-            or (n - self.min_observations) % self.refit_interval_weeks
-            == 0
+            or (n - self.min_observations) % self.refit_interval_weeks == 0
         )
         if not is_refit_week:
             return events
@@ -163,10 +159,7 @@ class Tier3CITS:
                 prev = self.estimates[-2]
                 if not prev.is_significant():
                     emit = True
-                elif (
-                    (prev.effect_estimate > 0)
-                    != (estimate.effect_estimate > 0)
-                ):
+                elif (prev.effect_estimate > 0) != (estimate.effect_estimate > 0):
                     emit = True
 
             if emit:
@@ -190,13 +183,14 @@ class Tier3CITS:
         if n_weeks < self.min_observations:
             return None
 
-        if self.mode == "cits_with_cf":
+        if self.mode in ("cits_with_cf", "cits_with_control"):
             return self._fit_cits_with_cf(current_week)
         else:
             return self._fit_its_only(current_week)
 
     def _fit_cits_with_cf(
-        self, current_week: int,
+        self,
+        current_week: int,
     ) -> Optional[Tier3Estimate]:
         """Fit CITS with counterfactual as the comparison series.
 
@@ -210,6 +204,7 @@ class Tier3CITS:
 
         try:
             result = cits_with_control(
+                paired=self.mode == "cits_with_cf",
                 treatment_series=np.asarray(self.factual_history),
                 control_series=np.asarray(self.counterfactual_history),
             )
@@ -223,11 +218,12 @@ class Tier3CITS:
             ci_upper=result.ci_upper,
             p_value=result.p_value,
             n_observations=result.n_observations,
-            mode="cits_with_cf",
+            mode=self.mode,
         )
 
     def _fit_its_only(
-        self, current_week: int,
+        self,
+        current_week: int,
     ) -> Optional[Tier3Estimate]:
         """Pure ITS on the factual series alone.
 

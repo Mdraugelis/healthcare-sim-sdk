@@ -62,7 +62,7 @@ class WeeklyDashboardRow:
     n_departures_this_week: int
     unit_turnover_rate: float  # departures / active at start of week
     cumulative_departures: int
-    retention_rate: float      # fraction still employed
+    retention_rate: float  # fraction still employed
 
     # Check-in adherence (Tier 1 leading indicator)
     check_ins_done_this_week: int
@@ -166,41 +166,27 @@ def aggregate(
     """
     week = int(outcomes.metadata.get("t", 0))
     n_active = int(outcomes.metadata.get("n_active", 0))
-    total_departures = int(
-        outcomes.metadata.get("total_departures", 0)
-    )
-    n_new_hire_active = int(
-        outcomes.metadata.get("n_new_hire_active", 0)
-    )
+    total_departures = int(outcomes.metadata.get("total_departures", 0))
+    n_new_hire_active = int(outcomes.metadata.get("n_new_hire_active", 0))
 
-    n_departures_this_week = (
-        total_departures - previous_cumulative_departures
-    )
+    n_departures_this_week = total_departures - previous_cumulative_departures
 
     # Weekly turnover rate: departures / population at start of week
     unit_turnover_rate = (
-        n_departures_this_week / previous_active
-        if previous_active > 0
-        else 0.0
+        n_departures_this_week / previous_active if previous_active > 0 else 0.0
     )
 
     # Check-in adherence this week.
     # AI-directed check-ins come from intervene(); SOC check-ins come
     # from step() regardless of whether a prediction happened.
     ai_check_ins = (
-        interventions.metadata.get("n_treated", 0)
-        if interventions is not None
-        else 0
+        interventions.metadata.get("n_treated", 0) if interventions is not None else 0
     )
     total_check_ins = ai_check_ins + soc_interventions_this_week
 
     n_managers = int(state.n_managers)
     check_in_target = capacity_this_week * n_managers
-    adherence = (
-        total_check_ins / check_in_target
-        if check_in_target > 0
-        else 0.0
-    )
+    adherence = total_check_ins / check_in_target if check_in_target > 0 else 0.0
 
     # Adoption rate (manager-level AI adoption from state)
     n_adopting = int(state.manager_adopts_ai.sum())
@@ -222,10 +208,7 @@ def aggregate(
         # plus SOC check-ins in proportion to team eligibility.
         mgr_ai_checkins = (
             capacity_this_week
-            if (
-                interventions is not None
-                and bool(state.manager_adopts_ai[mgr_id])
-            )
+            if (interventions is not None and bool(state.manager_adopts_ai[mgr_id]))
             else 0
         )
 
@@ -263,16 +246,12 @@ def aggregate(
         n_departures_this_week=n_departures_this_week,
         unit_turnover_rate=unit_turnover_rate,
         cumulative_departures=total_departures,
-        retention_rate=float(
-            outcomes.metadata.get("retention_rate", 0.0)
-        ),
+        retention_rate=float(outcomes.metadata.get("retention_rate", 0.0)),
         check_ins_done_this_week=total_check_ins,
         check_in_target_this_week=check_in_target,
         check_in_adherence=adherence,
         n_new_hire_active=n_new_hire_active,
-        new_hire_fraction=(
-            n_new_hire_active / n_active if n_active > 0 else 0.0
-        ),
+        new_hire_fraction=(n_new_hire_active / n_active if n_active > 0 else 0.0),
         n_managers_adopting=n_adopting,
         n_managers_total=n_managers,
         adoption_rate=adoption_rate,

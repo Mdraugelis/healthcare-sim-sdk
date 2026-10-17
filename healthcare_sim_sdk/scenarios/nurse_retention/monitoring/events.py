@@ -68,14 +68,10 @@ class DetectionEvent:
             raise ValueError(f"tier must be 1-4, got {self.tier}")
         if self.severity not in ("info", "warning", "critical"):
             raise ValueError(
-                f"severity must be info|warning|critical, "
-                f"got {self.severity!r}"
+                f"severity must be info|warning|critical, got {self.severity!r}"
             )
         if self.direction not in ("up", "down", "level"):
-            raise ValueError(
-                f"direction must be up|down|level, "
-                f"got {self.direction!r}"
-            )
+            raise ValueError(f"direction must be up|down|level, got {self.direction!r}")
 
     def to_dict(self) -> Dict[str, Any]:
         """JSON-serializable dict representation."""
@@ -170,13 +166,15 @@ class MonitoringRun:
         return [e for e in self.detection_events if e.tier == tier]
 
     def first_detection(
-        self, tier: int, metric: Optional[str] = None,
+        self,
+        tier: int,
+        metric: Optional[str] = None,
     ) -> Optional[DetectionEvent]:
         """Return the earliest detection for a given tier (and metric)."""
         events = [
-            e for e in self.detection_events
-            if e.tier == tier
-            and (metric is None or e.metric == metric)
+            e
+            for e in self.detection_events
+            if e.tier == tier and (metric is None or e.metric == metric)
         ]
         if not events:
             return None
@@ -189,11 +187,7 @@ class MonitoringRun:
             "seed": self.seed,
             "n_weeks": self.n_weeks,
             "weekly_history": self.weekly_history,
-            "detection_events": [
-                e.to_dict() for e in self.detection_events
-            ],
-            "tier3_estimates": [
-                e.to_dict() for e in self.tier3_estimates
-            ],
+            "detection_events": [e.to_dict() for e in self.detection_events],
+            "tier3_estimates": [e.to_dict() for e in self.tier3_estimates],
             "metadata": self.metadata,
         }

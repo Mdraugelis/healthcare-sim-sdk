@@ -1,0 +1,13 @@
+# Reproduce report replacements through Hydra, with no hardcoded Python grids.
+kind: retention
+seed: 1000
+auc: 0.75
+capacity: 4
+max_hours: 24
+reminder_study: chong
+hydra:
+  run:
+    dir: outputs/issue_register/${kind}_${seed}
+  sweep:
+    dir: outputs/issue_register_${kind}
+    subdir: ${hydra.job.num}

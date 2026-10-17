@@ -42,21 +42,21 @@ from healthcare_sim_sdk.population.risk_distributions import beta_distributed_ri
 # State layout: numpy array with shape (N_ROWS, n_patients)
 # ---------------------------------------------------------------------------
 # Row indices — constants, never mutated
-ROW_BASE_RISK = 0          # Immutable baseline sepsis risk
-ROW_AR1_MOD = 1            # AR(1) risk modifier (evolves in step)
-ROW_CURRENT_RISK = 2       # base_risk * ar1_mod * demographic_mult
-ROW_STAGE = 3              # 0=at_risk, 1=sepsis, 2=severe, 3=shock, 4=deceased, 5=discharged
-ROW_STAGE_TIMER = 4        # Timesteps since entering current stage
-ROW_TREATED = 5            # 1 if patient has been treated this admission
-ROW_TREATMENT_TIMER = 6    # Timesteps since treatment (0 if untreated)
-ROW_DEMO_RACE = 7          # Encoded race/ethnicity (0-4)
-ROW_DEMO_INSURANCE = 8     # Encoded insurance (0-3)
-ROW_DEMO_AGE = 9           # Encoded age band (0-3)
-ROW_DEMO_RISK_MULT = 10   # Demographic risk multiplier (computed at creation)
-ROW_LOS_REMAINING = 11     # Timesteps remaining in admission (decrements in step)
+ROW_BASE_RISK = 0  # Immutable baseline sepsis risk
+ROW_AR1_MOD = 1  # AR(1) risk modifier (evolves in step)
+ROW_CURRENT_RISK = 2  # base_risk * ar1_mod * demographic_mult
+ROW_STAGE = 3  # 0=at_risk, 1=sepsis, 2=severe, 3=shock, 4=deceased, 5=discharged
+ROW_STAGE_TIMER = 4  # Timesteps since entering current stage
+ROW_TREATED = 5  # 1 if patient has been treated this admission
+ROW_TREATMENT_TIMER = 6  # Timesteps since treatment (0 if untreated)
+ROW_DEMO_RACE = 7  # Encoded race/ethnicity (0-4)
+ROW_DEMO_INSURANCE = 8  # Encoded insurance (0-3)
+ROW_DEMO_AGE = 9  # Encoded age band (0-3)
+ROW_DEMO_RISK_MULT = 10  # Demographic risk multiplier (computed at creation)
+ROW_LOS_REMAINING = 11  # Timesteps remaining in admission (decrements in step)
 ROW_CUMULATIVE_ALERTS = 12  # Total alerts fired for this patient
-ROW_FALSE_ALERTS = 13       # False alerts (for fatigue tracking)
-ROW_ONSET_TIMESTEP = 14     # Timestep of first STAGE_SEPSIS (-1)
+ROW_FALSE_ALERTS = 13  # False alerts (for fatigue tracking)
+ROW_ONSET_TIMESTEP = 14  # Timestep of first STAGE_SEPSIS (-1)
 ROW_BASELINE_DETECT_DELAY = 15  # Clinical detection delay (ts)
 N_STATE_ROWS = 16
 
@@ -208,6 +208,8 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
     # ------------------------------------------------------------------
     def create_population(self, n_entities: int) -> np.ndarray:
         """Generate inpatient admission cohort."""
+        self._model_fitted = False
+        self._cumulative_false_alerts = 0
         rng = self.rng.population
         n = n_entities
 
@@ -247,7 +249,8 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         # Current risk = base × modifier × demographic
         state[ROW_CURRENT_RISK] = np.clip(
             state[ROW_BASE_RISK] * state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
-            0.001, 0.99,
+            0.001,
+            0.99,
         )
 
         # All patients start at stage 0 (at_risk)
@@ -295,23 +298,20 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         n = state.shape[1]
 
         # Identify active patients (not deceased, not discharged)
-        active = (state[ROW_STAGE] < STAGE_DECEASED)
+        active = state[ROW_STAGE] < STAGE_DECEASED
 
         # --- AR(1) drift on risk modifier ---
         noise = rng.normal(0, self.cfg.ar1_sigma, n)
         new_mods = (
-            self.cfg.ar1_rho * state[ROW_AR1_MOD]
-            + (1 - self.cfg.ar1_rho) * 1.0
-            + noise
+            self.cfg.ar1_rho * state[ROW_AR1_MOD] + (1 - self.cfg.ar1_rho) * 1.0 + noise
         )
         new_state[ROW_AR1_MOD] = np.clip(new_mods, 0.5, 2.0)
 
         # Recompute current risk
         new_state[ROW_CURRENT_RISK] = np.clip(
-            state[ROW_BASE_RISK]
-            * new_state[ROW_AR1_MOD]
-            * state[ROW_DEMO_RISK_MULT],
-            0.001, 0.99,
+            state[ROW_BASE_RISK] * new_state[ROW_AR1_MOD] * state[ROW_DEMO_RISK_MULT],
+            0.001,
+            0.99,
         )
 
         # --- Disease progression (stochastic, risk-modified) ---
@@ -331,8 +331,10 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             delay_hours = delay_timesteps * 4.0
             effectiveness = np.where(
                 state[ROW_TREATED] == 1,
-                self.cfg.max_treatment_effectiveness * np.power(
-                    0.5, delay_hours / self.cfg.kumar_half_life_hours,
+                self.cfg.max_treatment_effectiveness
+                * np.power(
+                    0.5,
+                    delay_hours / self.cfg.kumar_half_life_hours,
                 ),
                 0.0,
             )
@@ -360,10 +362,13 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         # the population mean risk. Patients above the mean progress faster;
         # patients below the mean progress slower. The base transition
         # probabilities are calibrated for a patient at mean risk.
-        mean_risk = np.mean(new_state[ROW_CURRENT_RISK][active]) if active.any() else 0.04
+        mean_risk = (
+            np.mean(new_state[ROW_CURRENT_RISK][active]) if active.any() else 0.04
+        )
         risk_scale = np.clip(
             new_state[ROW_CURRENT_RISK] / max(mean_risk, 0.001),
-            0.1, 5.0,
+            0.1,
+            5.0,
         )
 
         # At-risk -> sepsis
@@ -376,7 +381,9 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         # Record onset timestep for patients newly entering SEPSIS
         newly_septic = progressed & (state[ROW_ONSET_TIMESTEP] < 0)
         new_state[ROW_ONSET_TIMESTEP] = np.where(
-            newly_septic, float(t), state[ROW_ONSET_TIMESTEP],
+            newly_septic,
+            float(t),
+            state[ROW_ONSET_TIMESTEP],
         )
 
         # Sepsis -> severe
@@ -417,8 +424,10 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
         mort_draws = rng.random(n)
         mort_sepsis = sepsis_mask & ~progressed2 & (mort_draws < self.cfg.mort_sepsis)
         mort_severe = severe_mask & ~progressed3 & (mort_draws < self.cfg.mort_severe)
-        mort_shock = active & (state[ROW_STAGE] == STAGE_SHOCK) & (
-            mort_draws < self.cfg.mort_shock
+        mort_shock = (
+            active
+            & (state[ROW_STAGE] == STAGE_SHOCK)
+            & (mort_draws < self.cfg.mort_shock)
         )
         deceased = mort_sepsis | mort_severe | mort_shock
         new_state[ROW_STAGE, deceased] = STAGE_DECEASED
@@ -454,7 +463,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
     def predict(self, state: np.ndarray, t: int) -> Predictions:
         """Score all active patients with the sepsis prediction model."""
         rng = self.rng.prediction
-        n = state.shape[1]
+        state.shape[1]
 
         # True sepsis status: 1 if patient is in sepsis/severe/shock, 0 otherwise
         true_labels = (
@@ -466,14 +475,14 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
 
         # Fit model on first call
         if not self._model_fitted:
-            self._model.fit(true_labels, true_risks, rng, n_iterations=3)
+            self._model.fit_reference(true_risks, rng)
             self._model_fitted = True
 
         # Generate predictions with controlled AUC
         scores = self._model.predict(true_risks, rng)
 
         # Only score active patients; set discharged/deceased to 0
-        active = (state[ROW_STAGE] < STAGE_DECEASED)
+        active = state[ROW_STAGE] < STAGE_DECEASED
         scores = np.where(active, scores, 0.0)
 
         # Percentile-based threshold on active patient scores
@@ -537,7 +546,9 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             ]
 
         # Apply treatment to responded patients (who haven't been treated yet)
-        newly_treated = responded_indices[new_state[ROW_TREATED, responded_indices] == 0]
+        newly_treated = responded_indices[
+            new_state[ROW_TREATED, responded_indices] == 0
+        ]
         new_state[ROW_TREATED, newly_treated] = 1
         new_state[ROW_TREATMENT_TIMER, newly_treated] = 0
 
@@ -570,7 +581,11 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
     # 5. MEASURE — outcomes on both branches
     # ------------------------------------------------------------------
     def measure(self, state: np.ndarray, t: int) -> Outcomes:
-        """
+        """Events measure state occupancy (patient-time when summed), not incident
+        cases. Use secondary['incident_onset'] for first onsets this step;
+        mortality is cumulative occupancy and should be read at the final step.
+
+
         Observe outcomes at this timestep. Called on BOTH branches.
 
         Primary outcome: sepsis progression event (entered a worse stage).
@@ -607,6 +622,7 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             events=events,
             entity_ids=np.arange(n),
             secondary={
+                "incident_onset": (state[ROW_ONSET_TIMESTEP] == t).astype(float),
                 "mortality": mortality,
                 "stage": state[ROW_STAGE].copy(),
                 "treated": state[ROW_TREATED].copy(),
@@ -618,15 +634,11 @@ class SepsisEarlyAlertScenario(BaseScenario[np.ndarray]):
             },
             metadata={
                 "stage_counts": stage_counts,
-                "mortality_rate": round(
-                    stage_counts["deceased"] / max(1, n), 4
-                ),
+                "mortality_rate": round(stage_counts["deceased"] / max(1, n), 4),
                 "treated_fraction": round(
                     float((state[ROW_TREATED] == 1).sum()) / max(1, n), 4
                 ),
-                "active_patients": int(
-                    (state[ROW_STAGE] < STAGE_DECEASED).sum()
-                ),
+                "active_patients": int((state[ROW_STAGE] < STAGE_DECEASED).sum()),
             },
         )
 

@@ -66,12 +66,14 @@ class MonitoringHarness:
 
     regime: str = "unnamed"
     seed: int = 0
-    tier3_mode: str = "cits_with_cf"
+    tier3_mode: str = "cits_with_control"
+    tier2_h: float = 96.0
 
     def run_from_results(
         self,
         results: Any,
         config: RetentionConfig,
+        control_results: Any = None,
     ) -> MonitoringRun:
         """Replay a completed simulation through the four tiers.
 
@@ -91,6 +93,8 @@ class MonitoringHarness:
             from all tiers, Tier 3 quarterly estimates, ground
             truth trajectories, Tier 4 rolling statistics.
         """
+        if self.tier3_mode == "cits_with_control" and control_results is None:
+            raise ValueError("Tier 3 requires an independent observed control series")
         n_weeks = len(results.outcomes)
 
         run = MonitoringRun(
@@ -115,10 +119,10 @@ class MonitoringHarness:
         tier1.add_metric("adoption_rate", baseline_weeks=8)
 
         tier2 = Tier2CUSUM(
-            metric="unit_turnover_rate",
+            metric="risk_adjusted_departures",
             baseline_weeks=8,
             k_multiplier=0.5,
-            h_multiplier=4.0,
+            h_multiplier=self.tier2_h,
         )
 
         tier3 = Tier3CITS(mode=self.tier3_mode)
@@ -126,6 +130,12 @@ class MonitoringHarness:
         # Walk weeks
         previous_active = None
         previous_cum_departures = 0
+        latest_forecast = None
+        run.metadata["tier3_mode"] = self.tier3_mode
+        run.metadata["tier3_oracle_benchmark"] = self.tier3_mode == "cits_with_cf"
+        run.metadata["tier2_h"] = self.tier2_h
+        oracle_prediction_log = []
+        paired_factual_prediction_log = []
 
         for t in sorted(results.outcomes.keys()):
             f_out = results.outcomes[t]
@@ -135,14 +145,13 @@ class MonitoringHarness:
             f_interventions = results.interventions.get(t)
 
             # SOC interventions: delta from previous
-            f_soc_total = int(
-                f_out.metadata.get("total_soc_interventions", 0)
-            )
+            f_soc_total = int(f_out.metadata.get("total_soc_interventions", 0))
 
             # We track SOC as a delta across weeks
             prev_soc = (
                 run.weekly_history[-1].get(
-                    "_cumulative_soc_interventions", 0,
+                    "_cumulative_soc_interventions",
+                    0,
                 )
                 if run.weekly_history
                 else 0
@@ -157,7 +166,8 @@ class MonitoringHarness:
 
             capacity_this_week = int(
                 resolve(
-                    config.max_interventions_per_manager_per_week, t,
+                    config.max_interventions_per_manager_per_week,
+                    t,
                 )
             )
 
@@ -181,9 +191,7 @@ class MonitoringHarness:
                     interventions=f_interventions,
                     soc_interventions_this_week=soc_this_week,
                     capacity_this_week=capacity_this_week,
-                    previous_cumulative_departures=(
-                        previous_cum_departures
-                    ),
+                    previous_cumulative_departures=(previous_cum_departures),
                     previous_active=previous_active,
                 )
             else:
@@ -202,22 +210,49 @@ class MonitoringHarness:
                     config=config,
                 )
 
-            # Capture prediction data for Tier 4 (offline analysis)
+            # A prediction at t can be graded only after weeks t+1...t+H.
+            # Labels drawn for fitting are never visible to this monitor.
             if t in results.predictions:
                 pred = results.predictions[t]
                 scores_arr = np.asarray(pred.scores)
-                true_labels = np.asarray(
-                    pred.metadata.get(
-                        "true_labels", np.zeros_like(scores_arr),
+                horizon = config.prediction_interval
+                end = t + horizon
+                active = np.asarray(f_out.secondary["active_mask"], dtype=bool)
+                if end < n_weeks:
+                    labels = np.maximum.reduce(
+                        [results.outcomes[u].events for u in range(t + 1, end + 1)]
+                    ).astype(int)
+                    run.tier4_prediction_log.append(
+                        {
+                            "week": end,
+                            "prediction_week": t,
+                            "scores": scores_arr[active],
+                            "true_labels": labels[active],
+                        }
                     )
-                )
-                run.tier4_prediction_log.append(
-                    {
-                        "week": int(t),
-                        "scores": scores_arr,
-                        "true_labels": true_labels,
-                    }
-                )
+                    # Separate oracle benchmark on the common risk set.
+                    cf_active = np.asarray(cf_out.secondary["active_mask"], dtype=bool)
+                    shared = active & cf_active
+                    cf_labels = np.maximum.reduce(
+                        [
+                            results.counterfactual_outcomes[u].events
+                            for u in range(t + 1, end + 1)
+                        ]
+                    ).astype(int)
+                    paired_factual_prediction_log.append(
+                        {
+                            "week": end,
+                            "scores": scores_arr[shared],
+                            "true_labels": labels[shared],
+                        }
+                    )
+                    oracle_prediction_log.append(
+                        {
+                            "week": end,
+                            "scores": scores_arr[shared],
+                            "true_labels": cf_labels[shared],
+                        }
+                    )
 
             # Tier 1: update the Shewhart charts
             tier1_metrics = {
@@ -231,19 +266,36 @@ class MonitoringHarness:
                 run.add_event(e)
 
             # Tier 2: update CUSUM
-            tier2_events = tier2.update(t, row.unit_turnover_rate)
+            # Forecast uses the last prediction, made BEFORE this week's
+            # outcomes. Adjust for the current observed risk set so attrition
+            # does not masquerade as a program effect. No true risks enter.
+            residual = None
+            if latest_forecast is not None:
+                at_risk = np.asarray(f_out.secondary["active_mask"], bool) | (
+                    f_out.events > 0
+                )
+                probs = 1 - (1 - np.clip(latest_forecast[at_risk], 0, 1)) ** (
+                    1 / config.prediction_interval
+                )
+                expected = float(probs.sum())
+                variance = float(np.sum(probs * (1 - probs)))
+                residual = (float(f_out.events.sum()) - expected) / np.sqrt(
+                    max(variance, 1e-6)
+                )
+            tier2_events = tier2.update(t, residual) if residual is not None else []
+            if t in results.predictions:
+                latest_forecast = np.asarray(results.predictions[t].scores).copy()
             for e in tier2_events:
                 run.add_event(e)
 
             # Tier 3: update rolling CITS
             # The CF turnover rate is the ground-truth counterfactual
             # series, used as the comparison for cits_with_cf mode.
-            cf_total_depart = int(
-                cf_out.metadata.get("total_departures", 0)
-            )
+            cf_total_depart = int(cf_out.metadata.get("total_departures", 0))
             prev_cf_total = (
                 run.weekly_history[-1].get(
-                    "_cumulative_cf_departures", 0,
+                    "_cumulative_cf_departures",
+                    0,
                 )
                 if run.weekly_history
                 else 0
@@ -252,16 +304,21 @@ class MonitoringHarness:
             cf_active = int(cf_out.metadata.get("n_active", 0))
             prev_cf_active = (
                 run.weekly_history[-1].get(
-                    "_previous_cf_active", cf_active,
+                    "_previous_cf_active",
+                    cf_active,
                 )
                 if run.weekly_history
                 else cf_active
             )
-            cf_turnover_rate = (
-                cf_delta / prev_cf_active
-                if prev_cf_active > 0 else 0.0
-            )
+            cf_turnover_rate = cf_delta / prev_cf_active if prev_cf_active > 0 else 0.0
 
+            if self.tier3_mode == "cits_with_control":
+                ctrl = control_results.outcomes[t]
+                ctrl_count = float(ctrl.events.sum())
+                ctrl_active = (
+                    float(np.asarray(ctrl.secondary["active_mask"]).sum()) + ctrl_count
+                )
+                cf_turnover_rate = ctrl_count / max(ctrl_active, 1)
             tier3_events = tier3.update(
                 week=t,
                 factual_turnover=row.unit_turnover_rate,
@@ -273,6 +330,7 @@ class MonitoringHarness:
             # Store weekly history. We attach a couple of private
             # keys used for delta computation across weeks.
             row_dict = row.to_dict()
+            row_dict["risk_adjusted_departures"] = residual
             row_dict["_cumulative_soc_interventions"] = f_soc_total
             row_dict["_cumulative_cf_departures"] = cf_total_depart
             row_dict["_previous_cf_active"] = cf_active
@@ -296,7 +354,8 @@ class MonitoringHarness:
         cf_departures = np.array(
             [
                 results.counterfactual_outcomes[t].metadata.get(
-                    "total_departures", 0,
+                    "total_departures",
+                    0,
                 )
                 for t in sorted(results.counterfactual_outcomes.keys())
             ],
@@ -312,7 +371,8 @@ class MonitoringHarness:
         cf_retention = np.array(
             [
                 results.counterfactual_outcomes[t].metadata.get(
-                    "retention_rate", 0.0,
+                    "retention_rate",
+                    0.0,
                 )
                 for t in sorted(results.counterfactual_outcomes.keys())
             ],
@@ -329,6 +389,18 @@ class MonitoringHarness:
         run.metadata["tier4_rolling_stats"] = [
             s.to_dict() for s in tier4_result.rolling_stats
         ]
+        paired_factual_tier4 = analyze_tier4(paired_factual_prediction_log)
+        run.metadata["tier4_paired_factual_rolling_stats"] = [
+            s.to_dict() for s in paired_factual_tier4.rolling_stats
+        ]
+        run.metadata["tier4_oracle_comparison"] = (
+            "same scores, common active risk set, factual versus counterfactual future departures"
+        )
+        oracle_tier4 = analyze_tier4(oracle_prediction_log)
+        run.metadata["tier4_oracle_rolling_stats"] = [
+            s.to_dict() for s in oracle_tier4.rolling_stats
+        ]
+        run.metadata["tier4_label_source"] = "realized_forward_factual_departures"
         for e in tier4_result.detection_events:
             run.add_event(e)
 
@@ -353,18 +425,12 @@ class MonitoringHarness:
         """
         n_active = int(f_out.metadata.get("n_active", 0))
         total_departures = int(f_out.metadata.get("total_departures", 0))
-        n_new_hire_active = int(
-            f_out.metadata.get("n_new_hire_active", 0)
-        )
+        n_new_hire_active = int(f_out.metadata.get("n_new_hire_active", 0))
         retention_rate = float(f_out.metadata.get("retention_rate", 0.0))
 
-        n_departures_this_week = (
-            total_departures - previous_cum_departures
-        )
+        n_departures_this_week = total_departures - previous_cum_departures
         unit_turnover_rate = (
-            n_departures_this_week / previous_active
-            if previous_active > 0
-            else 0.0
+            n_departures_this_week / previous_active if previous_active > 0 else 0.0
         )
 
         ai_check_ins = (
@@ -377,17 +443,14 @@ class MonitoringHarness:
         # Approximate n_managers from config
         n_managers = max(1, config.n_nurses // config.nurses_per_manager)
         check_in_target = capacity_this_week * n_managers
-        adherence = (
-            total_check_ins / check_in_target
-            if check_in_target > 0
-            else 0.0
-        )
+        adherence = total_check_ins / check_in_target if check_in_target > 0 else 0.0
 
         # Without per-manager state, assume all managers adopt
         # (this is only inaccurate for Regime F — if we don't have
         # state, the harness caller is responsible for providing
         # state via results.factual_states)
-        adoption_rate = 1.0
+        n_adopting = int(f_out.metadata.get("n_managers_adopting", n_managers))
+        adoption_rate = n_adopting / max(n_managers, 1)
 
         return WeeklyDashboardRow(
             week=t,
@@ -400,10 +463,8 @@ class MonitoringHarness:
             check_in_target_this_week=check_in_target,
             check_in_adherence=adherence,
             n_new_hire_active=n_new_hire_active,
-            new_hire_fraction=(
-                n_new_hire_active / n_active if n_active > 0 else 0.0
-            ),
-            n_managers_adopting=n_managers,
+            new_hire_fraction=(n_new_hire_active / n_active if n_active > 0 else 0.0),
+            n_managers_adopting=n_adopting,
             n_managers_total=n_managers,
             adoption_rate=adoption_rate,
             per_manager=[],
