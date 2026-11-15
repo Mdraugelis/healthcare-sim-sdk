@@ -9,7 +9,8 @@ A clinic that double-books slots a model predicts will be no-shows. Utilization 
 - `python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_evaluation`: the structured evaluation experiment.
 - `python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_governance_eval`: the AI governance evaluation.
 - `python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_burden_analysis`: who carries the overbooking burden, for ethics review.
-- `python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer`: Hydra sweep; config `configs/threshold_optimizer.yaml`.
+- `python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer`: the operations grid.
+- Each runner reads `configs/<name>.yaml`: `evaluation`, `governance_eval`, `burden_analysis`, `threshold_optimizer`.
 - `realistic_scenario.py` and `evaluation_harness.py` are libraries the runners use.
 
 ## Verify

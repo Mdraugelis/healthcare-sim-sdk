@@ -9,7 +9,7 @@ One or two sentences. Name the unit of analysis and say what `events` counts. As
 
 ## Entry points
 - Config: `configs/example_sweep.yaml`. Conventions are in `configs/README.md`.
-- Runner: `python -m healthcare_sim_sdk.scenarios.<name>.<runner>`. Runners live in this folder and end with `finalize_experiment()`.
+- Runner: `python -m healthcare_sim_sdk.scenarios.<name>.<runner>`. A runner lives in this folder, starts through `@hydra.main` with its settings in `configs/`, and ends with `finalize_experiment()`. The shape is in `healthcare_sim_sdk/experiments/runner.py`.
 - Walkthrough: `examples/10_scenario_template.ipynb`.
 
 ## Verify

@@ -139,3 +139,46 @@ def test_protocol_phases_and_levels_match_root_guidance():
     assert f"The {NUMBER_WORDS[len(levels)]} levels:" in ROOT_GUIDANCE
     mandatory = ROOT_GUIDANCE.split("The five levels:", 1)[1].split("4. ", 1)[0]
     assert len(re.findall(r"^\s+- ", mandatory, flags=re.M)) == len(levels)
+
+
+# -- the runner contract --------------------------------------------------
+SCENARIOS = ROOT / "healthcare_sim_sdk" / "scenarios"
+LAUNCHABLE = sorted(
+    p.relative_to(ROOT).as_posix() for p in SCENARIOS.rglob("*.py")
+    if 'if __name__ == "__main__":' in p.read_text())
+
+
+def test_every_exemption_names_a_launchable_script_and_gives_a_reason():
+    entries = INVARIANTS["runner_contract"]["finalize_exemptions"]
+    paths = [e["path"] for e in entries]
+    assert len(paths) == len(set(paths))
+    for entry in entries:
+        assert entry["path"] in LAUNCHABLE, entry["path"]
+        assert len(entry["reason"].split()) >= 8, entry["path"]
+    assert sdk_lint.finalize_exemptions() == set(paths)
+
+
+def test_every_launchable_script_has_its_hydra_config():
+    """@hydra.main names a config; that YAML must exist beside the script."""
+    missing = []
+    for rel in LAUNCHABLE:
+        text = (ROOT / rel).read_text()
+        call = re.search(r'@hydra\.main\(((?:.|\n)*?)\)\ndef ', text)
+        assert call, f"{rel} has no @hydra.main entry"
+        name = re.search(r'config_name="([^"]+)"', call.group(1))
+        folder = re.search(r'config_path="([^"]+)"', call.group(1))
+        assert name and folder, f"{rel}: @hydra.main needs both arguments"
+        config = ((ROOT / rel).parent / folder.group(1)
+                  / f"{name.group(1)}.yaml")
+        if not config.is_file():
+            missing.append(config.relative_to(ROOT).as_posix())
+    assert missing == []
+
+
+def test_lint_rule_matches_the_contract_in_the_file():
+    contract = INVARIANTS["runner_contract"]
+    assert contract["final_call"] == "finalize_experiment"
+    assert contract["entry_decorator"] == "hydra.main"
+    assert set(contract["banned_in_runners"]) == (
+        sdk_lint.RUNNER_BANNED_IMPORTS | sdk_lint.RUNNER_BANNED_CALLS
+        | {"sys.argv"})

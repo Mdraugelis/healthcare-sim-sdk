@@ -5,21 +5,28 @@ This sweep varies the standard-of-care detection timeline to find the
 delay that reproduces the Adams et al. (2022) finding of ~3pp mortality
 reduction from TREWS.
 
-Usage:
-    python run_baseline_sweep.py
+The grid is in configs/baseline_sweep.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_baseline_sweep
 """
 
 import logging
 import time
 
-import yaml
 from pathlib import Path
+
+import hydra
+import yaml
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.scenarios.sepsis_early_alert.scenario import (
     SepsisConfig,
     SepsisEarlyAlertScenario,
@@ -120,12 +127,15 @@ def run_single(
     }
 
 
-def main():
-    trews_raw = load_config("trews_replication")
-
-    # Sweep baseline detection max_hours at multiple capacity levels
-    max_hours_values = [6, 12, 18, 24, 36, 48, 72]
-    capacity_values = [10, 25, 50, 100]
+@hydra.main(version_base=None, config_path="configs",
+            config_name="baseline_sweep")
+def main(cfg: DictConfig) -> None:
+    settings = runner_settings(cfg)
+    trews_raw = load_config(settings["study"])
+    seed = settings["seed"]
+    max_hours_values = settings["max_hours_values"]
+    capacity_values = settings["capacity_values"]
+    low, high = settings["target_reduction_pp"]
 
     logger.info("TREWS Baseline Detection Delay x Capacity Sweep")
     logger.info("=" * 80)
@@ -152,7 +162,7 @@ def main():
         logger.info("--- Capacity = %d ---", cap)
         for mh in max_hours_values:
             t0 = time.time()
-            r = run_single(trews_raw, mh, cap)
+            r = run_single(trews_raw, mh, cap, seed)
             all_results[(cap, mh)] = r
             elapsed = time.time() - t0
             logger.info(
@@ -182,12 +192,12 @@ def main():
         for mh in max_hours_values:
             r = all_results[(cap, mh)]
             val = r["reduction_pp"]
-            marker = "*" if 2.0 <= val <= 4.0 else " "
+            marker = "*" if low <= val <= high else " "
             row += "  %5.2f%s" % (val, marker)
         logger.info(row)
 
     logger.info("")
-    logger.info("* = within target range (2-4 pp)")
+    logger.info("* = within target range (%s-%s pp)", low, high)
     logger.info("")
 
     # Print treated counts matrix
@@ -232,6 +242,32 @@ def main():
     logger.info("")
     logger.info(
         "  All findings are conditional on the stated assumptions."
+    )
+
+    cells = list(all_results.values())
+    reductions = [r["reduction_pp"] for r in cells]
+    finalize_experiment(
+        run_dir(),
+        {"scenario": "sepsis_early_alert",
+         "experiment_name": "baseline_sweep", **settings,
+         "study_parameters": trews_raw},
+        {"n_cells": len(cells),
+         "min_reduction_pp": min(reductions),
+         "max_reduction_pp": max(reductions),
+         "cells_in_target_band": sum(low <= v <= high for v in reductions)},
+        {"cells": cells},
+        require_validated=True,
+        validation_checks=[
+            check("grid_complete", "Every capacity x delay cell ran",
+                  len(cells) == len(max_hours_values) * len(capacity_values),
+                  expected=len(max_hours_values) * len(capacity_values),
+                  actual=len(cells)),
+            check("deaths_within_population",
+                  "Deaths on each branch are between 0 and the cohort size",
+                  all(0 <= r[k] <= trews_raw["n_patients"] for r in cells
+                      for k in ("f_deaths", "cf_deaths")),
+                  expected=f"[0, {trews_raw['n_patients']}]"),
+        ],
     )
 
 

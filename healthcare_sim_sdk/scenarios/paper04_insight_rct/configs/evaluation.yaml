@@ -1,0 +1,22 @@
+# Calibration exercise. The published result was used to set these
+# inputs, so the run cannot confirm that result. See AGENTS.md here.
+#   python -m healthcare_sim_sdk.scenarios.paper04_insight_rct.run_evaluation
+seed: 42
+n_patients: 1000                # larger than the trial, for stable estimates
+n_timesteps: 84                 # 4-hour blocks; 14 days
+# Variance study at the trial's own size.
+rct_n: 142
+variance_seeds: 20
+scenario:
+  model_auc: 0.78               # assumed; the paper reports none
+  treatment_effectiveness: 0.58
+  sepsis_prevalence: 0.213
+
+hydra:
+  run:
+    dir: outputs/paper04_insight_rct/evaluation/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/paper04_insight_rct/evaluation/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

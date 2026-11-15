@@ -6,7 +6,7 @@
 Nurses with time-varying turnover risk. A model flags high-risk nurses for manager check-ins, and each manager has limited capacity. The unit is a nurse and a timestep is a week. Design reasoning is in `EXPERIMENT_DESIGN.md`.
 
 ## Entry points
-- `python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation`: the evaluation experiment. `configs/retention_sweep.yaml` holds the Hydra grid for model quality against manager capacity.
+- `python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation`: the evaluation experiment. Settings and the grid of model quality against manager capacity are in `configs/retention_sweep.yaml`; `sweep=true` runs the grid.
 - `python -m healthcare_sim_sdk.scenarios.nurse_retention.monitoring_validation`: Hydra runner for the four-tier monitoring harness across six regimes; configs under `configs/monitoring/`.
 - `monitoring/`: Tier 1 Shewhart, Tier 2 CUSUM, Tier 3 controlled ITS, Tier 4 model drift.
 

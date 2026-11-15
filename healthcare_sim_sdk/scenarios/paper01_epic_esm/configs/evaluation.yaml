@@ -1,0 +1,26 @@
+# Calibration exercise. The published result was used to set these
+# inputs, so the run cannot confirm that result. See AGENTS.md here.
+#   python -m healthcare_sim_sdk.scenarios.paper01_epic_esm.run_evaluation
+seed: 42
+n_timesteps: 84                 # 4-hour blocks; 14 days
+# Cohort size for the three boundary runs (random model, null treatment,
+# ignored alerts). Each varies one input of the scenario block below.
+boundary_n_patients: 2000
+scenario:
+  n_patients: 5000
+  model_auc: 0.63               # published external validation
+  alert_threshold_percentile: 82.0
+  treatment_effectiveness: 0.20
+  initial_response_rate: 0.55
+  fatigue_coefficient: 0.003
+  floor_response_rate: 0.20
+  sepsis_prevalence: 0.035
+
+hydra:
+  run:
+    dir: outputs/paper01_epic_esm/evaluation/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/paper01_epic_esm/evaluation/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

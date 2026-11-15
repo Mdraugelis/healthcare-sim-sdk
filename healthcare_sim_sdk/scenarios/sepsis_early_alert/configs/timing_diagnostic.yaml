@@ -1,0 +1,19 @@
+# Detection-timing diagnostic: usual-care delay (max hours) and
+# rapid-response capacity for each case to print.
+#   python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_timing_diagnostic
+study: trews_replication
+seed: 42
+cases:
+  - {max_hours: 24, capacity: 10, label: "Default TREWS config"}
+  - {max_hours: 24, capacity: 50, label: "Higher capacity"}
+  - {max_hours: 72, capacity: 10, label: "Long baseline delay"}
+  - {max_hours: 72, capacity: 50, label: "Long delay + higher capacity"}
+
+hydra:
+  run:
+    dir: outputs/sepsis_early_alert/timing_diagnostic/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sepsis_early_alert/timing_diagnostic/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

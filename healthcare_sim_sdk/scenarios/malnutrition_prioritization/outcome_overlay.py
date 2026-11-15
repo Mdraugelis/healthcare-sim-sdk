@@ -26,16 +26,19 @@ Disclosed leaks (quantified by the anchor cells, --anchors):
 
 Usage (from repo root):
   python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization\
-.outcome_overlay --root outputs/malnutrition/exp7_los_readmit_queue/example
+.outcome_overlay root=outputs/malnutrition/exp7_los_readmit_queue/example
   ... --anchors      # adds the 5 leak-targeted full-sim anchor checks
 """
 
-import argparse
 import json
 from pathlib import Path
 from typing import Any, Dict, List
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
+
+from healthcare_sim_sdk.experiments.runner import runner_settings
 
 from .scenario import (
     MalnutritionConfig,
@@ -332,20 +335,19 @@ def run_anchors(base_cfg_kwargs: Dict[str, Any],
     return out
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", required=True,
-                    help="queue-stage output dir (…/exp7…/<campus>)")
-    ap.add_argument("--anchors", action="store_true",
-                    help="also run the 5 leak-targeted anchor checks")
-    args = ap.parse_args()
-    root = Path(args.root)
+@hydra.main(version_base=None, config_path="configs",
+            config_name="outcome_overlay")
+def main(cfg: DictConfig) -> None:
+    """Post-processing of a registered queue-stage run; registers nothing
+    itself (exemption listed in config/invariants.yaml)."""
+    settings = runner_settings(cfg)
+    root = Path(settings["root"])
     cfg = MalnutritionConfig()
 
     print(f"[outcome_overlay] {root}")
     results = run_overlay(root, cfg)
 
-    if args.anchors:
+    if settings["anchors"]:
         print("running leak-targeted anchors "
               f"({ANCHOR_SEEDS} paired seeds each)...")
         summary = json.loads((root / "summary.json").read_text())

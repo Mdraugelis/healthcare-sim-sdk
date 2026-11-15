@@ -1,0 +1,12 @@
+# Verification gates. Not an experiment: it checks the scenario and
+# model and exits non-zero on failure.
+#   python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization.run_verification
+#   ... run_verification stage=all recalibrate=false
+stage: A            # A, B or all
+recalibrate: true   # false: use the existing model_frozen.yaml
+
+hydra:
+  run:
+    dir: outputs/malnutrition_prioritization/verification/${now:%Y%m%d_%H%M%S}
+  job:
+    chdir: false

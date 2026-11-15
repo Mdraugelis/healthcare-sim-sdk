@@ -7,9 +7,16 @@ Usage:
 """
 
 import json
+
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from healthcare_sim_sdk.scenarios.paper01_epic_esm.scenario import (
     EpicESMScenario,
@@ -18,27 +25,32 @@ from healthcare_sim_sdk.scenarios.paper01_epic_esm.scenario import (
 
 
 # --- Boundary condition tests ---
-def run_boundary_check(
-    label, model_auc, treatment_effectiveness, initial_response_rate, seed=42
-):
+def run_boundary_check(label, settings, **changed):
+    """Run the scenario block with one input changed to a boundary value."""
+    base = settings["scenario"]
+    initial = changed.get("initial_response_rate",
+                          base["initial_response_rate"])
+    n = settings["boundary_n_patients"]
     cfg = EpicESMConfig(
-        n_patients=2000,
-        model_auc=model_auc,
-        treatment_effectiveness=treatment_effectiveness,
-        initial_response_rate=initial_response_rate,
-        floor_response_rate=min(0.10, initial_response_rate),
-        sepsis_prevalence=0.035,
+        n_patients=n,
+        model_auc=changed.get("model_auc", base["model_auc"]),
+        treatment_effectiveness=changed.get(
+            "treatment_effectiveness", base["treatment_effectiveness"]),
+        initial_response_rate=initial,
+        floor_response_rate=min(0.10, initial),
+        sepsis_prevalence=base["sepsis_prevalence"],
     )
     tc = TimeConfig(
         n_timesteps=20,
         timestep_duration=4 / 24 / 365,
         prediction_schedule=list(range(20)),
     )
-    scenario = EpicESMScenario(time_config=tc, seed=seed, config=cfg)
+    scenario = EpicESMScenario(
+        time_config=tc, seed=settings["seed"], config=cfg)
     engine = BranchedSimulationEngine(
         scenario, counterfactual_mode=CounterfactualMode.BRANCHED
     )
-    results = engine.run(2000)
+    results = engine.run(n)
     factual_deaths = sum(
         r.secondary["mortality"].sum()
         for r in results.outcomes.values()
@@ -52,7 +64,7 @@ def run_boundary_check(
     print(
         f"  [{label}] factual_deaths={factual_deaths:.0f}, cf_deaths={cf_deaths:.0f}, delta={factual_deaths - cf_deaths:.0f}"
     )
-    if treatment_effectiveness == 0 or initial_response_rate == 0:
+    if cfg.treatment_effectiveness == 0 or cfg.initial_response_rate == 0:
         for t in results.outcomes:
             np.testing.assert_array_equal(
                 results.outcomes[t].events,
@@ -63,37 +75,29 @@ def run_boundary_check(
                 results.outcomes[t].secondary["mortality"],
                 results.counterfactual_outcomes[t].secondary["mortality"],
             )
-    if model_auc == 0.50:
+    if cfg.model_auc == 0.50:
         report = scenario._model._fit_report
         assert abs(report["achieved_auc"] - 0.5) <= 0.05, report
     return factual_deaths, cf_deaths
 
 
-def run_main_scenario():
+def run_main_scenario(settings):
     """Main scenario calibrated to Wong et al. 2021 parameters."""
     print("\n=== Paper 01: Epic ESM (Wong et al. 2021) ===")
     print("Calibrating to: AUC=0.63, sensitivity=0.33, PPV=0.12, alert_rate=0.18")
 
     # Main run — 8 weeks of simulation (56 days at 4hr timesteps = 336 steps)
-    cfg = EpicESMConfig(
-        n_patients=5000,
-        model_auc=0.63,
-        alert_threshold_percentile=82.0,
-        treatment_effectiveness=0.20,
-        initial_response_rate=0.55,
-        fatigue_coefficient=0.003,
-        floor_response_rate=0.20,
-        sepsis_prevalence=0.035,
-    )
+    cfg = EpicESMConfig(**settings["scenario"])
     tc = TimeConfig(
-        n_timesteps=84,
+        n_timesteps=settings["n_timesteps"],
         timestep_duration=4 / 24 / 365,
         timestep_unit="4h",
-        prediction_schedule=list(range(84)),
+        prediction_schedule=list(range(settings["n_timesteps"])),
     )
 
     print("\n--- Main scenario run ---")
-    scenario = EpicESMScenario(time_config=tc, seed=42, config=cfg)
+    scenario = EpicESMScenario(
+        time_config=tc, seed=settings["seed"], config=cfg)
     engine = BranchedSimulationEngine(
         scenario, counterfactual_mode=CounterfactualMode.BRANCHED
     )
@@ -187,22 +191,13 @@ def run_main_scenario():
     # Boundary condition tests
     print("\n--- BOUNDARY CONDITION TESTS ---")
     run_boundary_check(
-        "AUC=0.50 (random)",
-        model_auc=0.50,
-        treatment_effectiveness=0.20,
-        initial_response_rate=0.55,
+        "AUC=0.50 (random)", settings, model_auc=0.50,
     )
     null_deaths, null_cf_deaths = run_boundary_check(
-        "effectiveness=0 (null)",
-        model_auc=0.63,
-        treatment_effectiveness=0.00,
-        initial_response_rate=0.55,
+        "effectiveness=0 (null)", settings, treatment_effectiveness=0.00,
     )
     run_boundary_check(
-        "response_rate=0 (ignored)",
-        model_auc=0.63,
-        treatment_effectiveness=0.20,
-        initial_response_rate=0.00,
+        "response_rate=0 (ignored)", settings, initial_response_rate=0.00,
     )
 
     # Verification checks
@@ -267,7 +262,32 @@ def run_main_scenario():
     }
 
 
-if __name__ == "__main__":
-    results_summary = run_main_scenario()
+def _finalize(settings, summary, name):
+    """Save, verify and register the exercise through the lifecycle."""
+    checks = [
+        check(key, f"Sanity check: {key.replace('_', ' ')}", bool(passed),
+              category="sanity")
+        for key, passed in summary["checks"].items()]
+    metrics = {k: v for k, v in summary.items() if k != "checks"}
+    finalize_experiment(
+        run_dir(),
+        {"scenario": name, "experiment_name": f"{name}_evaluation",
+         "exercise": "calibration", **settings},
+        metrics, validation_checks=checks, require_validated=True,
+        notes="Calibration exercise: inputs were set from the published "
+              "result; the checks are sanity checks only.")
+
+
+@hydra.main(version_base=None, config_path="configs",
+            config_name="evaluation")
+def main(cfg: DictConfig) -> None:
+    settings = runner_settings(cfg)
+    summary = run_main_scenario(settings)
     print("\n=== SUMMARY ===")
-    print(json.dumps(results_summary, indent=2))
+    print(json.dumps(summary, indent=2))
+    _finalize(settings, summary, "paper01_epic_esm")
+    print(f"\nResults saved to: {run_dir()}")
+
+
+if __name__ == "__main__":
+    main()

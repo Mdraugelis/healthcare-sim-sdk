@@ -6,10 +6,10 @@
 Phone reminders aimed at the appointments a model scores as most likely to be missed. A reminder lowers that appointment's no-show probability. Caller capacity is set in `CallerConfig`. The unit is an appointment.
 
 ## Entry points
-- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_evaluation`: the main evaluation.
-- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_threshold_sweep`: sweeps the targeting threshold and compares with a published benchmark. `configs/threshold_sweep.yaml` holds the matching Hydra grid.
-- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_review_demo`: writes a public review packet from `configs/review_demo.yaml` and `configs/review_claims.yaml`. See `docs/review_packets.md`.
-- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.calibrate`: fits `reminder_effectiveness` to a published effect.
+- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_evaluation`: the main evaluation; `configs/evaluation.yaml`.
+- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_threshold_sweep`: sweeps the targeting threshold and compares with a published benchmark; grids and the benchmark are in `configs/threshold_sweep.yaml`.
+- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_review_demo`: writes a public review packet from `configs/review_demo.yaml` and `configs/review_claims.yaml`. Exempt from `finalize_experiment()`: a packet has its own manifest. See `docs/review_packets.md`.
+- `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.calibrate`: fits `reminder_effectiveness` to a published effect (`setting=chong` or `setting=rosen`). Exempt: a tuning tool.
 - Study configs: `configs/chong_replication.yaml`, `configs/rosen_replication.yaml`. Local projection: `configs/local_projection.yaml`.
 
 ## Verify

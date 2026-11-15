@@ -1,0 +1,16 @@
+# Replication runner. Each study's parameters are in its own file in this
+# folder (trews_replication.yaml, esm_replication.yaml); this file says
+# which to run.
+#   python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_replication
+#   ... run_replication 'studies=[trews_replication]'
+studies: [trews_replication, esm_replication]
+seed: 42
+
+hydra:
+  run:
+    dir: outputs/sepsis_early_alert/replication/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sepsis_early_alert/replication/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

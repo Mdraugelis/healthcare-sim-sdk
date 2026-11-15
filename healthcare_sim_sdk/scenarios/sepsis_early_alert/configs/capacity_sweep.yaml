@@ -1,0 +1,15 @@
+# Rapid-response capacity sweep on two studies' parameters, to find where
+# a higher-quality model separates from a lower-quality one.
+#   python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_capacity_sweep
+studies: [trews_replication, esm_replication]
+seed: 42
+capacities: [4, 8, 15, 25, 40, 60, 100, 200]
+
+hydra:
+  run:
+    dir: outputs/sepsis_early_alert/capacity_sweep/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sepsis_early_alert/capacity_sweep/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

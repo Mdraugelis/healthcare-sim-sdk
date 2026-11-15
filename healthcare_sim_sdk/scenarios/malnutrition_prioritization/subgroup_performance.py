@@ -396,7 +396,7 @@ class FrozenSubgroupScorer:
                 f"Frozen model params not found at {p}. Run "
                 "`python -m healthcare_sim_sdk.scenarios."
                 "malnutrition_prioritization.run_verification "
-                "--stage A` to calibrate and freeze them (requires "
+                "stage=A` to calibrate and freeze them (requires "
                 "configs/model_targets.yaml -- see "
                 "model_targets.example.yaml). No silent defaults.")
         raw = yaml.safe_load(p.read_text())

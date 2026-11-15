@@ -8,24 +8,15 @@ There is intentionally no threshold dimension. Capacity IS the
 threshold — each manager takes the top K nurses by risk score.
 Any absolute score threshold would be dominated by capacity.
 
-Usage:
-    # Default single run
-    python scenarios/nurse_retention/run_evaluation.py
-
-    # Override parameters
-    python scenarios/nurse_retention/run_evaluation.py \
-        --model-auc 0.75 --capacity 6
-
-    # Full sweep (AUC x capacity), parallel across all cores
-    python scenarios/nurse_retention/run_evaluation.py --sweep
-
-    # Force sequential execution (useful for debugging)
-    python scenarios/nurse_retention/run_evaluation.py --sweep --workers 1
+Settings and grids are in configs/retention_sweep.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation
+    python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation \\
+        model_auc=0.75 max_interventions_per_manager_per_week=6
+    python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation \\
+        sweep=true workers=1
 """
 
-import argparse
 import csv
-import json
 import logging
 import multiprocessing as mp
 import os
@@ -35,11 +26,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
+)
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    build, check, run_dir, runner_settings,
 )
 from healthcare_sim_sdk.ml.performance import auc_score
 from healthcare_sim_sdk.scenarios.nurse_retention.scenario import (
@@ -362,27 +359,9 @@ def _build_summary(results: List[Dict]) -> Dict[str, Any]:
 
 
 def save_results(experiment: Dict, output_dir: Path):
-    """Save experiment results to disk."""
+    """Write the per-cell CSV. finalize_experiment() saves the config,
+    summary metrics and full results."""
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Config
-    with open(output_dir / "config.json", "w") as f:
-        json.dump(experiment["config"], f, indent=2)
-
-    # Full results (strip trajectories for JSON readability)
-    results_clean = []
-    for r in experiment["results"]:
-        r_copy = {
-            k: v for k, v in r.items()
-            if not k.endswith("_trajectory")
-        }
-        results_clean.append(r_copy)
-    with open(output_dir / "results.json", "w") as f:
-        json.dump(results_clean, f, indent=2, default=str)
-
-    # Summary
-    with open(output_dir / "summary.json", "w") as f:
-        json.dump(experiment["summary"], f, indent=2)
 
     # CSV for easy analysis
     csv_path = output_dir / "results.csv"
@@ -498,79 +477,65 @@ def print_report(experiment: Dict):
         )
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run nurse retention evaluation",
-    )
-    parser.add_argument("--n-nurses", type=int, default=1000)
-    parser.add_argument("--nurses-per-manager", type=int, default=100)
-    parser.add_argument("--n-weeks", type=int, default=52)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--model-auc", type=float, default=0.80)
-    parser.add_argument("--capacity", type=int, default=4)
-    parser.add_argument("--effectiveness", type=float, default=0.50)
-    parser.add_argument(
-        "--sweep", action="store_true",
-        help="Run full AUC x capacity sweep",
-    )
-    parser.add_argument(
-        "--workers", type=int, default=0,
-        help=(
-            "Parallel workers for the sweep. "
-            "0 = auto (os.cpu_count(), capped by #cells); "
-            "1 = sequential; "
-            "N > 1 = use exactly N workers (also capped by #cells). "
-            "Sweeps with <=2 cells always run sequentially."
-        ),
-    )
-    parser.add_argument("--output-dir", type=str, default="outputs")
-    args = parser.parse_args()
+def _checks(experiment: Dict) -> list:
+    """Run-specific verification recorded with the experiment."""
+    results = experiment["results"]
+    n = experiment["config"]["n_nurses"]
+    return [
+        check("departures_within_population",
+              "Departures on each branch are between 0 and the workforce",
+              all(0 <= r[k] <= n for r in results
+                  for k in ("factual_departures",
+                            "counterfactual_departures")),
+              expected=f"[0, {n}]"),
+        check("retention_rates_in_unit_interval",
+              "Retention rates lie in [0, 1]",
+              all(0.0 <= r[k] <= 1.0 for r in results
+                  for k in ("factual_retention_rate",
+                            "counterfactual_retention_rate")),
+              expected="[0, 1]"),
+        check("prevented_is_branch_difference",
+              "Departures prevented equals counterfactual minus factual",
+              all(r["departures_prevented"]
+                  == r["counterfactual_departures"] - r["factual_departures"]
+                  for r in results), expected="identity holds"),
+    ]
 
+
+@hydra.main(version_base=None, config_path="configs",
+            config_name="retention_sweep")
+def main(cfg: DictConfig) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-
-    config = ExperimentConfig(
-        seed=args.seed,
-        n_nurses=args.n_nurses,
-        nurses_per_manager=args.nurses_per_manager,
-        n_weeks=args.n_weeks,
-        model_auc=args.model_auc,
-        max_interventions_per_manager_per_week=args.capacity,
-        intervention_effectiveness=args.effectiveness,
-    )
-
-    if not args.sweep:
-        # Single run mode
-        config.auc_grid = [args.model_auc]
-        config.capacity_grid = [args.capacity]
-
-    output_dir = Path(args.output_dir) / (
-        f"{config.experiment_name}_{config.timestamp}"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    fh = logging.FileHandler(output_dir / "experiment.log")
-    fh.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    )
-    logging.getLogger().addHandler(fh)
-
+    settings = runner_settings(cfg)
+    config = build(ExperimentConfig, settings)
+    if not settings["sweep"]:
+        config.auc_grid = [config.model_auc]
+        config.capacity_grid = [
+            config.max_interventions_per_manager_per_week]
+    output_dir = run_dir()
     logger.info("Starting: %s", config.experiment_name)
-    logger.info("Config: %s", json.dumps(asdict(config), indent=2))
 
     t0 = time.time()
-    experiment = run_experiment(config, workers=args.workers)
-    total_time = time.time() - t0
-
-    logger.info("Complete in %.1f seconds", total_time)
+    experiment = run_experiment(config, workers=settings["workers"])
+    logger.info("Complete in %.1f seconds", time.time() - t0)
 
     save_results(experiment, output_dir)
+    finalize_experiment(
+        output_dir,
+        {**experiment["config"], "sweep": settings["sweep"],
+         "workers": settings["workers"]},
+        experiment["summary"],
+        {"results": [
+            {k: v for k, v in r.items() if not k.endswith("_trajectory")}
+            for r in experiment["results"]]},
+        require_validated=True,
+        validation_checks=_checks(experiment),
+    )
     print_report(experiment)
     print(f"\nResults saved to: {output_dir}")
-
-    return experiment
 
 
 if __name__ == "__main__":

@@ -4,15 +4,14 @@ Runs baseline vs ML predictor across threshold sweep, logs all
 results to experiments/outputs/ with JSON summaries, CSV data,
 and configuration tracking.
 
-Usage:
-    python scenarios/noshow_overbooking/run_evaluation.py
+Settings: configs/evaluation.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_evaluation
 
     # Override parameters:
-    python scenarios/noshow_overbooking/run_evaluation.py --n-days 90 --model-auc 0.87
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_evaluation \\
+        n_days=90 model_auc=0.87
 """
 
-import argparse
-import json
 import logging
 import time
 from dataclasses import asdict, dataclass
@@ -20,7 +19,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
     ClinicConfig,
@@ -30,6 +31,10 @@ from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine, CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    build, check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.ml.performance import (
     auc_score, confusion_matrix_metrics,
 )
@@ -248,20 +253,9 @@ def _build_summary(config, results):
 
 
 def save_results(experiment: Dict, output_dir: Path):
-    """Save experiment results to disk."""
+    """Write the per-configuration CSV. finalize_experiment() saves the
+    config, summary metrics and full results."""
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Config
-    with open(output_dir / "config.json", "w") as f:
-        json.dump(experiment["config"], f, indent=2)
-
-    # Full results
-    with open(output_dir / "results.json", "w") as f:
-        json.dump(experiment["results"], f, indent=2, default=str)
-
-    # Summary
-    with open(output_dir / "summary.json", "w") as f:
-        json.dump(experiment["summary"], f, indent=2)
 
     # CSV for easy analysis
     import csv
@@ -352,105 +346,53 @@ def print_report(experiment: Dict):
         )
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run no-show overbooking evaluation",
-    )
-    parser.add_argument("--n-patients", type=int, default=2000)
-    parser.add_argument("--n-days", type=int, default=60)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--model-auc", type=float, default=0.83)
-    parser.add_argument("--base-noshow-rate", type=float, default=0.13)
-    parser.add_argument("--ar1-rho", type=float, default=0.95)
-    parser.add_argument("--ar1-sigma", type=float, default=0.04)
-    parser.add_argument(
-        "--policy", type=str, default="threshold",
-        choices=["threshold", "urgent_first"],
-        help="Overbooking policy: 'threshold' or 'urgent_first'",
-    )
-    parser.add_argument(
-        "--output-dir", type=str,
-        default="outputs",
-    )
-    args = parser.parse_args()
+def _checks(experiment: Dict) -> list:
+    """Run-specific verification recorded with the experiment."""
+    results = experiment["results"]
+    control = next(r for r in results if r["label"] == "no_overbooking")
+    rates = [r[k] for r in results
+             for k in ("utilization", "collision_rate", "noshow_rate")]
+    return [
+        check("rates_in_unit_interval",
+              "Utilization, collision and no-show rates lie in [0, 1]",
+              all(0.0 <= v <= 1.0 for v in rates),
+              expected="[0, 1]", actual=[min(rates), max(rates)]),
+        check("control_has_no_overbooking",
+              "The no-overbooking control books no extra patients",
+              control["total_overbooked"] == 0,
+              expected=0, actual=control["total_overbooked"]),
+        check("metrics_finite", "Every numeric result is finite",
+              all(np.isfinite(v) for r in results for v in r.values()
+                  if isinstance(v, (int, float))),
+              expected="all finite"),
+    ]
 
-    # Setup logging
+
+@hydra.main(version_base=None, config_path="configs",
+            config_name="evaluation")
+def main(cfg: DictConfig) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-        ],
     )
-
-    config = ExperimentConfig(
-        seed=args.seed,
-        n_patients=args.n_patients,
-        n_days=args.n_days,
-        model_auc=args.model_auc,
-        base_noshow_rate=args.base_noshow_rate,
-        ar1_rho=args.ar1_rho,
-        ar1_sigma=args.ar1_sigma,
-        overbooking_policy=args.policy,
-    )
-
-    output_dir = Path(args.output_dir) / (
-        f"{config.experiment_name}_{config.timestamp}"
-    )
-
-    # Add file logging
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fh = logging.FileHandler(output_dir / "experiment.log")
-    fh.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)s %(message)s"
-    ))
-    logging.getLogger().addHandler(fh)
-
+    config = build(ExperimentConfig, runner_settings(cfg))
+    output_dir = run_dir()
     logger.info("Starting experiment: %s", config.experiment_name)
-    logger.info("Config: %s", json.dumps(asdict(config), indent=2))
 
     t0 = time.time()
     experiment = run_experiment(config)
-    total_time = time.time() - t0
-
-    logger.info("Experiment complete in %.1f seconds", total_time)
+    logger.info("Experiment complete in %.1f seconds", time.time() - t0)
 
     save_results(experiment, output_dir)
-
-    # Register in catalog
-    from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
-    catalog = ExperimentCatalog()
-    catalog.register(
+    finalize_experiment(
         output_dir, experiment["config"], experiment["summary"],
-    )
-    logger.info("Registered in experiment catalog")
-
-    # Generate and save markdown report
-    from healthcare_sim_sdk.experiments.report import generate_report
-    report_md = generate_report(config.timestamp, catalog)
-    report_path = output_dir / "report.md"
-    with open(report_path, "w") as f:
-        f.write(report_md)
-    logger.info("Report saved to %s", report_path)
-
-    # Run validation and save appendix
-    from healthcare_sim_sdk.experiments.validate import validate_experiment
-    appendix_md = validate_experiment(config.timestamp)
-    appendix_path = output_dir / "validation_appendix.md"
-    with open(appendix_path, "w") as f:
-        f.write(appendix_md)
-    # Count pass/fail
-    n_pass = appendix_md.count("| PASS |")
-    n_fail = appendix_md.count("| **FAIL** |")
-    logger.info(
-        "Validation: %d/%d checks passed", n_pass, n_pass + n_fail,
+        {"results": experiment["results"]},
+        require_validated=True,
+        validation_checks=_checks(experiment),
     )
 
     print_report(experiment)
     print(f"\nResults saved to: {output_dir}")
-    print(f"Report: {report_path}")
-    print(f"Validation: {appendix_path} ({n_pass}/{n_pass+n_fail} checks)")
-    return experiment
 
 
 if __name__ == "__main__":

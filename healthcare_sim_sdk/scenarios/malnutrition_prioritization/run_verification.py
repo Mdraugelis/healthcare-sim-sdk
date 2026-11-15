@@ -18,13 +18,16 @@ Stage B (full-sim boundary gate; requires intervene/erosion/coding):
 
 Usage:
   python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization\
-.run_verification --stage A
+.run_verification stage=A
 """
 
-import argparse
 import json
-import sys
 from pathlib import Path
+
+import hydra
+from omegaconf import DictConfig
+
+from healthcare_sim_sdk.experiments.runner import runner_settings
 
 from .subgroup_performance import (
     CALIBRATION_SEED,
@@ -161,20 +164,22 @@ def stage_b() -> bool:
     return run_boundary_suite()
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", choices=["A", "B", "all"],
-                    default="A")
-    ap.add_argument("--no-recalibrate", action="store_true",
-                    help="use existing model_frozen.yaml")
-    args = ap.parse_args()
-
+@hydra.main(version_base=None, config_path="configs",
+            config_name="verification")
+def main(cfg: DictConfig) -> None:
+    """The verification gates: a checker, not an experiment. It registers
+    nothing (exemption listed in config/invariants.yaml)."""
+    settings = runner_settings(cfg)
+    stage = settings["stage"]
+    if stage not in ("A", "B", "all"):
+        raise ValueError(f"stage must be A, B or all, not {stage!r}")
     ok = True
-    if args.stage in ("A", "all"):
-        ok &= stage_a(recalibrate=not args.no_recalibrate)
-    if args.stage in ("B", "all"):
+    if stage in ("A", "all"):
+        ok &= stage_a(recalibrate=settings["recalibrate"])
+    if stage in ("B", "all"):
         ok &= stage_b()
-    sys.exit(0 if ok else 1)
+    if not ok:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

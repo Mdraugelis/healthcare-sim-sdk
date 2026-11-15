@@ -2,20 +2,21 @@
 
 Runs TREWS and/or ESM replication configs and prints verification summary.
 
-Usage:
-    python run_replication.py trews
-    python run_replication.py esm
-    python run_replication.py both
+Which studies run is set in configs/replication.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_replication
+    python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_replication \\
+        'studies=[trews_replication]'
 """
 
 import logging
-import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
 
+import hydra
 import numpy as np
 import yaml
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
@@ -28,6 +29,9 @@ from healthcare_sim_sdk.scenarios.sepsis_early_alert.scenario import (
     SepsisEarlyAlertScenario,
 )
 from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -42,7 +46,7 @@ def load_config(name: str) -> dict:
         return yaml.safe_load(f)
 
 
-def run_replication(config_name: str, seed: int = 42) -> dict:
+def run_replication(config_name: str, seed: int, output_dir: Path) -> dict:
     """Run a single replication scenario and return metrics."""
     raw = load_config(config_name)
     logger.info("=" * 70)
@@ -279,7 +283,6 @@ def run_replication(config_name: str, seed: int = 42) -> dict:
     logger.info("")
 
     # --- Save via lifecycle ---
-    output_dir = Path("outputs") / "sepsis_early_alert" / config_name
     config_dict = {
         "scenario": "sepsis_early_alert",
         "experiment_name": config_name,
@@ -287,22 +290,31 @@ def run_replication(config_name: str, seed: int = 42) -> dict:
         **asdict(cfg),
     }
     # A failed save must fail the run, not be logged and skipped.
-    finalize_experiment(output_dir, config_dict, metrics)
+    finalize_experiment(
+        output_dir, config_dict, metrics,
+        require_validated=True,
+        validation_checks=[check(
+            "structural_checks",
+            "Population conservation, deaths within population, no NaN, "
+            "counterfactual treatment consistency",
+            checks_passed == checks_total,
+            expected=checks_total, actual=checks_passed)],
+    )
     logger.info("Results saved to %s", output_dir)
 
     return metrics
 
 
-def main():
-    targets = sys.argv[1] if len(sys.argv) > 1 else "both"
-
+@hydra.main(version_base=None, config_path="configs",
+            config_name="replication")
+def main(cfg: DictConfig) -> None:
+    settings = runner_settings(cfg)
     all_metrics = {}
-    if targets in ("trews", "both"):
-        all_metrics["trews"] = run_replication("trews_replication")
-    if targets in ("esm", "both"):
-        all_metrics["esm"] = run_replication("esm_replication")
+    for study in settings["studies"]:
+        all_metrics[study.replace("_replication", "")] = run_replication(
+            study, settings["seed"], run_dir() / study)
 
-    if len(all_metrics) == 2:
+    if {"trews", "esm"} <= set(all_metrics):
         logger.info("")
         logger.info("=" * 70)
         logger.info("COMPARATIVE SUMMARY")

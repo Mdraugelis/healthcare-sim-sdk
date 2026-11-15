@@ -1,20 +1,27 @@
 """Sweep rapid_response_capacity to find where TREWS vs ESM differentiate.
 
-Usage:
-    python run_capacity_sweep.py
+The studies and capacities are in configs/capacity_sweep.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_capacity_sweep
 """
 
 import logging
 import time
 
-import yaml
 from pathlib import Path
+
+import hydra
+import yaml
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.scenarios.sepsis_early_alert.scenario import (
     SepsisConfig,
     SepsisEarlyAlertScenario,
@@ -110,11 +117,15 @@ def run_single(raw: dict, capacity: int, seed: int = 42) -> dict:
     }
 
 
-def main():
-    trews_raw = load_config("trews_replication")
-    esm_raw = load_config("esm_replication")
-
-    capacities = [4, 8, 15, 25, 40, 60, 100, 200]
+@hydra.main(version_base=None, config_path="configs",
+            config_name="capacity_sweep")
+def main(cfg: DictConfig) -> None:
+    settings = runner_settings(cfg)
+    first, second = settings["studies"]
+    trews_raw = load_config(first)
+    esm_raw = load_config(second)
+    seed = settings["seed"]
+    capacities = settings["capacities"]
 
     logger.info("Sweeping rapid_response_capacity: %s", capacities)
     logger.info("TREWS: AUC=%.2f, threshold=%.0f%%, response=%.2f",
@@ -132,8 +143,8 @@ def main():
 
     for cap in capacities:
         t0 = time.time()
-        trews_results[cap] = run_single(trews_raw, cap)
-        esm_results[cap] = run_single(esm_raw, cap)
+        trews_results[cap] = run_single(trews_raw, cap, seed)
+        esm_results[cap] = run_single(esm_raw, cap, seed)
         elapsed = time.time() - t0
         logger.info("  capacity=%3d  done (%.1fs)", cap, elapsed)
 
@@ -200,6 +211,32 @@ def main():
     )
     logger.info(
         "and clinician engagement translate into differential mortality benefit."
+    )
+
+    cells = [{"study": name, "capacity": cap, **res[cap]}
+             for name, res in ((first, trews_results), (second, esm_results))
+             for cap in capacities]
+    advantage = [trews_results[c]["reduction_pp"]
+                 - esm_results[c]["reduction_pp"] for c in capacities]
+    finalize_experiment(
+        run_dir(),
+        {"scenario": "sepsis_early_alert",
+         "experiment_name": "capacity_sweep", **settings,
+         "study_parameters": {first: trews_raw, second: esm_raw}},
+        {"n_cells": len(cells),
+         "max_advantage_pp": max(advantage),
+         "min_advantage_pp": min(advantage)},
+        {"cells": cells},
+        require_validated=True,
+        validation_checks=[
+            check("grid_complete", "Every study x capacity cell ran",
+                  len(cells) == 2 * len(capacities),
+                  expected=2 * len(capacities), actual=len(cells)),
+            check("deaths_nonnegative",
+                  "Deaths on each branch are non-negative",
+                  all(r[k] >= 0 for r in cells
+                      for k in ("f_deaths", "cf_deaths")), expected=">= 0"),
+        ],
     )
 
 

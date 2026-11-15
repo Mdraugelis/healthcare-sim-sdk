@@ -7,24 +7,29 @@ against counterfactual (baseline detection only).
 Target: ~3.3pp adjusted mortality reduction among sepsis patients
 whose alert was confirmed within 3 hours.
 
-Usage:
-    python run_trews_replication.py [--seeds 30] [--output-dir outputs]
+Settings are in configs/trews_multiseed.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_trews_replication
+    python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_trews_replication n_seeds=5
 """
 
-import argparse
-import json
 import logging
 import time
 from pathlib import Path
 
+import hydra
 import numpy as np
 import yaml
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.scenarios.sepsis_early_alert.scenario import (
     SepsisConfig,
     SepsisEarlyAlertScenario,
@@ -125,21 +130,12 @@ def run_single_seed(raw: dict, seed: int) -> dict:
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="TREWS replication (Adams et al. 2022)",
-    )
-    parser.add_argument(
-        "--seeds", type=int, default=30,
-        help="Number of replications (default: 30)",
-    )
-    parser.add_argument(
-        "--output-dir", type=str, default=None,
-        help="Directory to save results JSON",
-    )
-    args = parser.parse_args()
-
-    path = CONFIGS_DIR / "trews_replication.yaml"
+@hydra.main(version_base=None, config_path="configs",
+            config_name="trews_multiseed")
+def main(cfg: DictConfig) -> None:
+    settings = runner_settings(cfg)
+    n_seeds = settings["n_seeds"]
+    path = CONFIGS_DIR / f"{settings['study']}.yaml"
     with open(path) as f:
         raw = yaml.safe_load(f)
 
@@ -163,7 +159,7 @@ def main():
     )
     logger.info(
         "  %d patients, %d timesteps, %d seeds",
-        raw["n_patients"], raw["n_timesteps"], args.seeds,
+        raw["n_patients"], raw["n_timesteps"], n_seeds,
     )
     logger.info(
         "  Target: ~3.3pp mortality reduction (septic patients)",
@@ -172,7 +168,8 @@ def main():
 
     all_results = []
     t_total = time.time()
-    for seed in range(1, args.seeds + 1):
+    for seed in range(settings["first_seed"],
+                      settings["first_seed"] + n_seeds):
         t0 = time.time()
         r = run_single_seed(raw, seed)
         all_results.append(r)
@@ -195,7 +192,7 @@ def main():
 
     logger.info("")
     logger.info("=" * 70)
-    logger.info("RESULTS: %d replications (%.0fs total)", args.seeds,
+    logger.info("RESULTS: %d replications (%.0fs total)", n_seeds,
                 total_time)
     logger.info("=" * 70)
     logger.info("")
@@ -232,7 +229,7 @@ def main():
     logger.info("")
 
     # --- Comparison to published ---
-    published = 3.3
+    published = settings["published_reduction_pp"]
     logger.info("Published (Adams et al.): %.1f pp (adjusted)", published)
     in_ci = (
         np.percentile(reductions, 2.5) <= published
@@ -269,7 +266,7 @@ def main():
     # sepsis_incidence is per-timestep transition rate, not
     # cumulative. Check that septic count is consistent across seeds.
     cv = np.std(n_septics) / mean_septic if mean_septic > 0 else 1
-    if cv < 0.10:
+    if cv < settings["max_sepsis_count_cv"]:
         passed += 1
         logger.info(
             "  [PASS] Sepsis count stable across seeds: "
@@ -284,7 +281,7 @@ def main():
         )
 
     checks += 1
-    if np.std(reductions) < 2.0:
+    if np.std(reductions) < settings["max_reduction_std_pp"]:
         passed += 1
         logger.info(
             "  [PASS] Variance reasonable (std=%.2f pp)",
@@ -315,36 +312,56 @@ def main():
         np.percentile(reductions, 97.5),
     )
     logger.info(
-        "patients, consistent with the published 3.3pp finding.",
+        "patients. The published %.1f pp is %s the simulated interval. "
+        "This is a calibration", published,
+        "inside" if in_ci else "outside",
+    )
+    logger.info(
+        "exercise: the published result set the study parameters, so "
+        "agreement does not test the simulator.",
     )
 
-    # --- Save results ---
-    if args.output_dir:
-        out = Path(args.output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        summary = {
-            "experiment": "trews_replication",
-            "n_seeds": args.seeds,
-            "n_patients": raw["n_patients"],
-            "published_reduction_pp": published,
-            "mean_reduction_pp": round(np.mean(reductions), 2),
-            "median_reduction_pp": round(
-                np.median(reductions), 2,
-            ),
-            "std_reduction_pp": round(np.std(reductions), 2),
-            "ci_95_lower": round(
-                np.percentile(reductions, 2.5), 2,
-            ),
-            "ci_95_upper": round(
-                np.percentile(reductions, 97.5), 2,
-            ),
-            "published_within_ci": in_ci,
-            "per_seed": all_results,
-        }
-        out_path = out / "trews_replication_results.json"
-        with open(out_path, "w") as f:
-            json.dump(summary, f, indent=2)
-        logger.info("Results saved to %s", out_path)
+    metrics = {
+        "n_seeds": n_seeds,
+        "n_patients": raw["n_patients"],
+        "published_reduction_pp": published,
+        "mean_reduction_pp": round(float(np.mean(reductions)), 2),
+        "median_reduction_pp": round(float(np.median(reductions)), 2),
+        "std_reduction_pp": round(float(np.std(reductions)), 2),
+        "ci_95_lower": round(float(np.percentile(reductions, 2.5)), 2),
+        "ci_95_upper": round(float(np.percentile(reductions, 97.5)), 2),
+        "published_within_ci": bool(in_ci),
+    }
+    finalize_experiment(
+        run_dir(),
+        {"scenario": "sepsis_early_alert",
+         "experiment_name": "trews_multiseed", **settings,
+         "seed": settings["first_seed"],
+         "seeds": [r["seed"] for r in all_results],
+         "study_parameters": raw},
+        metrics, {"per_seed": all_results},
+        require_validated=True,
+        validation_checks=[
+            check("sepsis_count_stable",
+                  "Septic patients per run vary little across seeds",
+                  cv < settings["max_sepsis_count_cv"],
+                  expected=f"CV < {settings['max_sepsis_count_cv']}",
+                  actual=round(float(cv), 4), tolerance="upper limit",
+                  category="statistical"),
+            check("reduction_variance",
+                  "Mortality reduction is stable across seeds",
+                  float(np.std(reductions))
+                  < settings["max_reduction_std_pp"],
+                  expected=f"SD < {settings['max_reduction_std_pp']} pp",
+                  actual=round(float(np.std(reductions)), 2),
+                  tolerance="upper limit", category="statistical"),
+            check("mortality_in_range",
+                  "Mortality on each branch lies in [0, 100] percent",
+                  all(0.0 <= v <= 100.0 for v in f_morts + cf_morts),
+                  expected="[0, 100]"),
+        ],
+    )
+    logger.info("Results saved to %s", run_dir())
 
 
 if __name__ == "__main__":

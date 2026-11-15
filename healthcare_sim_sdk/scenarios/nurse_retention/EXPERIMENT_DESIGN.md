@@ -185,21 +185,22 @@ Every run produces a built-in comparison: factual (AI-directed) vs. counterfactu
 
 ### Hydra CLI Examples
 
+Settings and both grids are in `configs/retention_sweep.yaml`.
+
 ```bash
-# Single run (default params)
-python scenarios/nurse_retention/run_evaluation.py
+# Single run (the YAML's values)
+python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation
 
 # Override for a quick test
-python scenarios/nurse_retention/run_evaluation.py \
-    --model-auc 0.75 --capacity 6
+python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation \
+    model_auc=0.75 max_interventions_per_manager_per_week=6
 
-# Full primary sweep
-python scenarios/nurse_retention/run_evaluation.py --sweep
+# The full grid in the YAML, one combined table
+python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation sweep=true
 
-# Hydra multirun (alternative)
-python scenarios/nurse_retention/run_evaluation.py --multirun \
-    model.auc=0.60,0.70,0.80,0.85 \
-    policy.max_interventions_per_week=2,4,6,8
+# A different grid, still from the command line
+python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation sweep=true \
+    auc_grid=[0.60,0.70,0.80,0.85] capacity_grid=[2,4,6,8]
 ```
 
 ## Key Metrics (per run)

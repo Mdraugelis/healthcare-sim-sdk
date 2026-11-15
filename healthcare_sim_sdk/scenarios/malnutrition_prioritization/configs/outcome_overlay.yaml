@@ -1,0 +1,12 @@
+# Outcome overlay for the length-of-stay and readmission experiment.
+# Post-processing: it reads the output of a registered queue-stage run
+# (run_los_readmit_sweep) and writes tables beside it.
+#   python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization.outcome_overlay root=<queue-stage output dir>
+root: ???           # required: the queue-stage output directory
+anchors: false     # true: also run the leak-targeted anchor checks
+
+hydra:
+  run:
+    dir: outputs/malnutrition_prioritization/outcome_overlay/${now:%Y%m%d_%H%M%S}
+  job:
+    chdir: false

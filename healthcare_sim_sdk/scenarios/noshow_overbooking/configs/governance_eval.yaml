@@ -1,0 +1,41 @@
+# AI governance evaluation: model AUC x threshold x policy, each checked
+# against the governance targets below.
+#   python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_governance_eval
+experiment_name: governance_evaluation
+timestamp: ${now:%Y%m%d_%H%M%S}
+seed: 42
+n_patients: 2000
+n_days: 90
+base_noshow_rate: 0.13
+n_providers: 6
+slots_per_provider: 12
+max_overbook_per_provider: 2
+new_waitlist_requests_per_day: 5
+max_individual_overbooks: 10
+ar1_rho: 0.95
+ar1_sigma: 0.04
+
+# The grid. One run covers every combination and writes one report.
+model_aucs: [0.70, 0.80, 0.83, 0.87]
+thresholds: [0.15, 0.20, 0.25, 0.30, 0.35, 0.40]
+policies: [threshold, urgent_first]
+
+# Governance targets from the evaluation plan.
+governance:
+  auc_minimum: 0.70
+  auc_target: 0.80
+  ppv_minimum: 0.30
+  sensitivity_minimum: 0.50
+  calibration_slope_low: 0.8
+  calibration_slope_high: 1.2
+  subgroup_auc_max_gap: 0.15     # no subgroup more than 15% worse
+  burden_disparity_max: 2.0      # max ratio between groups
+
+hydra:
+  run:
+    dir: outputs/noshow_overbooking/governance_eval/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/noshow_overbooking/governance_eval/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

@@ -71,6 +71,52 @@ def test_sdk004_and_sdk005():
     assert codes(found, "block") == {}
 
 
+def test_sdk007_runner_outside_the_contract():
+    found = lint("sdk007_bad.py")
+    assert codes(found, "block") == {"SDK007": 6}
+    messages = " ".join(f.message for f in found)
+    for expected in ("imports argparse", "reads sys.argv",
+                     "calls save_experiment()", "calls ExperimentCatalog()",
+                     "does not start through Hydra",
+                     "never calls finalize_experiment()"):
+        assert expected in messages
+
+
+def test_sdk007_applies_only_to_launchable_scenario_scripts():
+    text = (FIXTURES / "sdk007_bad.py").read_text()
+    # The same code outside scenarios/, or without a __main__ block, is
+    # not a runner.
+    assert codes(sdk_lint.lint_source(text, "scripts/tool.py"))["SDK007"] == 0
+    library = text.split("if __name__")[0]
+    assert codes(sdk_lint.lint_source(
+        library, "healthcare_sim_sdk/scenarios/example/helpers.py"))[
+            "SDK007"] == 0
+
+
+def test_sdk007_cannot_be_suppressed_with_a_comment():
+    text = (FIXTURES / "sdk007_bad.py").read_text().replace(
+        "import argparse\n",
+        "import argparse  # sdk-lint: allow SDK007 -- just this once\n")
+    found = sdk_lint.lint_source(
+        text, "healthcare_sim_sdk/scenarios/example/run_old_style.py")
+    assert codes(found, "block") == {"SDK007": 6, "SDK000": 1}
+
+
+def test_sdk007_exemption_needs_a_listed_reason(monkeypatch):
+    tool = (FIXTURES / "sdk007_good.py").read_text().replace(
+        "    finalize_experiment(run_dir(), settings, {\"n\": settings[\"n\"]})\n",
+        "    print(run_dir(), settings)\n")
+    rel = "healthcare_sim_sdk/scenarios/example/diagnostic.py"
+    (finding,) = sdk_lint.lint_source(tool, rel)
+    assert "never calls finalize_experiment()" in finding.message
+    monkeypatch.setattr(sdk_lint, "_EXEMPTIONS", {rel})
+    assert sdk_lint.lint_source(tool, rel) == []
+    # An exempt script that does finalize must leave the list.
+    good = (FIXTURES / "sdk007_good.py").read_text()
+    (stale,) = sdk_lint.lint_source(good, rel)
+    assert "listed as exempt" in stale.message
+
+
 def test_sdk006_unfinished_contract_methods():
     found = lint("sdk006_bad.py")
     names = sorted(f.message.split(".")[1].split(" ")[0] for f in found)

@@ -1,0 +1,22 @@
+# Calibration exercise. The published result was used to set these
+# inputs, so the run cannot confirm that result. See AGENTS.md here.
+#   python -m healthcare_sim_sdk.scenarios.paper03_kaiser_aam.run_evaluation
+seed: 42
+n_patients: 5000
+n_timesteps: 84                 # 4-hour blocks; 14 days
+scenario:
+  model_auc: 0.845              # published c-statistic
+  alert_threshold_percentile: 90.0
+  treatment_effectiveness: 0.32
+  vqnc_review_rate: 0.90
+  vqnc_action_rate: 0.60
+  deterioration_prevalence: 0.08
+
+hydra:
+  run:
+    dir: outputs/paper03_kaiser_aam/evaluation/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/paper03_kaiser_aam/evaluation/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

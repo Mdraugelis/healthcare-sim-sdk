@@ -1,58 +1,39 @@
-# Threshold Sweep Configuration — UCSF Benchmark Comparison
-# ----------------------------------------------------------
-# Sweeps probability thresholds in the reminder-call decision,
-# matching the operating range where UCSF Health chose 10% over
-# Epic's suggested 15% "High Risk" cutoff (UserWeb, 2018).
-#
-# Key comparison: at 20% threshold, UCSF reported ~12% flag rate
-# and ~60% TPR across ~808K appointments with ~9% base no-show rate.
-#
-# Run single config:
-#   python run_threshold_sweep.py model.auc=0.80 threshold=0.10
-#
-# Run full grid:
-#   python run_threshold_sweep.py --multirun \
-#     base_noshow_rate=0.09,0.13,0.18 \
-#     model.auc=0.72,0.80,0.85 \
-#     threshold=0.05,0.10,0.15,0.20,0.25,0.30
-
+# Threshold sweep with a published benchmark for comparison.
+# Sweeps the probability threshold in the reminder-call decision across
+# base no-show rates and model AUCs. One run covers the whole grid and
+# writes one table.
+#   python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_threshold_sweep
+#   ... run_threshold_sweep 'thresholds=[0.10,0.20]' n_days=30
+experiment_name: threshold_sweep_ucsf_benchmark
 seed: 42
-n_days: 90
 n_patients: 5000
+n_days: 90
 
-population:
-  base_noshow_rate: 0.09       # UCSF implied ~9% from validation data
-  noshow_concentration: 0.3
+# The grid.
+base_noshow_rates: [0.09, 0.13, 0.18]
+auc_targets: [0.72, 0.80, 0.85]
+thresholds: [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
 
-model:
-  type: predictor
-  auc: 0.80
+targeting_mode: threshold
+call_capacity_per_day: 48      # set high so capacity does not bind
+call_success_rate: 0.65
+reminder_effectiveness: 0.35
 
-# Threshold for calling decision
-threshold: 0.10
-
-intervention:
-  targeting_mode: threshold
-  call_capacity_per_day: 48     # Uncapped relative to schedule size
-  call_success_rate: 0.65
-  reminder_effectiveness: 0.35
-
-clinic:
-  n_providers: 8
-  slots_per_provider_per_day: 12
-
-# UCSF benchmark reference (at 20% threshold):
-#   flag_rate: 12.1%
-#   tpr: 59.5%
-#   tp: 42,651
-#   fp: ~55,166
-#   tn: 682,913
-#   total_appointments: ~808,405
-#   implied_base_noshow_rate: ~8.9%
+# Published comparison point. UCSF Health chose a 10% threshold over the
+# vendor's suggested 15% cutoff; these are its reported figures at 20%.
+ucsf_benchmark:
+  threshold: 0.20
+  flag_rate: 0.121
+  tpr: 0.595
+  total_appointments: 808405
+  implied_base_noshow_rate: 0.089
+  source: "UCSF Health UserWeb, 2018"
 
 hydra:
   run:
-    dir: outputs/${now:%Y%m%d_%H%M%S}_threshold
+    dir: outputs/noshow_targeted_reminders/threshold_sweep/${now:%Y%m%d_%H%M%S}
   sweep:
-    dir: outputs/sweep_threshold_${now:%Y%m%d_%H%M%S}
-    subdir: ns${population.base_noshow_rate}_auc${model.auc}_t${threshold}
+    dir: outputs/noshow_targeted_reminders/threshold_sweep/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

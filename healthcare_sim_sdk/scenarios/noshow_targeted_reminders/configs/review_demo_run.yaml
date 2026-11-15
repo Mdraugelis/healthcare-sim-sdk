@@ -1,0 +1,13 @@
+# Review-packet demo: builds a public review packet for one targeted
+# reminder run. It produces an assurance document about a run and
+# registers nothing itself.
+#   python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_review_demo
+output_dir: outputs/review_demo/noshow_reminders
+# The reviewed run's settings; a path, or null for configs/review_demo.yaml.
+config: null
+
+hydra:
+  run:
+    dir: outputs/noshow_targeted_reminders/review_demo/${now:%Y%m%d_%H%M%S}
+  job:
+    chdir: false

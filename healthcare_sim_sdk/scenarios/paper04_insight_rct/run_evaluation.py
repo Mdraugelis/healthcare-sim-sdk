@@ -11,14 +11,21 @@ Usage:
 """
 
 import json
+
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from healthcare_sim_sdk.scenarios.paper04_insight_rct.scenario import InSightRCTScenario
 
 
-def run_main():
+def run_main(settings):
     print("\n=== Paper 04: InSight RCT (Shimabukuro et al. 2017) ===")
     print(
         "Calibrating to: mortality 21.3% control → 8.96% intervention (58% reduction)"
@@ -29,20 +36,18 @@ def run_main():
     )
 
     tc = TimeConfig(
-        n_timesteps=84,
+        n_timesteps=settings["n_timesteps"],
         timestep_duration=4 / 24 / 365,
         timestep_unit="4h",
-        prediction_schedule=list(range(84)),
+        prediction_schedule=list(range(settings["n_timesteps"])),
     )
 
     # Run with n=1000 for stable estimates
-    n = 1000
+    n = settings["n_patients"]
     scenario = InSightRCTScenario(
         time_config=tc,
-        seed=42,
-        model_auc=0.78,
-        treatment_effectiveness=0.58,
-        sepsis_prevalence=0.213,
+        seed=settings["seed"],
+        **settings["scenario"],
     )
 
     engine = BranchedSimulationEngine(
@@ -99,25 +104,24 @@ def run_main():
     # Run with n=142 to show variance (mimicking actual RCT)
     print("\n--- VARIANCE ANALYSIS (n=142, mimicking actual RCT) ---")
     mort_deltas = []
-    for seed in range(20):
+    rct_n = settings["rct_n"]
+    for seed in range(settings["variance_seeds"]):
         s2 = InSightRCTScenario(
             time_config=tc,
             seed=seed,
-            model_auc=0.78,
-            treatment_effectiveness=0.58,
-            sepsis_prevalence=0.213,
+            **settings["scenario"],
         )
         e2 = BranchedSimulationEngine(
             s2, counterfactual_mode=CounterfactualMode.BRANCHED
         )
-        r2 = e2.run(142)
+        r2 = e2.run(rct_n)
         f_mort = (
-            float(r2.outcomes[last_t].secondary["mortality"].sum()) / 142
+            float(r2.outcomes[last_t].secondary["mortality"].sum()) / rct_n
             if last_t in r2.outcomes
             else 0
         )
         cf_mort = (
-            float(r2.counterfactual_outcomes[last_t].secondary["mortality"].sum()) / 142
+            float(r2.counterfactual_outcomes[last_t].secondary["mortality"].sum()) / rct_n
             if last_t in r2.counterfactual_outcomes
             else 0
         )
@@ -156,7 +160,32 @@ def run_main():
     }
 
 
-if __name__ == "__main__":
-    r = run_main()
+def _finalize(settings, summary, name):
+    """Save, verify and register the exercise through the lifecycle."""
+    checks = [
+        check(key, f"Sanity check: {key.replace('_', ' ')}", bool(passed),
+              category="sanity")
+        for key, passed in summary["checks"].items()]
+    metrics = {k: v for k, v in summary.items() if k != "checks"}
+    finalize_experiment(
+        run_dir(),
+        {"scenario": name, "experiment_name": f"{name}_evaluation",
+         "exercise": "calibration", **settings},
+        metrics, validation_checks=checks, require_validated=True,
+        notes="Calibration exercise: inputs were set from the published "
+              "result; the checks are sanity checks only.")
+
+
+@hydra.main(version_base=None, config_path="configs",
+            config_name="evaluation")
+def main(cfg: DictConfig) -> None:
+    settings = runner_settings(cfg)
+    summary = run_main(settings)
     print("\n=== SUMMARY ===")
-    print(json.dumps(r, indent=2))
+    print(json.dumps(summary, indent=2))
+    _finalize(settings, summary, "paper04_insight_rct")
+    print(f"\nResults saved to: {run_dir()}")
+
+
+if __name__ == "__main__":
+    main()

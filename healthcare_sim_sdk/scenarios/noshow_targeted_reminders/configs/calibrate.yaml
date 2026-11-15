@@ -1,0 +1,44 @@
+# Calibration tool: searches for the reminder_effectiveness that makes
+# the factual no-show rate match a study's published rate. Not an
+# experiment; it prints the value and registers nothing.
+#   python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.calibrate setting=chong
+setting: ???               # required: chong or rosen
+seed: 42
+tolerance_pp: 0.5
+call_capacity_per_day: null   # null: keep the scenario default
+
+studies:
+  chong:
+    n_patients: 3000
+    n_days: 90
+    base_noshow_rate: 0.193
+    model_auc: 0.74
+    targeting_mode: top_fraction
+    targeting_fraction: 0.25
+    call_success_rate: 0.80
+    target_noshow_rate: 0.159
+    n_providers: 8
+    slots_per_provider: 12
+  rosen:
+    n_patients: 5000
+    n_days: 180
+    base_noshow_rate: 0.36
+    model_auc: 0.72
+    targeting_mode: top_k
+    targeting_fraction: 0.25      # unused for top_k
+    call_success_rate: 0.60
+    target_noshow_rate: 0.33
+    n_providers: 8
+    slots_per_provider: 12
+    race_ethnicity:
+      White: {prob: 0.55, noshow_mult: 0.86}
+      Black: {prob: 0.30, noshow_mult: 1.17}
+      Hispanic: {prob: 0.10, noshow_mult: 1.05}
+      Asian: {prob: 0.02, noshow_mult: 0.80}
+      Other: {prob: 0.03, noshow_mult: 1.00}
+
+hydra:
+  run:
+    dir: outputs/noshow_targeted_reminders/calibrate/${now:%Y%m%d_%H%M%S}
+  job:
+    chdir: false

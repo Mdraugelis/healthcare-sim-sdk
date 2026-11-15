@@ -3,17 +3,13 @@
 Runs ML-targeted vs no-intervention (counterfactual) across
 configurations matching Chong (2020) and Rosen (2023) findings.
 
-Usage:
-    python scenarios/noshow_targeted_reminders/run_evaluation.py
-
-    # Override parameters:
-    python scenarios/noshow_targeted_reminders/run_evaluation.py \
-        --n-days 90 --model-auc 0.74 --base-noshow-rate 0.193
+Settings and grids are in configs/evaluation.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_evaluation
+    python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_evaluation \\
+        n_days=90 model_auc=0.74 base_noshow_rate=0.193
 """
 
-import argparse
 import csv
-import json
 import logging
 import time
 from dataclasses import asdict, dataclass
@@ -21,7 +17,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.scenarios.noshow_targeted_reminders.scenario import (
     CallerConfig,
@@ -32,6 +30,10 @@ from healthcare_sim_sdk.core.engine import (
     CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    build, check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.ml.performance import auc_score
 
 logger = logging.getLogger(__name__)
@@ -270,17 +272,9 @@ def _build_summary(
 
 
 def save_results(experiment: Dict, output_dir: Path):
-    """Save experiment results to disk."""
+    """Write the per-configuration CSV. finalize_experiment() saves the
+    config, summary metrics and full results."""
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    with open(output_dir / "config.json", "w") as f:
-        json.dump(experiment["config"], f, indent=2)
-
-    with open(output_dir / "results.json", "w") as f:
-        json.dump(experiment["results"], f, indent=2, default=str)
-
-    with open(output_dir / "summary.json", "w") as f:
-        json.dump(experiment["summary"], f, indent=2)
 
     csv_path = output_dir / "results.csv"
     fieldnames = [
@@ -362,74 +356,50 @@ def print_report(experiment: Dict):
     print()
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run targeted reminder evaluation",
-    )
-    parser.add_argument("--n-patients", type=int, default=5000)
-    parser.add_argument("--n-days", type=int, default=90)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--model-auc", type=float, default=0.72)
-    parser.add_argument(
-        "--base-noshow-rate", type=float, default=0.36,
-    )
-    parser.add_argument(
-        "--targeting-mode", type=str, default="top_k",
-        choices=["top_k", "top_fraction", "threshold"],
-    )
-    parser.add_argument(
-        "--call-capacity", type=int, default=24,
-    )
-    parser.add_argument(
-        "--call-success-rate", type=float, default=0.65,
-    )
-    parser.add_argument(
-        "--reminder-effectiveness", type=float, default=0.35,
-    )
-    parser.add_argument(
-        "--output-dir", type=str, default="outputs",
-    )
-    args = parser.parse_args()
+def _checks(experiment: Dict) -> list:
+    """Run-specific verification recorded with the experiment."""
+    results = experiment["results"]
+    rates = [r[k] for r in results
+             for k in ("factual_noshow_rate", "counterfactual_noshow_rate")]
+    return [
+        check("rates_in_unit_interval",
+              "Factual and counterfactual no-show rates lie in [0, 1]",
+              all(0.0 <= v <= 1.0 for v in rates),
+              expected="[0, 1]", actual=[min(rates), max(rates)]),
+        check("reached_not_above_called",
+              "Calls reached never exceed calls made",
+              all(r["total_calls_reached"] <= r["total_calls_made"]
+                  for r in results), expected="reached <= made"),
+        check("metrics_finite", "Every numeric result is finite",
+              all(np.isfinite(v) for r in results for v in r.values()
+                  if isinstance(v, (int, float))), expected="all finite"),
+    ]
 
+
+@hydra.main(version_base=None, config_path="configs",
+            config_name="evaluation")
+def main(cfg: DictConfig) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-
-    config = ExperimentConfig(
-        seed=args.seed,
-        n_patients=args.n_patients,
-        n_days=args.n_days,
-        model_auc=args.model_auc,
-        base_noshow_rate=args.base_noshow_rate,
-        targeting_mode=args.targeting_mode,
-        call_capacity_per_day=args.call_capacity,
-        call_success_rate=args.call_success_rate,
-        reminder_effectiveness=args.reminder_effectiveness,
-    )
-
-    output_dir = Path(args.output_dir) / (
-        f"{config.experiment_name}_{config.timestamp}"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    fh = logging.FileHandler(output_dir / "experiment.log")
-    fh.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)s %(message)s"
-    ))
-    logging.getLogger().addHandler(fh)
-
+    config = build(ExperimentConfig, runner_settings(cfg))
+    output_dir = run_dir()
     logger.info("Starting experiment: %s", config.experiment_name)
 
     t0 = time.time()
     experiment = run_experiment(config)
-    total_time = time.time() - t0
-    logger.info("Experiment complete in %.1f seconds", total_time)
+    logger.info("Experiment complete in %.1f seconds", time.time() - t0)
 
     save_results(experiment, output_dir)
+    finalize_experiment(
+        output_dir, experiment["config"], experiment["summary"],
+        {"results": experiment["results"]},
+        require_validated=True,
+        validation_checks=_checks(experiment),
+    )
     print_report(experiment)
     print(f"\nResults saved to: {output_dir}")
-    return experiment
 
 
 if __name__ == "__main__":

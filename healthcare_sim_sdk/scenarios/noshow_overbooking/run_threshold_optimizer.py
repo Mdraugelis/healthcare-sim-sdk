@@ -4,12 +4,12 @@ Each invocation runs ONE configuration. Hydra handles the grid sweep
 via --multirun. Results are written to Hydra's output directory.
 
 Single run:
-    python run_threshold_optimizer.py \
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer \
         clinic.noshow_rate=0.13 clinic.utilization=90 \
         model.auc=0.83 model.threshold=0.30
 
 Full grid (198 runs):
-    python run_threshold_optimizer.py --multirun \
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer --multirun \
         clinic.noshow_rate=0.07,0.13,0.20 \
         clinic.utilization=80,90,110 \
         model.type=baseline,predictor \
@@ -17,14 +17,14 @@ Full grid (198 runs):
         model.threshold=0.20,0.30,0.40,0.50,0.60,0.70,0.80
 
 Predictor-only grid (189 runs):
-    python run_threshold_optimizer.py --multirun \
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer --multirun \
         clinic.noshow_rate=0.07,0.13,0.20 \
         clinic.utilization=80,90,110 \
         model.auc=0.65,0.75,0.83 \
         model.threshold=0.20,0.30,0.40,0.50,0.60,0.70,0.80
 
 Baseline only (9 runs):
-    python run_threshold_optimizer.py --multirun \
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer --multirun \
         clinic.noshow_rate=0.07,0.13,0.20 \
         clinic.utilization=80,90,110 \
         model.type=baseline model.threshold=0.50
@@ -32,9 +32,7 @@ Baseline only (9 runs):
 
 import logging
 import time
-from pathlib import Path
 
-import hydra.core.hydra_config
 
 import hydra
 import numpy as np
@@ -54,14 +52,12 @@ from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
     RealisticNoShowScenario,
 )
 
-logger = logging.getLogger(__name__)
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, finite_metrics_check, run_dir, runner_settings,
+)
 
-# Utilization -> operational params lookup
-UTIL_PARAMS = {
-    80: {"ob_cap": 3, "wl_day": 2},
-    90: {"ob_cap": 2, "wl_day": 5},
-    110: {"ob_cap": 1, "wl_day": 10},
-}
+logger = logging.getLogger(__name__)
 
 
 @hydra.main(
@@ -75,7 +71,12 @@ def main(cfg: DictConfig) -> float:
 
     # Resolve utilization-dependent params
     util = cfg.clinic.utilization
-    up = UTIL_PARAMS.get(util, UTIL_PARAMS[90])
+    table = {int(k): dict(v) for k, v in cfg.utilization_params.items()}
+    if int(util) not in table:
+        raise ValueError(
+            f"clinic.utilization={util} has no entry in utilization_params "
+            f"(configs/threshold_optimizer.yaml): {sorted(table)}")
+    up = table[int(util)]
 
     cc = ClinicConfig(
         n_providers=cfg.clinic.n_providers,
@@ -199,21 +200,24 @@ def main(cfg: DictConfig) -> float:
         "sim_seconds": sim_time,
     }
 
-    # Save via lifecycle
-    from healthcare_sim_sdk.experiments.lifecycle import (
-        save_experiment,
-        register_experiment,
-    )
-
-    out_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
-    config_dict = OmegaConf.to_container(cfg, resolve=True)
+    out_dir = run_dir()
+    config_dict = runner_settings(cfg)
     config_dict["timestamp"] = out_dir.name
     config_dict["scenario"] = "noshow_overbooking"
     config_dict["experiment_name"] = "threshold_optimizer"
 
-    save_experiment(out_dir, config_dict, metrics)
-    # A failed registration must fail the run, not be logged and skipped.
-    register_experiment(out_dir)
+    finalize_experiment(
+        out_dir, config_dict, metrics,
+        require_validated=True,
+        validation_checks=[
+            finite_metrics_check(metrics),
+            check("rates_in_unit_interval",
+                  "Collision and observed no-show rates lie in [0, 1]",
+                  all(0.0 <= metrics[k] <= 1.0
+                      for k in ("collision_rate", "noshow_observed")),
+                  expected="[0, 1]"),
+        ],
+    )
 
     logger.info(
         "Result: util=%.1f%% coll=%.1f%% WL=%d burden=%d (%.1fs)",

@@ -9,13 +9,14 @@ seeds come from configs/review_demo.yaml. The packet is a worked example of
 the review workflow on synthetic data; it certifies nothing.
 """
 
-import argparse
 import json
 from pathlib import Path
 
-from omegaconf import OmegaConf
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 from ...experiments.review import ReviewPacket, evidence, load_registry
+from ...experiments.runner import runner_settings
 from ...experiments.uncertainty import summarize_metrics
 from .review import REGISTRY, run_reviewed
 
@@ -72,13 +73,14 @@ def run_demo(output_dir, config_path=DEFAULT_CONFIG) -> Path:
     return packet.write()
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir",
-                        default="outputs/review_demo/noshow_reminders")
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    args = parser.parse_args()
-    print(run_demo(args.output_dir, args.config))
+@hydra.main(version_base=None, config_path="configs",
+            config_name="review_demo_run")
+def main(cfg: DictConfig) -> None:
+    """Builds a review packet about a run; registers nothing itself
+    (exemption listed in config/invariants.yaml)."""
+    settings = runner_settings(cfg)
+    config = Path(settings["config"]) if settings["config"] else DEFAULT_CONFIG
+    print(run_demo(settings["output_dir"], config))
 
 
 if __name__ == "__main__":

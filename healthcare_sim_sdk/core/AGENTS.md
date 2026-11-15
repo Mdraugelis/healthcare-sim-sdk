@@ -16,6 +16,7 @@ The engine, the scenario interface, results and the random-number partitioner. E
 | No randomness outside the partitioner | `scripts/sdk_lint.py`, rule SDK001 |
 | Engine does not inspect state | `scripts/check_invariants.py` |
 | Step purity; equal draw counts on both branches | `tests/integration/test_all_scenario_contracts.py`, on every scenario |
+| Runners start through Hydra; experiments end in `finalize_experiment()` | `scripts/sdk_lint.py`, rule SDK007; `tests/integration/test_runner_lifecycle.py` runs each one |
 | The YAML, the code and the documents agree | `tests/unit/test_invariants_file.py` |
 
 Static checks cannot prove purity. Only the behavioral tests do.

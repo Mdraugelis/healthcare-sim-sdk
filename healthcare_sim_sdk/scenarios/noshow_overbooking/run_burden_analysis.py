@@ -8,22 +8,22 @@ Key questions:
 - Do specific demographics bear disproportionate burden?
 - How quickly do high-burden patients hit the individual cap?
 
-Usage:
-    python scenarios/noshow_overbooking/run_burden_analysis.py
-    python scenarios/noshow_overbooking/run_burden_analysis.py --n-days 365 --cap 5
+Settings: configs/burden_analysis.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_burden_analysis
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_burden_analysis \\
+        n_days=365 max_individual_overbooks=5
 """
 
-import argparse
-import json
 import logging
 import time
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 
 from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
@@ -34,6 +34,10 @@ from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine, CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    build, check, run_dir, runner_settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -419,90 +423,51 @@ def generate_burden_report(analysis: Dict) -> str:
     return "\n".join(lines)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Overbooking burden analysis",
-    )
-    parser.add_argument("--n-days", type=int, default=365)
-    parser.add_argument("--n-patients", type=int, default=2000)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--threshold", type=float, default=0.30)
-    parser.add_argument("--cap", type=int, default=10)
-    parser.add_argument(
-        "--policy", type=str, default="threshold",
-        choices=["threshold", "urgent_first"],
-    )
-    parser.add_argument(
-        "--output-dir", type=str,
-        default="outputs",
-    )
-    args = parser.parse_args()
-
+@hydra.main(version_base=None, config_path="configs",
+            config_name="burden_analysis")
+def main(cfg: DictConfig) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-
-    config = BurdenConfig(
-        seed=args.seed,
-        n_patients=args.n_patients,
-        n_days=args.n_days,
-        overbooking_threshold=args.threshold,
-        max_individual_overbooks=args.cap,
-        overbooking_policy=args.policy,
-    )
-
-    output_dir = Path(args.output_dir) / (
-        f"{config.experiment_name}_{config.timestamp}"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    fh = logging.FileHandler(output_dir / "experiment.log")
-    fh.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)s %(message)s"
-    ))
-    logging.getLogger().addHandler(fh)
-
-    logger.info("Config: %s", json.dumps(asdict(config), indent=2))
+    config = build(BurdenConfig, runner_settings(cfg))
+    output_dir = run_dir()
 
     analysis = run_burden_analysis(config)
 
-    # Save outputs
-    with open(output_dir / "config.json", "w") as f:
-        json.dump(config.__dict__, f, indent=2)
-
-    # Save analysis (without raw burden_data for JSON size)
-    analysis_save = {
-        k: v for k, v in analysis.items() if k != "burden_data"
-    }
-    with open(output_dir / "analysis.json", "w") as f:
-        json.dump(analysis_save, f, indent=2, default=str)
-
-    # Save per-patient data as CSV
+    # Per-patient data as CSV (too large for the JSON results)
     import csv
-    csv_path = output_dir / "patient_burden.csv"
     if analysis["burden_data"]:
         fieldnames = list(analysis["burden_data"][0].keys())
-        with open(csv_path, "w", newline="") as f:
+        with open(output_dir / "patient_burden.csv", "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(analysis["burden_data"])
 
-    # Generate and save report
     report = generate_burden_report(analysis)
-    with open(output_dir / "burden_report.md", "w") as f:
-        f.write(report)
+    (output_dir / "burden_report.md").write_text(report)
 
-    # Register in catalog
-    from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
-    catalog = ExperimentCatalog()
-    catalog.register(
+    burdens = [row["n_times_overbooked"] for row in analysis["burden_data"]]
+    finalize_experiment(
         output_dir, asdict(config),
         {"type": "burden_analysis",
          "patients_at_cap": analysis["patients_at_cap"],
          "mean_burden": analysis["mean_burden"]},
+        {k: v for k, v in analysis.items() if k != "burden_data"},
         notes=f"Burden analysis: {config.n_days} days, "
               f"policy={config.overbooking_policy}",
+        require_validated=True,
+        validation_checks=[
+            check("cap_respected",
+                  "No patient is overbooked more than the individual cap",
+                  all(b <= config.max_individual_overbooks for b in burdens),
+                  expected=f"<= {config.max_individual_overbooks}",
+                  actual=max(burdens, default=0)),
+            check("mean_burden_nonnegative",
+                  "Mean overbooking burden is a finite, non-negative number",
+                  analysis["mean_burden"] >= 0, expected=">= 0",
+                  actual=analysis["mean_burden"]),
+        ],
     )
 
     print(report)

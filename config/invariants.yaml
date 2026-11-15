@@ -132,6 +132,57 @@ analytical_first_pass:
   reference_protocol: docs/analytical_first_pass.md
   worked_example: docs/analytical_first_pass.md
 
+runner_contract:
+  description: >
+    Every script under healthcare_sim_sdk/scenarios/ that can be launched
+    (it has an `if __name__ == "__main__"` block) starts through Hydra and
+    takes every setting and grid from a YAML file in its scenario's
+    configs/ folder. Every experiment ends by calling
+    finalize_experiment(), which saves, records provenance, validates and
+    then registers the run. scripts/sdk_lint.py rule SDK007 blocks
+    anything else.
+  entry_decorator: hydra.main
+  final_call: finalize_experiment
+  banned_in_runners:
+    - argparse
+    - sys.argv
+    - ExperimentCatalog
+    - save_experiment
+    - register_experiment
+  # Scripts that start through Hydra but do not call finalize_experiment(),
+  # because they are not experiments. Each needs a reason. Nothing else is
+  # exempt, and an exempt script that starts calling finalize_experiment()
+  # must be removed from this list.
+  finalize_exemptions:
+    - path: healthcare_sim_sdk/scenarios/malnutrition_prioritization/run_verification.py
+      reason: >
+        The verification gates. It checks the scenario and model and exits
+        non-zero on failure; it produces a pass or fail, not an experiment.
+    - path: healthcare_sim_sdk/scenarios/malnutrition_prioritization/outcome_overlay.py
+      reason: >
+        Post-processing. It reads the output of a registered queue-stage
+        run and writes tables beside it.
+    - path: healthcare_sim_sdk/scenarios/malnutrition_prioritization/estimands.py
+      reason: >
+        Post-processing. It computes estimands and tables from the same
+        registered queue-stage run and writes them beside it.
+    - path: healthcare_sim_sdk/scenarios/malnutrition_prioritization/power_map.py
+      reason: >
+        Post-processing. It computes the detectability table from the same
+        registered queue-stage run and writes it beside it.
+    - path: healthcare_sim_sdk/scenarios/noshow_targeted_reminders/calibrate.py
+      reason: >
+        A tuning tool. It searches for one parameter value and prints it;
+        the value then goes into a study config that an experiment uses.
+    - path: healthcare_sim_sdk/scenarios/noshow_targeted_reminders/run_review_demo.py
+      reason: >
+        Builds a review packet, an assurance document about a run, with its
+        own manifest and integrity check.
+    - path: healthcare_sim_sdk/scenarios/sepsis_early_alert/run_timing_diagnostic.py
+      reason: >
+        A diagnostic that prints detection-timing distributions and saves
+        nothing.
+
 behavioral_enforcement:
   purity: tests/integration/test_all_scenario_contracts.py
   draw_count_invariance: tests/integration/test_all_scenario_contracts.py

@@ -22,16 +22,19 @@ alpha=0.05 two-sided; PASS = power >= 0.80.
 
 Usage (from repo root):
   python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization\
-.power_map --root outputs/malnutrition/exp7_los_readmit_queue/example
+.power_map root=outputs/malnutrition/exp7_los_readmit_queue/example
 """
 
-import argparse
 import json
 from math import erf, sqrt
 from pathlib import Path
 from typing import Any, Dict, List
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
+
+from healthcare_sim_sdk.experiments.runner import runner_settings
 
 from .outcome_overlay import (
     GRID_DETECT_LOS,
@@ -249,18 +252,18 @@ def emit_d2(res: Dict[str, Any], endpoint: str) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", required=True)
-    ap.add_argument("--cell",
-                    default="rdn_assessments_per_day=30,"
-                            "true_prevalence=0.3")
-    args = ap.parse_args()
-    root = Path(args.root)
-    res = build_map(root, args.cell, MalnutritionConfig())
+@hydra.main(version_base=None, config_path="configs",
+            config_name="power_map")
+def main(cfg: DictConfig) -> None:
+    """Post-processing of a registered queue-stage run; registers nothing
+    itself (exemption listed in config/invariants.yaml)."""
+    settings = runner_settings(cfg)
+    root = Path(settings["root"])
+    cell = settings["cell"]
+    res = build_map(root, cell, MalnutritionConfig())
     (root / "power_map.json").write_text(json.dumps(res, indent=2))
     md = [
-        f"# Table D2 -- detectability by design (cell {args.cell})",
+        f"# Table D2 -- detectability by design (cell {cell})",
         "",
         "## Readmission (pp)",
         emit_d2(res, "readmission"),

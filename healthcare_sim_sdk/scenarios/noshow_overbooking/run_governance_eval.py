@@ -13,19 +13,19 @@ Governance targets:
 - Flagging proportional to actual no-show rate by subgroup
 - Overbooking burden not concentrated by demographics
 
-Usage:
-    python scenarios/noshow_overbooking/run_governance_eval.py
+The targets and the grid are in configs/governance_eval.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_governance_eval
 """
 
-import json
 import logging
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 
 from healthcare_sim_sdk.scenarios.noshow_overbooking.realistic_scenario import (
@@ -35,6 +35,10 @@ from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine, CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    build, check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.ml.performance import (
     auc_score, calibration_slope, confusion_matrix_metrics,
 )
@@ -44,16 +48,9 @@ logger = logging.getLogger(__name__)
 
 # -- Governance thresholds from the evaluation plan -----------------------
 
-GOVERNANCE = {
-    "auc_minimum": 0.70,
-    "auc_target": 0.80,
-    "ppv_minimum": 0.30,
-    "sensitivity_minimum": 0.50,
-    "calibration_slope_low": 0.8,
-    "calibration_slope_high": 1.2,
-    "subgroup_auc_max_gap": 0.15,  # no subgroup > 15% worse
-    "burden_disparity_max": 2.0,   # max ratio between groups
-}
+# Filled from the `governance` block of configs/governance_eval.yaml by
+# main(); no target is set in Python.
+GOVERNANCE: Dict[str, float] = {}
 
 
 @dataclass
@@ -505,26 +502,18 @@ def generate_governance_report(
     return "\n".join(lines)
 
 
-def main():
+@hydra.main(version_base=None, config_path="configs",
+            config_name="governance_eval")
+def main(cfg: DictConfig) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-
-    config = GovernanceConfig()
-    output_dir = (
-        Path("outputs")
-        / f"{config.experiment_name}_{config.timestamp}"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    fh = logging.FileHandler(output_dir / "experiment.log")
-    fh.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)s %(message)s"
-    ))
-    logging.getLogger().addHandler(fh)
-
-    logger.info("Config: %s", json.dumps(asdict(config), indent=2))
+    settings = runner_settings(cfg)
+    GOVERNANCE.clear()
+    GOVERNANCE.update(settings["governance"])
+    config = build(GovernanceConfig, settings)
+    output_dir = run_dir()
 
     all_results = []
     total = (
@@ -547,54 +536,37 @@ def main():
                     config, model_auc, threshold, policy,
                 )
                 all_results.append(result)
-                gc = result["governance_checks"]
-                n_p = sum(1 for c in gc if c["passed"])
-                status = (
-                    "ALL PASS" if result["all_checks_pass"]
-                    else f"{n_p}/{len(gc)}"
-                )
-                logger.info(
-                    "  -> AUC=%.3f PPV=%.1%% Sens=%.1%% [%s]",
-                    result["overall_auc"],
-                    result["ppv"] * 100,
-                    result["sensitivity"] * 100,
-                    status,
-                )
 
-    elapsed = time.time() - t0
-    logger.info("Complete in %.1f seconds", elapsed)
+    logger.info("Complete in %.1f seconds", time.time() - t0)
 
-    # Save results
-    with open(output_dir / "config.json", "w") as f:
-        json.dump(asdict(config), f, indent=2)
-
-    results_save = []
-    for r in all_results:
-        r_copy = {k: v for k, v in r.items()}
-        results_save.append(r_copy)
-    with open(output_dir / "results.json", "w") as f:
-        json.dump(results_save, f, indent=2, default=str)
-
-    # Generate report
     report = generate_governance_report(config, all_results)
-    with open(output_dir / "governance_report.md", "w") as f:
-        f.write(report)
+    (output_dir / "governance_report.md").write_text(report)
 
-    # Register in catalog
-    from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
     n_passing = sum(1 for r in all_results if r["all_checks_pass"])
-    catalog = ExperimentCatalog()
-    catalog.register(
-        output_dir, asdict(config),
+    finalize_experiment(
+        output_dir, settings,
         {
             "type": "governance_evaluation",
             "configs_tested": len(all_results),
             "configs_passing": n_passing,
         },
+        {"results": all_results},
         notes=(
             f"Governance eval: {len(all_results)} configs, "
             f"{n_passing} passing all checks"
         ),
+        require_validated=True,
+        validation_checks=[
+            check("grid_complete",
+                  "Every AUC x threshold x policy combination ran",
+                  len(all_results) == total,
+                  expected=total, actual=len(all_results)),
+            check("rates_in_unit_interval",
+                  "AUC, PPV and sensitivity lie in [0, 1]",
+                  all(0.0 <= r[k] <= 1.0 for r in all_results
+                      for k in ("overall_auc", "ppv", "sensitivity")),
+                  expected="[0, 1]"),
+        ],
     )
 
     print(report)

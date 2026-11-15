@@ -3,21 +3,22 @@
 Binary search over reminder_effectiveness until the simulated
 post-intervention no-show rate matches the target within tolerance.
 
-Usage:
+The study settings are in configs/calibrate.yaml. Usage:
     # Chong calibration
     python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.calibrate \
-        --setting chong
+        setting=chong
 
     # Rosen calibration
     python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.calibrate \
-        --setting rosen
+        setting=rosen
 """
 
-import argparse
 import time
 from typing import Dict, Tuple
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.scenarios.noshow_targeted_reminders.scenario import (
     CallerConfig,
@@ -28,44 +29,11 @@ from healthcare_sim_sdk.core.engine import (
     CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.runner import runner_settings
 from healthcare_sim_sdk.ml.performance import auc_score
 
 
 # -- Settings ---------------------------------------------------------------
-
-CHONG_SETTINGS = dict(
-    n_patients=3000,
-    n_days=90,
-    base_noshow_rate=0.193,
-    model_auc=0.74,
-    targeting_mode="top_fraction",
-    targeting_fraction=0.25,
-    call_success_rate=0.80,
-    target_noshow_rate=0.159,
-    n_providers=8,
-    slots_per_provider=12,
-)
-
-ROSEN_SETTINGS = dict(
-    n_patients=5000,
-    n_days=180,
-    base_noshow_rate=0.36,
-    model_auc=0.72,
-    targeting_mode="top_k",
-    targeting_fraction=0.25,  # unused for top_k
-    call_success_rate=0.60,
-    target_noshow_rate=0.33,
-    n_providers=8,
-    slots_per_provider=12,
-    race_ethnicity={
-        "White": {"prob": 0.55, "noshow_mult": 0.86},
-        "Black": {"prob": 0.30, "noshow_mult": 1.17},
-        "Hispanic": {"prob": 0.10, "noshow_mult": 1.05},
-        "Asian": {"prob": 0.02, "noshow_mult": 0.80},
-        "Other": {"prob": 0.03, "noshow_mult": 1.00},
-    },
-)
-
 
 def run_simulation(
     settings: Dict,
@@ -225,49 +193,30 @@ def calibrate(
     return best_eff
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Calibrate reminder effectiveness",
-    )
-    parser.add_argument(
-        "--setting",
-        type=str,
-        required=True,
-        choices=["chong", "rosen"],
-    )
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument(
-        "--tolerance",
-        type=float,
-        default=0.5,
-        help="Tolerance in percentage points",
-    )
-    parser.add_argument(
-        "--capacity",
-        type=int,
-        default=None,
-        help="Override call_capacity_per_day",
-    )
-    args = parser.parse_args()
-
-    if args.setting == "chong":
-        settings = dict(CHONG_SETTINGS)
-    else:
-        settings = dict(ROSEN_SETTINGS)
-
-    if args.capacity is not None:
-        settings["call_capacity_per_day"] = args.capacity
+@hydra.main(version_base=None, config_path="configs",
+            config_name="calibrate")
+def main(cfg: DictConfig) -> None:
+    """A tuning tool, not an experiment: it prints the calibrated value
+    and registers nothing (exemption listed in config/invariants.yaml)."""
+    run = runner_settings(cfg)
+    if run["setting"] not in run["studies"]:
+        raise ValueError(
+            f"setting must be one of {sorted(run['studies'])}, "
+            f"not {run['setting']!r}")
+    settings = dict(run["studies"][run["setting"]])
+    if run["call_capacity_per_day"] is not None:
+        settings["call_capacity_per_day"] = run["call_capacity_per_day"]
 
     t0 = time.time()
     best_eff = calibrate(
         settings,
-        tolerance_pp=args.tolerance,
-        seed=args.seed,
+        tolerance_pp=run["tolerance_pp"],
+        seed=run["seed"],
     )
     total = time.time() - t0
 
     print(f"\n{'=' * 65}")
-    print(f"CALIBRATION RESULT ({args.setting.upper()})")
+    print(f"CALIBRATION RESULT ({run['setting'].upper()})")
     print(f"{'=' * 65}")
     print(f"  reminder_effectiveness: {best_eff:.4f}")
     print(f"  Total time: {total:.0f}s")
@@ -277,7 +226,7 @@ def main():
     f_rate, cf_rate, auc, race_rates = run_simulation(
         settings,
         best_eff,
-        seed=args.seed,
+        seed=run["seed"],
     )
     print(f"  Factual no-show rate:        {f_rate:.1%}")
     print(f"  Counterfactual no-show rate:  {cf_rate:.1%}")
@@ -285,7 +234,7 @@ def main():
     print(f"  Relative reduction:           {(cf_rate - f_rate) / cf_rate * 100:.1f}%")
     print(f"  Achieved AUC:                 {auc:.3f}")
 
-    if args.setting == "rosen":
+    if run["setting"] == "rosen":
         print("\n  Race-level rates:")
         for race in ["White", "Black", "Hispanic"]:
             f_key = f"factual_{race}"

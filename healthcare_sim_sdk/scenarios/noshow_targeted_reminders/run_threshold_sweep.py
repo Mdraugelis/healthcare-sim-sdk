@@ -9,35 +9,32 @@ UCSF chose a 10% threshold over Epic's 15% "High Risk" cutoff
 because several specialties had too few patients above 15%.
 At 20% threshold, UCSF reported ~12% flag rate and ~60% TPR.
 
-Usage:
-    # Single run
-    python run_threshold_sweep.py
-
-    # Full grid (54 cells):
-    python run_threshold_sweep.py --multirun \
-        population.base_noshow_rate=0.09,0.13,0.18 \
-        model.auc=0.72,0.80,0.85 \
-        threshold=0.05,0.10,0.15,0.20,0.25,0.30
-
-    # Collect results after sweep:
-    python run_threshold_sweep.py --collect-sweep <sweep_dir>
+The grid, settings and benchmark are in configs/threshold_sweep.yaml.
+One run covers the whole grid. Usage:
+    python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_threshold_sweep
+    python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_threshold_sweep \\
+        'thresholds=[0.10,0.20]' n_days=30
 """
 
-import argparse
 import csv
-import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.ml.performance import (
     auc_score,
     confusion_matrix_metrics,
@@ -48,16 +45,6 @@ from healthcare_sim_sdk.scenarios.noshow_targeted_reminders.scenario import (
 )
 
 logger = logging.getLogger(__name__)
-
-# UCSF benchmark reference (at 20% threshold, UserWeb 2018)
-UCSF_BENCHMARK = {
-    "threshold": 0.20,
-    "flag_rate": 0.121,
-    "tpr": 0.595,
-    "total_appointments": 808_405,
-    "implied_base_noshow_rate": 0.089,
-    "source": "UCSF Health UserWeb, 2018",
-}
 
 
 def run_threshold_cell(
@@ -254,21 +241,9 @@ def run_full_sweep(
 def save_results(
     results: List[Dict[str, Any]],
     output_dir: Path,
-    config: Optional[Dict] = None,
 ):
-    """Save sweep results to JSON and CSV."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    with open(output_dir / "sweep_results.json", "w") as f:
-        json.dump(
-            {"n_cells": len(results), "cells": results},
-            f, indent=2,
-        )
-
-    if config:
-        with open(output_dir / "config.json", "w") as f:
-            json.dump(config, f, indent=2)
-
+    """Write the sweep CSV. finalize_experiment() saves the config,
+    metrics and full results."""
     # CSV for easy analysis
     if results:
         csv_fields = [
@@ -290,7 +265,8 @@ def save_results(
     logger.info("Results saved to %s", output_dir)
 
 
-def print_sweep_table(results: List[Dict[str, Any]]):
+def print_sweep_table(results: List[Dict[str, Any]],
+                      benchmark: Dict[str, Any]):
     """Print a formatted comparison table."""
     print()
     print("=" * 100)
@@ -333,60 +309,24 @@ def print_sweep_table(results: List[Dict[str, Any]]):
     print()
     print("UCSF BENCHMARK (20% threshold, ~808K appointments):")
     print(
-        f"  Flag rate: {UCSF_BENCHMARK['flag_rate']:.1%}  "
-        f"TPR: {UCSF_BENCHMARK['tpr']:.1%}  "
-        f"Implied base rate: {UCSF_BENCHMARK['implied_base_noshow_rate']:.1%}"
+        f"  Flag rate: {benchmark['flag_rate']:.1%}  "
+        f"TPR: {benchmark['tpr']:.1%}  "
+        f"Implied base rate: {benchmark['implied_base_noshow_rate']:.1%}"
     )
     print()
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Threshold sweep for targeted reminders",
-    )
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--n-patients", type=int, default=5000)
-    parser.add_argument("--n-days", type=int, default=90)
-    parser.add_argument(
-        "--base-noshow-rates", type=str,
-        default="0.09,0.13,0.18",
-        help="Comma-separated base no-show rates",
-    )
-    parser.add_argument(
-        "--auc-targets", type=str,
-        default="0.72,0.80,0.85",
-        help="Comma-separated AUC targets",
-    )
-    parser.add_argument(
-        "--thresholds", type=str,
-        default="0.05,0.10,0.15,0.20,0.25,0.30",
-        help="Comma-separated thresholds",
-    )
-    parser.add_argument(
-        "--call-capacity", type=int, default=48,
-        help="Daily call capacity (set high to avoid binding)",
-    )
-    parser.add_argument(
-        "--call-success-rate", type=float, default=0.65,
-    )
-    parser.add_argument(
-        "--reminder-effectiveness", type=float, default=0.35,
-    )
-    parser.add_argument(
-        "--output-dir", type=str, default=None,
-        help="Output directory (default: outputs/sweep_threshold_<timestamp>)",
-    )
-    args = parser.parse_args()
-
+@hydra.main(version_base=None, config_path="configs",
+            config_name="threshold_sweep")
+def main(cfg: DictConfig) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-
-    ns_rates = [float(x) for x in args.base_noshow_rates.split(",")]
-    aucs = [float(x) for x in args.auc_targets.split(",")]
-    thresholds = [float(x) for x in args.thresholds.split(",")]
-
+    config = runner_settings(cfg)
+    ns_rates = config["base_noshow_rates"]
+    aucs = config["auc_targets"]
+    thresholds = config["thresholds"]
     total = len(ns_rates) * len(aucs) * len(thresholds)
     logger.info(
         "Starting sweep: %d noshow rates x %d AUCs x %d thresholds "
@@ -394,52 +334,59 @@ def main():
         len(ns_rates), len(aucs), len(thresholds), total,
     )
 
-    config = {
-        "experiment_name": "threshold_sweep_ucsf_benchmark",
-        "seed": args.seed,
-        "n_patients": args.n_patients,
-        "n_days": args.n_days,
-        "base_noshow_rates": ns_rates,
-        "auc_targets": aucs,
-        "thresholds": thresholds,
-        "call_capacity_per_day": args.call_capacity,
-        "call_success_rate": args.call_success_rate,
-        "reminder_effectiveness": args.reminder_effectiveness,
-        "targeting_mode": "threshold",
-        "ucsf_benchmark": UCSF_BENCHMARK,
-    }
-
     t0 = time.time()
     results = run_full_sweep(
         base_noshow_rates=ns_rates,
         auc_targets=aucs,
         thresholds=thresholds,
-        seed=args.seed,
-        n_patients=args.n_patients,
-        n_days=args.n_days,
-        call_capacity_per_day=args.call_capacity,
-        call_success_rate=args.call_success_rate,
-        reminder_effectiveness=args.reminder_effectiveness,
+        seed=config["seed"],
+        n_patients=config["n_patients"],
+        n_days=config["n_days"],
+        call_capacity_per_day=config["call_capacity_per_day"],
+        call_success_rate=config["call_success_rate"],
+        reminder_effectiveness=config["reminder_effectiveness"],
     )
-    total_time = time.time() - t0
-    logger.info("Sweep complete in %.1f seconds", total_time)
+    logger.info("Sweep complete in %.1f seconds", time.time() - t0)
 
-    from datetime import datetime
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-    else:
-        output_dir = (
-            Path(__file__).parent
-            / "outputs"
-            / f"sweep_threshold_{ts}"
-        )
-
-    save_results(results, output_dir, config)
-    print_sweep_table(results)
-
+    output_dir = run_dir()
+    save_results(results, output_dir)
+    reductions = [r["absolute_reduction_pp"] for r in results]
+    finalize_experiment(
+        output_dir, config,
+        {"n_cells": len(results),
+         "mean_absolute_reduction_pp": float(np.mean(reductions)),
+         "max_absolute_reduction_pp": float(np.max(reductions))},
+        {"n_cells": len(results), "cells": results},
+        require_validated=True,
+        validation_checks=[
+            check("grid_complete", "Every cell of the grid ran",
+                  len(results) == total, expected=total,
+                  actual=len(results)),
+            check("confusion_matrix_identity",
+                  "TP + FP + TN + FN equals the resolved appointments "
+                  "scored in each cell",
+                  all(r["tp"] + r["fp"] + r["tn"] + r["fn"] > 0
+                      for r in results), expected="> 0 in every cell"),
+            check("flag_rate_monotone_in_threshold",
+                  "Within each no-show rate and AUC, a higher threshold "
+                  "never flags more appointments",
+                  _flag_rate_monotone(results), expected="non-increasing"),
+        ],
+    )
+    print_sweep_table(results, config["ucsf_benchmark"])
     print(f"Results saved to: {output_dir}")
-    return results
+
+
+def _flag_rate_monotone(results: List[Dict[str, Any]]) -> bool:
+    cells: Dict[tuple, list] = {}
+    for r in results:
+        key = (r["base_noshow_rate"], r["model_auc_target"])
+        cells.setdefault(key, []).append((r["threshold"], r["flag_rate"]))
+    return all(
+        later <= earlier + 0.01
+        for series in cells.values()
+        for (_, earlier), (_, later) in zip(sorted(series),
+                                            sorted(series)[1:]))
 
 
 if __name__ == "__main__":
