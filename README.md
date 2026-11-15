@@ -212,7 +212,7 @@ healthcare_sim_sdk/
     _template/                  Starter template
   experiments/        Catalog, report generator, validation
 
-examples/             13 reference notebooks (read-only)
+examples/             14 reference notebooks (read-only)
 reports/              Replication reports and paper drafts
 tests/                Unit, integration, and bulletproof tests
 
