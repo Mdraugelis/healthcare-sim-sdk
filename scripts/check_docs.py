@@ -21,14 +21,12 @@ import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
 
-# Rules that run by default. Later changes switch more on as their files land.
-ENABLED: Tuple[str, ...] = (
-    "DOC001", "DOC002", "DOC003", "DOC006", "DOC007", "DOC008", "DOC009",
-)
 ALL_CODES: Tuple[str, ...] = (
     "DOC001", "DOC002", "DOC003", "DOC004", "DOC005",
     "DOC006", "DOC007", "DOC008", "DOC009",
 )
+# Rules that run by default: all of them.
+ENABLED: Tuple[str, ...] = ALL_CODES
 
 AUTHORITY_MAP = "docs/AUTHORITY.md"
 CLASSES = ("current", "rationale", "proposal", "record")
@@ -48,6 +46,8 @@ SCENARIO_STATUSES = (
     "reference", "operational", "calibration exercise",
     "institution-specific", "template",
 )
+PRIVATE_HEADING = "## Private files"
+TEMPLATE_FOLDER = "_template"
 SCENARIO_HEADINGS = (
     "## What it models", "## Entry points", "## Verify",
     "## Private files", "## Known limits",
@@ -397,6 +397,13 @@ def doc004_scenario_guidance(repo: Repo) -> List[Finding]:
                     rel, number, "DOC004",
                     f"status '{value}' is not one of: "
                     + ", ".join(SCENARIO_STATUSES)))
+            elif (value == "template") != (
+                    os.path.basename(folder) == TEMPLATE_FOLDER):
+                findings.append(Finding(
+                    rel, number, "DOC004",
+                    f"status 'template' belongs to {TEMPLATE_FOLDER}/ alone; "
+                    "a copied scenario must state its own status and fill "
+                    "in the copied guidance"))
         present = {line.strip() for line in lines}
         for heading in SCENARIO_HEADINGS:
             if heading not in present:
@@ -413,7 +420,12 @@ def doc005_scenario_commands(repo: Repo) -> List[Finding]:
         if rel not in repo.fileset:
             continue
         lines = repo.lines(rel)
+        section = ""
         for number, line in prose_lines(lines):
+            if line.startswith("## "):
+                section = line.strip()
+            if section == PRIVATE_HEADING:
+                continue  # private files are absent from the repo by design
             for span in CODE_SPAN.findall(line):
                 for problem in _span_problems(repo, folder, span):
                     if not suppressed(lines, number, "DOC005"):

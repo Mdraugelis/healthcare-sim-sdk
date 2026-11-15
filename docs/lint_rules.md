@@ -54,14 +54,14 @@ Approved SDK001 locations: `healthcare_sim_sdk/core/rng.py` (the partitioner), `
 | DOC001 | A relative markdown link whose target does not exist | A dead link sends the reader nowhere |
 | DOC002 | A repo path in backticks that does not exist, in a document classed `current` | A current rule must not point at something that is gone. Records are exempt |
 | DOC003 | `CLAUDE.md` that is not a symlink to `AGENTS.md` (or the one-line import `@AGENTS.md`); any dangling symlink | A copy drifts from its source |
-| DOC004 | A scenario folder without an `AGENTS.md`, or one missing its status line or a standard heading | Local guidance is part of a scenario |
-| DOC005 | A runner module, test path or file named in a scenario `AGENTS.md` that does not exist | Commands in guidance must be real |
+| DOC004 | A scenario folder without an `AGENTS.md`, or one missing its status line or a standard heading; a copy of the template still marked `template` | Local guidance is part of a scenario |
+| DOC005 | A runner module, test path or file named in a scenario `AGENTS.md` that does not exist. Paths under its "Private files" heading are exempt: those files are ignored by git on purpose | Commands in guidance must be real |
 | DOC006 | A markdown file with no class in [`AUTHORITY.md`](AUTHORITY.md); a row that matches no file, repeats, or has an unknown class | Every document is a current rule, rationale, a proposal or a record |
 | DOC007 | Root `AGENTS.md` longer than 80 lines | It loads in every session |
 | DOC008 | A file in `.claude/agents/` without `name` and `description` frontmatter; a file in `.claude/rules/` without `paths` | Without them the tool does not register the adapter, or loads it everywhere |
 | DOC009 | A retired path named outside records and compatibility notes | Old locations must not creep back |
 
-`ENABLED` at the top of the script lists the rules that run by default. Run others with `--codes`.
+All rules run by default. Run a subset with `--codes`.
 
 Suppress DOC001, DOC002, DOC005 or DOC009 on one line with a reasoned comment on that line or the line above:
 

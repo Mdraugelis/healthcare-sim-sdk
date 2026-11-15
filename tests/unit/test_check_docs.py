@@ -199,6 +199,18 @@ def test_doc004_missing_heading_and_bad_status(tree):
     assert any("status 'finished'" in m for m in messages)
 
 
+def test_doc004_copied_template_must_be_filled_in(tree):
+    write(tree, f"{SCENARIO}/AGENTS.md",
+          GOOD_SCENARIO_GUIDE.replace("operational", "template"))
+    (finding,) = found(tree, "DOC004")
+    assert "must state its own status" in finding.message
+    template = "healthcare_sim_sdk/scenarios/_template"
+    write(tree, f"{template}/scenario.py")
+    write(tree, f"{template}/AGENTS.md", GOOD_SCENARIO_GUIDE)
+    messages = [f.message for f in found(tree, "DOC004")]
+    assert len(messages) == 2  # the template itself must say 'template'
+
+
 def test_doc005_dead_runner_test_and_config(tree):
     text = (GOOD_SCENARIO_GUIDE
             .replace("run_evaluation`", "run_missing`")
@@ -210,6 +222,19 @@ def test_doc005_dead_runner_test_and_config(tree):
     assert "configs/absent.yaml" in messages[0]
     assert "test_absent.py" in messages[1]
     assert "run_missing" in messages[2]
+
+
+def test_doc005_private_files_need_not_exist(tree):
+    """Files under 'Private files' are ignored by git on purpose, so they
+    are absent from a clean checkout. Naming one elsewhere is still an error."""
+    text = GOOD_SCENARIO_GUIDE.replace(
+        "## Private files\nNone.",
+        "## Private files\n- `configs/model_frozen.yaml` is ignored by git.")
+    write(tree, f"{SCENARIO}/AGENTS.md", text)
+    assert found(tree, "DOC005") == []
+    write(tree, f"{SCENARIO}/AGENTS.md", text.replace(
+        "configs/base.yaml", "configs/model_frozen.yaml"))
+    assert len(found(tree, "DOC005")) == 1
 
 
 def test_doc005_template_placeholders_are_skipped(tree):
