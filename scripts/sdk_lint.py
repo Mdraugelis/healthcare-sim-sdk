@@ -437,6 +437,17 @@ def _runner_contract(tree: ast.Module, rel: str) -> List[Finding]:
             name = _call_name(node)
             if name == "finalize_experiment":
                 finalize_call = finalize_call or node
+                given = {k.arg: k.value for k in node.keywords}
+                strict = given.get("require_validated")
+                if not (isinstance(strict, ast.Constant)
+                        and strict.value is True):
+                    add(node, "finalize_experiment() without "
+                              "require_validated=True; a runner may "
+                              "register only a run that passed its checks")
+                if "validation_checks" not in given:
+                    add(node, "finalize_experiment() without "
+                              "validation_checks=; a runner supplies at "
+                              "least one check of its own")
             elif name in RUNNER_BANNED_CALLS:
                 add(node, f"runner calls {name}() directly; end the run with "
                           "finalize_experiment(), which saves, validates "

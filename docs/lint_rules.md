@@ -33,7 +33,7 @@ Block means the gate fails. Warn means the finding is printed and the gate passe
 | SDK004 | Warn | A test with no `assert`, no `pytest.raises`/`warns`, and no call to an `assert*`, `check*`, `verify*` or `testing` helper | It passes as long as nothing raises |
 | SDK005 | Warn | A test whose every assertion is inside an `if` with no `else` | If the condition is never true, the test checks nothing |
 | SDK006 | Warn | A `BaseScenario` subclass whose `create_population`, `step`, `predict`, `intervene` or `measure` is only `pass`, `...`, a docstring, or `raise NotImplementedError` | An unfinished scenario method |
-| SDK007 | Block | A launchable script under `healthcare_sim_sdk/scenarios/` that imports `argparse`, reads `sys.argv`, lacks `@hydra.main`, saves or registers a run itself, or never calls `finalize_experiment()` | A run outside the runner contract: settings that were never recorded, or a result that was never checked |
+| SDK007 | Block | A launchable script under `healthcare_sim_sdk/scenarios/` that imports `argparse`, reads `sys.argv`, lacks `@hydra.main`, saves or registers a run itself, never calls `finalize_experiment()`, or calls it without `validation_checks=` and `require_validated=True` | A run outside the runner contract: settings that were never recorded, or a result that was never checked |
 | SDK000 | Block | A suppression comment without a reason, a malformed one, or one that suppresses nothing | Suppressions must stay explained and current |
 | PT011 | Block (Ruff) | `pytest.raises(ValueError)` without `match=` | The test passes even when a different error was raised |
 | PT012 | Block (Ruff) | More than one statement inside `pytest.raises` | Only the statement that should raise belongs inside |
@@ -54,7 +54,7 @@ A runner is any `.py` file under `healthcare_sim_sdk/scenarios/` with an `if __n
 |---|---|
 | Start through `@hydra.main(config_path=..., config_name=...)` | Hydra records the composed settings and refuses an unknown key |
 | Take every setting and grid from the named YAML | The saved configuration is what actually ran |
-| End an experiment with `finalize_experiment()` | One path saves, records provenance, checks and registers |
+| End an experiment with `finalize_experiment(..., validation_checks=..., require_validated=True)` | One path saves, records provenance, checks and registers. A run that fails or skips its checks is kept for diagnosis and never registered |
 | Not import `argparse`, read `sys.argv`, or call `save_experiment()`, `register_experiment()` or `ExperimentCatalog()` | Each is a way around the two rules above |
 
 A script may loop over a grid it read from the YAML and write one combined table. Hydra `--multirun` also works on every runner.
@@ -63,7 +63,7 @@ Scripts that are not experiments still start through Hydra but skip the final ca
 
 SDK007 cannot be suppressed with a comment. The only way past it is a new entry in `config/invariants.yaml`, which goes through review.
 
-The static rule reads names. `tests/integration/test_runner_lifecycle.py` launches each experiment runner with small settings. It asserts that the run was saved, checked and registered, that an unknown setting is refused, and that a failed check keeps the run out of the catalog.
+The static rule reads names. `tests/integration/test_runner_lifecycle.py` launches each of the 18 experiment runners with small settings. It asserts that the run was saved, checked and registered, that an unknown setting is refused, and that a failed check keeps the run out of the catalog.
 
 ## Documentation checks
 

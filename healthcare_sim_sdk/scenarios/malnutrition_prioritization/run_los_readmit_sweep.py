@@ -30,6 +30,7 @@ from .runner_common import (
     always_on_verification,
     config_from_dict,
     format_verification,
+    lifecycle_checks,
     reduce_patient_arrays,
     reduce_results,
     run_once,
@@ -59,6 +60,18 @@ def main(cfg: DictConfig) -> None:
     print(f"[{name} / {campus}] queue stage: {len(cells)} cell(s) x "
           f"{len(seeds)} seeds x {horizon} days")
 
+    # Hard guard, before any simulation: the queue stage is only valid
+    # at efficacy zero. The usual cause is a missing experiment= setting.
+    for cell in cells:
+        scen = config_from_dict(cell["config"])
+        if any((scen.eff_detect_rel, scen.eff_timing_rel,
+                scen.eff_detect_los, scen.eff_timing_los)):
+            raise SystemExit(
+                "The queue stage must run with all four efficacy settings "
+                f"at 0, but experiment '{name}' sets one above 0. Efficacy "
+                "is applied afterwards by outcome_overlay. Run this script "
+                "with experiment=exp7_los_readmit_queue.")
+
     # Always-On Verification on the center cell, first seed.
     center = config_from_dict(cells[len(cells) // 2]["config"])
     v = always_on_verification(center, horizon, seeds[0])
@@ -70,13 +83,6 @@ def main(cfg: DictConfig) -> None:
     cell_summaries = []
     for i, cell in enumerate(cells):
         scen = config_from_dict(cell["config"])
-        # Hard guard: the queue stage is only valid at efficacy zero.
-        assert (scen.eff_detect_rel == 0.0
-                and scen.eff_timing_rel == 0.0
-                and scen.eff_detect_los == 0.0
-                and scen.eff_timing_los == 0.0), (
-            "exp7 queue stage must run with all efficacy knobs at 0; "
-            "efficacy is applied by outcome_overlay.py")
         cell_dir = out_root / f"cell_{i:02d}"
         cell_dir.mkdir(parents=True, exist_ok=True)
         rows = []
@@ -103,7 +109,9 @@ def main(cfg: DictConfig) -> None:
              "experiment_name": f"{name}/{campus}/{cell['label']}",
              "seed": seeds[0],
              **cell["config"]},
-            metrics)
+            metrics,
+            validation_checks=lifecycle_checks(v, rows, len(seeds)),
+            require_validated=True)
 
     (out_root / "summary.json").write_text(json.dumps({
         "experiment": name,

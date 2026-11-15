@@ -103,18 +103,30 @@ def test_sdk007_cannot_be_suppressed_with_a_comment():
 
 
 def test_sdk007_exemption_needs_a_listed_reason(monkeypatch):
-    tool = (FIXTURES / "sdk007_good.py").read_text().replace(
-        "    finalize_experiment(run_dir(), settings, {\"n\": settings[\"n\"]})\n",
-        "    print(run_dir(), settings)\n")
+    good = (FIXTURES / "sdk007_good.py").read_text()
+    start = good.index("    finalize_experiment(")
+    end = good.index("require_validated=True)") + len(
+        "require_validated=True)")
+    tool = good[:start] + "    print(run_dir(), settings)" + good[end:]
     rel = "healthcare_sim_sdk/scenarios/example/diagnostic.py"
     (finding,) = sdk_lint.lint_source(tool, rel)
     assert "never calls finalize_experiment()" in finding.message
     monkeypatch.setattr(sdk_lint, "_EXEMPTIONS", {rel})
     assert sdk_lint.lint_source(tool, rel) == []
     # An exempt script that does finalize must leave the list.
-    good = (FIXTURES / "sdk007_good.py").read_text()
     (stale,) = sdk_lint.lint_source(good, rel)
     assert "listed as exempt" in stale.message
+
+
+def test_sdk007_finalize_must_be_strict_and_carry_checks():
+    """Three calls: no arguments, strict switched off, and strict passed as
+    a variable the rule cannot read. All are blocked."""
+    found = lint("sdk007_unverified.py")
+    assert codes(found, "block") == {"SDK007": 4}
+    messages = [f.message for f in found]
+    assert sum("without require_validated=True" in m for m in messages) == 3
+    assert sum("without validation_checks=" in m for m in messages) == 1
+    assert lint("sdk007_good.py") == []
 
 
 def test_sdk006_unfinished_contract_methods():

@@ -26,7 +26,7 @@ This repository is public. Institution-specific values, names, rates and model f
 - Every change reaches `main` through a pull request.
 - Use NumPy vector operations, not Python loops, over a population.
 - Runners live in their scenario folder and start through `@hydra.main`. Every setting and every grid is in the scenario's `configs/*.yaml`; none is typed into Python. Change a value with `key=value` on the command line.
-- Every experiment ends by calling `finalize_experiment()`. The only scripts that skip it are listed, with reasons, under `runner_contract` in [`config/invariants.yaml`](config/invariants.yaml). Lint rule SDK007 blocks anything else. See [`docs/experiment_verification.md`](docs/experiment_verification.md).
+- Every experiment ends by calling `finalize_experiment()` with its own `validation_checks` and `require_validated=True`, so only a run that passed its checks is registered. The only scripts that skip it are listed, with reasons, under `runner_contract` in [`config/invariants.yaml`](config/invariants.yaml). Lint rule SDK007 blocks anything else. See [`docs/experiment_verification.md`](docs/experiment_verification.md).
 - `outputs/` is never committed.
 - Analysis exports go through `AnalysisDataset`. See [`docs/analysis_exports.md`](docs/analysis_exports.md).
 - A new scenario starts as a copy of `healthcare_sim_sdk/scenarios/_template/`, including its `AGENTS.md`.

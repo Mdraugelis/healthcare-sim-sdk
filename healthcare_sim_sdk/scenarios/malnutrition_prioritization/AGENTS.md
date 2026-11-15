@@ -7,7 +7,7 @@ Dietitians work one daily list: time-bound consults first, then a model's risk r
 
 ## Entry points
 - `python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization.run_experiment`: Hydra runner; base `configs/base.yaml`, experiments in `configs/experiment/`.
-- `python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization.run_los_readmit_sweep`, then `outcome_overlay`, `estimands` and `power_map` with `root=<run folder>`: the length-of-stay and readmission experiment. Those three are post-processing tools, exempt from `finalize_experiment()`.
+- `python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization.run_los_readmit_sweep experiment=exp7_los_readmit_queue`, then `outcome_overlay`, `estimands` and `power_map` with `root=<run folder>`: the length-of-stay and readmission experiment. Those three are post-processing tools, exempt from `finalize_experiment()`.
 - `python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization.run_verification stage=A`: the verification gates (`configs/verification.yaml`; exempt, it returns pass or fail). Run them before interpreting any result.
 
 ## Verify

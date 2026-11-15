@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PKG = "healthcare_sim_sdk.scenarios"
 
 SMALL_CLINIC = ["n_days=5", "n_patients=300"]
+MODEL = "+scenario.model_params_path={model}"
 RUNNERS = [
     ("noshow_overbooking.run_evaluation", SMALL_CLINIC),
     ("noshow_overbooking.run_burden_analysis", SMALL_CLINIC),
@@ -41,11 +42,32 @@ RUNNERS = [
     ("paper04_insight_rct.run_evaluation",
      ["n_patients=600", "variance_seeds=2"]),
     ("paper05_composer.run_evaluation", ["n_patients=1500"]),
+    ("nurse_retention.monitoring_validation", ["population.n_nurses=300"]),
+    ("malnutrition_prioritization.run_experiment",
+     ["runner.n_seeds=2", MODEL]),
+    ("malnutrition_prioritization.run_los_readmit_sweep",
+     ["experiment=exp7_los_readmit_queue", "runner.n_seeds=2",
+      "runner.horizon_days=84", MODEL]),
 ]
+
+# The malnutrition scenario refuses to run without a frozen model file,
+# and the real one is private. The lifecycle does not depend on the
+# model's quality, so these runs use the same uncalibrated parameters as
+# the public contract tests (tests/bulletproof/test_malnutrition_
+# conservation.py), written to a file outside the repository.
+SYNTHETIC_MODEL = """\
+params: {d: 1.85, kappa: 0.5, h: 0.2, theta_female: 0.5, theta_black: 0.5,
+         theta_hl: 0.5, delta_hard: 0.5, scramble_scale: 0.15,
+         scramble_depth: 0.5}
+achieved: {source: synthetic lifecycle-test fixture; uncalibrated}
+"""
 
 
 def launch(module, overrides, cwd):
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
+    model = cwd / "synthetic_model.yaml"
+    model.write_text(SYNTHETIC_MODEL)
+    overrides = [o.format(model=model) for o in overrides]
     return subprocess.run(
         [sys.executable, "-m", f"{PKG}.{module}", *overrides],
         cwd=cwd, env=env, capture_output=True, text=True, timeout=600)
@@ -70,8 +92,8 @@ def test_runner_saves_verifies_and_registers(module, overrides, tmp_path):
         assert json.loads((run / "provenance.json").read_text())
         config = json.loads((run / "config.json").read_text())
         assert "seed" in config
-        # Hydra kept its own record of the composed settings for the run.
-        assert list(tmp_path.rglob(".hydra/config.yaml"))
+    # Hydra kept its own record of the composed settings for the run.
+    assert list(tmp_path.rglob(".hydra/config.yaml"))
 
     catalog = json.loads((tmp_path / "catalog.json").read_text())
     assert len(catalog) == len(records)
@@ -112,3 +134,15 @@ def test_failed_check_is_kept_but_never_registered(tmp_path):
     assert (record.parent / "metrics.json").exists()
     catalog = tmp_path / "catalog.json"
     assert not catalog.exists() or json.loads(catalog.read_text()) == []
+
+
+def test_queue_stage_refuses_the_wrong_experiment_before_simulating(
+        tmp_path):
+    """Launched without experiment=, the queue stage stops at once and
+    says which setting is missing."""
+    done = launch("malnutrition_prioritization.run_los_readmit_sweep",
+                  ["runner.n_seeds=2", MODEL], tmp_path)
+    assert done.returncode != 0
+    assert "experiment=exp7_los_readmit_queue" in done.stderr
+    assert "Population created" not in done.stdout + done.stderr
+    assert not (tmp_path / "catalog.json").exists()

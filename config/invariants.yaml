@@ -138,11 +138,17 @@ runner_contract:
     (it has an `if __name__ == "__main__"` block) starts through Hydra and
     takes every setting and grid from a YAML file in its scenario's
     configs/ folder. Every experiment ends by calling
-    finalize_experiment(), which saves, records provenance, validates and
-    then registers the run. scripts/sdk_lint.py rule SDK007 blocks
+    finalize_experiment() with its own checks and require_validated=True,
+    which saves, records provenance, validates and registers the run only
+    if the checks pass. scripts/sdk_lint.py rule SDK007 blocks
     anything else.
   entry_decorator: hydra.main
   final_call: finalize_experiment
+  # Written out at every call, so a run that fails or skips its checks
+  # is kept for diagnosis but never registered.
+  final_call_requires:
+    - validation_checks
+    - require_validated=True
   banned_in_runners:
     - argparse
     - sys.argv
