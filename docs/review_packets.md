@@ -96,10 +96,9 @@ rows = wrapped.to_rows()
 
 `experiments/uncertainty.py` summarizes metrics across seeds. It reports the seed range and the Monte Carlo standard error of the mean separately, and refuses missing or duplicate seeds.
 
-## Not included yet
+## Related work
 
-These parts of `codex/verification-review-packets` are not on main:
-
-- Malnutrition and nurse-retention review packets. They depend on runner and monitoring changes that main replaced in October.
-- The results-module export changes (entity snapshots, observed flags, `treatment_semantics`). Main kept its own `treatment_definition` semantics.
-- Held-out model checks, analysis certification and the blinded benchmark (next port).
+- Held-out model checks: `ml/fidelity.py` (`auc_fidelity`). Use it to supply evidence such as the reminders demo's `model_heldout_auc`.
+- Analysis-design evidence: `docs/analysis_design_certification.md`.
+- Frozen-input benchmark against a published study: `docs/blinded_benchmark.md`.
+- Changes to how the results module exports treatment timing and missing periods are proposed separately and are not part of this feature.
