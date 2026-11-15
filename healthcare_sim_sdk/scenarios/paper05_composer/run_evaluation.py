@@ -131,7 +131,8 @@ def run_main():
     print(f"  Intervention reduces mortality: {checks['intervention_direction']}")
     print(f"  Intervention improves bundle compliance: {checks['bundle_direction']}")
     print(
-        f"  OVERALL: {'PASS' if all(checks.values()) else 'PARTIAL'} ({sum(checks.values())}/{len(checks)})"
+        f"  SANITY CHECKS (calibration exercise; these checks do not test the published effect size): "
+        f"{'all passed' if all(checks.values()) else 'some failed'} ({sum(checks.values())}/{len(checks)})"
     )
 
     return {

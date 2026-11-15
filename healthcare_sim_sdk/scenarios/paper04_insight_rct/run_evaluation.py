@@ -143,7 +143,8 @@ def run_main():
     print(f"  Mortality plausible: {checks['mortality_plausible']}")
     print(f"  Intervention direction correct: {checks['intervention_direction']}")
     print(
-        f"  OVERALL: {'PASS' if all(checks.values()) else 'PARTIAL'} ({sum(checks.values())}/{len(checks)})"
+        f"  SANITY CHECKS (calibration exercise; these checks do not test the published effect size): "
+        f"{'all passed' if all(checks.values()) else 'some failed'} ({sum(checks.values())}/{len(checks)})"
     )
 
     return {

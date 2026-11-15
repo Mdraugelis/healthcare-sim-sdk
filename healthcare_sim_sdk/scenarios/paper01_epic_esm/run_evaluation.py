@@ -252,7 +252,8 @@ def run_main_scenario():
 
     all_pass = all(checks.values())
     print(
-        f"\n  OVERALL: {'PASS' if all_pass else 'PARTIAL PASS'} ({sum(checks.values())}/{len(checks)} checks)"
+        f"\n  SANITY CHECKS (calibration exercise; these checks do not test the published effect size): "
+        f"{'all passed' if all_pass else 'some failed'} ({sum(checks.values())}/{len(checks)} checks)"
     )
 
     if not all_pass:
