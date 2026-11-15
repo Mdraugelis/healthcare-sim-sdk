@@ -336,6 +336,10 @@ The following tools are already built into the SDK and available for your use:
 
 **`experiments/validate.py`** — Generic validation framework (`validate_generic()` + `format_appendix()`). Scenario-specific validators can be passed as callables. Checks config/metrics existence and strict JSON, seed, timestamp, and explicit `MetricRule` bounds. Each check is PASS, FAIL, NOT_RUN, INCONCLUSIVE or NOT_APPLICABLE; `checks_passed()` is the gate.
 
+**`experiments/review.py` and `experiments/trace.py`** — `ReviewPacket` builds a role-specific review packet from a claims registry and per-run evidence; `verify_packet()` checks its integrity. `TracingScenario` records stage-by-stage facts for case walkthroughs without changing outcomes or RNG use. Worked example: `python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_review_demo`. See `docs/review_packets.md`.
+
+**`experiments/uncertainty.py`** — `summarize_values()` and `summarize_metrics()` separate the seed range from the Monte Carlo standard error and reject missing or duplicate seeds; `binomial_performance()` gives exact intervals for detection rates.
+
 **`scripts/register_sweep.py`** — CLI tool to register a completed Hydra `--multirun` sweep: `python scripts/register_sweep.py outputs/sweep_<timestamp>/`.
 
 **`tests/bulletproof/conftest.py`** — Reusable statistical assertions: `assert_mean_in_range()` (4-sigma CLT bounds), `assert_rate_in_range()` (binomial CI), `assert_no_nan_inf()`, `assert_in_unit_interval()`, `assert_monotone_nondecreasing()`.

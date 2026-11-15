@@ -1,0 +1,18 @@
+# Public review-packet demonstration for targeted no-show reminders.
+# Synthetic population and shipped scenario defaults; no institutional values.
+experiment_name: reminders_review_demo
+scenario: noshow_targeted_reminders
+horizon_days: 30
+n_patients: 2000
+seeds: [1000, 1001, 1002]
+scenario_defaults:
+  base_noshow_rate: 0.36
+  model_type: predictor
+  model_auc: 0.72
+  targeting_mode: top_k
+cells:
+  - label: 12 calls per day
+    caller: {call_capacity_per_day: 12}
+  - label: 24 calls per day (shipped default)
+    caller: {call_capacity_per_day: 24}
+case_categories_per_run: 1
