@@ -2,7 +2,6 @@
 
 import numpy as np
 
-from healthcare_sim_sdk.ml.binary_classifier import ControlledBinaryClassifier
 from healthcare_sim_sdk.ml.performance import (
     auc_score,
     calibration_slope,
@@ -74,33 +73,14 @@ class TestROCAndAUC:
         assert len(fprs) == len(tprs) == len(thresholds)
 
 
-class TestBinaryClassifier:
-    def test_predict_returns_scores_and_labels(self):
-        rng = np.random.default_rng(42)
-        risks, labels = _make_population(rng)
-        clf = ControlledBinaryClassifier()
-        scores, preds = clf.predict(labels, risks, rng)
-        assert scores.shape == risks.shape
-        assert preds.shape == risks.shape
-        assert set(np.unique(preds)).issubset({0, 1})
-
-    def test_optimize_improves_performance(self):
-        rng = np.random.default_rng(42)
-        risks, labels = _make_population(rng, n=5000, prevalence=0.1)
-        clf = ControlledBinaryClassifier(
-            target_sensitivity=0.7, target_ppv=0.15,
-        )
-        result = clf.optimize(labels, risks, rng, n_iterations=5)
-        assert result["achieved_sensitivity"] > 0.3
-        assert clf._optimized
-
-    def test_scores_in_unit_interval(self):
-        rng = np.random.default_rng(42)
-        risks, labels = _make_population(rng)
-        clf = ControlledBinaryClassifier()
-        scores, _ = clf.predict(labels, risks, rng)
-        assert scores.min() >= 0
-        assert scores.max() <= 1
+class TestRemovedLabelReadingClassifier:
+    def test_binary_classifier_module_is_gone(self):
+        """It added a boost to patients who would have the event, so it could
+        score above the population's Bayes ceiling (14 Nov review)."""
+        import importlib
+        import pytest
+        with pytest.raises(ModuleNotFoundError, match="binary_classifier"):
+            importlib.import_module("healthcare_sim_sdk.ml.binary_classifier")
 
 
 class TestProbabilityModel:
