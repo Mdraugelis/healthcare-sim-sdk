@@ -35,7 +35,7 @@ class TestStrokeDomainInvariants:
     """Healthcare-specific invariants for stroke prevention."""
 
     def test_state_shape_invariant(self):
-        """State should always be (4, n_patients) array."""
+        """State should always be (6, n_patients) array."""
         config = StrokeConfig(
             allow_infeasible_model=True,
             n_patients=200,
@@ -44,7 +44,7 @@ class TestStrokeDomainInvariants:
         )
         sc = StrokePreventionScenario(config=config, seed=42)
         state = sc.create_population(200)
-        assert state.shape == (4, 200), f"State shape: {state.shape}"
+        assert state.shape == (6, 200), f"State shape: {state.shape}"
 
     def test_base_risks_immutable_after_step(self):
         """Base risks (row 0) should not change during step()."""

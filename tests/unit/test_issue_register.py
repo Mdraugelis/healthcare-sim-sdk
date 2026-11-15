@@ -319,15 +319,24 @@ def test_cusum_calibration_uses_external_null_runs():
         calibrate_h([np.arange(104).tolist()], [4, 8])
 
 
-def test_strict_stroke_defaults_raise_on_unreachable_targets():
+def test_strict_stroke_legacy_targets_raise_and_defaults_run():
     from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
         StrokeConfig,
         StrokePreventionScenario,
     )
 
     assert StrokeConfig().allow_infeasible_model is False
-    with pytest.raises(OperatingPointError):
-        BranchedSimulationEngine(StrokePreventionScenario(seed=42)).run(10000)
+    # The old pair (sensitivity 0.80 at PPV 0.15) needs AUC ~0.98 and must
+    # still fail loudly when asked for explicitly.
+    legacy = StrokeConfig(n_patients=10000, target_sensitivity=0.80,
+                          target_ppv=0.15)
+    with pytest.raises(OperatingPointError, match="exceeds this population.s Bayes ceiling"):
+        BranchedSimulationEngine(
+            StrokePreventionScenario(legacy, seed=42)).run(10000)
+    # The shipped defaults are feasible and run without the override.
+    sc = StrokePreventionScenario(StrokeConfig(n_patients=2000), seed=42)
+    BranchedSimulationEngine(sc).run(2000)
+    assert sc.model_status == "fitted"
 
 
 def test_engine_never_predicts_or_intervenes_on_counterfactual():
