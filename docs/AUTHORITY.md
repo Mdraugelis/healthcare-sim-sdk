@@ -21,6 +21,7 @@ When two files disagree, the higher row in that table wins, and code plus tests 
 | `CLAUDE.md` | current | Symlink to `AGENTS.md`. Claude Code and Cowork load it automatically. |
 | `README.md` | current | Overview and quick start for people. |
 | `CONTRIBUTING.md` | current | Setup, hooks and pull-request rules. |
+| `CHANGELOG.md` | current | Release notes and breaking changes, newest first. |
 | `.claude/` | current | Claude Code adapters. They register and point; they hold no rules of their own. See "Adapters" below. |
 | `docs/AUTHORITY.md` | current | This page. |
 | `docs/algorithm_description.md` | current | Sections 1 to 13 describe current behavior. Section 15 is a proposal. Appendices A and B are records. |
