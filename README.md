@@ -59,8 +59,10 @@ Repo-wide rules for any coding agent are in [`AGENTS.md`](AGENTS.md). Claude Cod
 ## Install
 
 ```bash
-pip install git+https://github.com/Mdraugelis/healthcare-sim-sdk.git
+pip install git+https://github.com/Mdraugelis/healthcare-sim-sdk.git@v0.2.0
 ```
+
+Release notes, including breaking changes since 0.1.0, are in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Quick Start
 

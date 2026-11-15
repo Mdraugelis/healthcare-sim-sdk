@@ -5,9 +5,9 @@
 | | |
 |---|---|
 | Document | Algorithm Description Document (ADD) |
-| Version | 0.4, body describes the current code |
+| Version | 0.5, body describes the current code; SDK release 0.2.0 |
 | Date | 15 November 2026 |
-| Code baseline | `main` at `7602e1c` (PRs #10–#13) plus the lint and hermetic-build change (#8), the calibration-exercise labels, the stroke fix and the classifier removal. Section 14 lists the last three. |
+| Code baseline | SDK release 0.2.0. Worked examples were run at `main` at `7602e1c` (PRs #10–#13) plus the lint and hermetic-build change (#8), the calibration-exercise labels, the stroke fix and the classifier removal; Section 14 lists the last three. Later changes (#19–#26) altered guidance files, runner entry points and registration rules, not the algorithms. |
 | Companion notebooks | All 14 notebooks in `examples/` execute in CI. Proposed new notebooks are in Section 15. |
 | Status of numbers | Worked examples in the body come from running the SDK at the baseline above, or from functions unchanged since the 0.3 baseline; each says which. Numbers quoted from a docstring or report say so. Appendix A keeps dated evidence from `main@3b94187`, which no longer describes the code. |
 
@@ -17,6 +17,7 @@
 | 0.2 | Corrections after an independent re-run of every check. |
 | 0.3 | Remediates I-01 to I-29, adds regression and contract checks and notebook CI, separates oracle from observed monitoring, and replaces pre-fix reports. |
 | 0.4 | Rewrites the body to describe the corrected code. Re-runs the coupling example (§5.7) on the corrected stroke scenario. Moves dated defect evidence to Appendix A and the register to Appendix B. Adds the static lint rules and quality gate (§6.5), the registration gate (§13.3), the export semantics (§10.4), and the removal of `ControlledBinaryClassifier` (§8.12). |
+| 0.5 | Describes the runner contract: every scenario runner starts through Hydra, takes its settings from YAML, and registers a run only if it passed its checks (§11.3, §13.3). No algorithm changed. Released with SDK 0.2.0. |
 
 **Open items.** The ITS design study (§11.5) has not been re-run on the corrected stroke scenario. Notebook 04 does not yet demonstrate draw-count invariance. Both are listed in Section 15.
 
@@ -882,7 +883,7 @@ An estimator that uses the counterfactual branch as its control (the oracle conf
 6. **Sweep the design knobs:** population size, horizon, switch-on time, aggregation level, number of sites.
 7. **Choose the smallest design that meets power and type I targets.** Report the design and its operating characteristics.
 
-Sweeps use Hydra YAML grids and `--multirun`, and runners call `finalize_experiment()`, per `AGENTS.md`.
+Every runner starts through `@hydra.main` and takes each setting and grid from a YAML file in its scenario's `configs/` folder. A runner may loop over a grid it read from YAML, or be launched with `--multirun`. Every experiment ends in `finalize_experiment()`. Lint rule SDK007 enforces this (`docs/lint_rules.md`).
 
 ### 11.4 Estimators available
 
@@ -991,7 +992,7 @@ A misconfigured simulation that looks plausible is worse than none, because it p
 1. **Test the deployed path.** Score what the scenario actually runs, on data the fit never saw.
 2. **Every check must be able to fail.** A check like `x >= 0` on an absolute value, or one that sets a total to N and then asserts it equals N, verifies nothing. The Epic ESM runner has both (I-16).
 3. **Fix tolerances before running.** Tolerances chosen after seeing results are not checks.
-4. **Gate interpretation on verification.** `finalize_experiment()` saves, records provenance, validates, then registers. With `require_validated=True`, a run whose checks fail is kept on disk, marked rejected, never registered, and raises. A run with no checks is never marked verified (`docs/experiment_verification.md`).
+4. **Gate interpretation on verification.** `finalize_experiment()` saves, records provenance, validates, then registers. With `require_validated=True`, a run whose checks fail is kept on disk, marked rejected, never registered, and raises. A run with no checks is never marked verified (`docs/experiment_verification.md`). Every scenario runner must supply checks and pass `require_validated=True`; lint rule SDK007 blocks a runner that does not, and `tests/integration/test_runner_lifecycle.py` launches each runner to confirm it.
 5. **Run the suite automatically.** CI runs the hermetic quality gate on every push and pull request: lint, the test suite, all notebooks, and a wheel build, offline, in the locked environment (Section 6.5).
 
 ### 13.4 Case 1: the label leak
