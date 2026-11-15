@@ -98,6 +98,7 @@ lint_all() {
     "\$BIN/flake8" healthcare_sim_sdk tests scripts
     "\$BIN/ruff" check --no-cache --output-format concise .
     "\$PY" scripts/sdk_lint.py
+    "\$PY" scripts/check_docs.py
   } 2>&1)
 }
 cd "$SRC"
@@ -106,6 +107,7 @@ step rng_guard bash -c 'find . -name "*.py" -not -path "./tests/lint_fixtures/*"
 step flake8 "\$BIN/flake8" healthcare_sim_sdk tests scripts
 step ruff "\$BIN/ruff" check --no-cache .
 step sdk_lint "\$PY" scripts/sdk_lint.py
+step docs_check "\$PY" scripts/check_docs.py
 lint_all "$WORK/a" > "$WORK/lint_a.txt"; lint_all "$WORK/b" > "$WORK/lint_b.txt"
 step lint_output_identical cmp "$WORK/lint_a.txt" "$WORK/lint_b.txt"
 step tests_public "\$PY" -m pytest -q -p no:cacheprovider -m "not private" tests/

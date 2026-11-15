@@ -164,7 +164,7 @@ When stakeholders ask "should we deploy?", the answer is "here is what the simul
 
 ### 9. Verification Before Interpretation
 
-Every simulation run, no exceptions, goes through a 4-level verification protocol before results are interpreted. A misconfigured simulation that looks plausible is worse than no simulation at all, because it produces false confidence.
+Every simulation run, no exceptions, goes through a five-level verification protocol before results are interpreted. A misconfigured simulation that looks plausible is worse than no simulation at all, because it produces false confidence.
 
 The protocol (detailed in the "Verification Protocol" section):
 
@@ -522,16 +522,18 @@ A use case that fails multiple fit criteria is a signal to use a different tool,
 
 ## Agent-Assisted Workflow
 
-The SDK is designed to be used with an AI assistant (Claude Code, Claude Cowork, or similar) as a collaborator. The agent protocol lives in [`.claude/agents/sim-guide.md`](../.claude/agents/sim-guide.md) and covers four phases:
+The SDK is designed to be used with an AI assistant (Claude Code, Claude Cowork, or similar) as a collaborator. The agent protocol lives in [`.claude/agents/sim-guide.md`](../.claude/agents/sim-guide.md) and covers six phases:
 
-- **Phase 1: Use-case fitness screening** — walk through the six fitness questions with the human; flag issues as they emerge; be direct when the SDK is not the right tool
-- **Phase 2: Scenario development** — guide the 5-method design conversation, translate domain language into the contract
-- **Phase 3: Verification** — run the 4-level protocol on every simulation, refuse to interpret until verification passes
-- **Phase 4: Stakeholder translation** — translate findings into the right language for clinical leaders (operational impact), governance (equity audits, burden distribution), research teams (causal method validation), and procurement (vendor claim stress-testing)
+- **Phase 1: Use-case fitness screening** — walk through the five fitness questions with the human; flag issues as they emerge; be direct when the SDK is not the right tool
+- **Phase 2: Analytical-first screen** — ask whether closed-form math answers the decision question before building a scenario
+- **Phase 3: Scenario development** — guide the 5-method design conversation, translate domain language into the contract
+- **Phase 4: Verification** — run the five-level protocol on every simulation, refuse to interpret until verification passes
+- **Phase 5: Interpretation** — frame results as answers to the question asked, and say what the simulation cannot tell you
+- **Phase 6: Stakeholder translation** — translate findings into the right language for clinical leaders (operational impact), governance (equity audits, burden distribution), research teams (causal method validation), and procurement (vendor claim stress-testing)
 
 The agent is a collaborator, not an autopilot. The human frames the question, reviews the scenario, runs verification, and owns the deployment decision. The agent thinks with the human; it does not think for them.
 
-Any Claude Code session opening this repository picks up the protocol automatically.
+Claude Code and Cowork load the root `CLAUDE.md` automatically. It tells the agent to follow the protocol, which is read on demand.
 
 ---
 
