@@ -41,7 +41,10 @@ requires_frozen_model = requires_private_files(*MALNUTRITION_MODEL)
 def synthetic_scorer_for_contracts(monkeypatch):
     """Public synthetic parameters, never presented as a calibrated model.
 
-    Private fidelity tests below remain skipped without their real artifacts.
+    With the frozen model absent, the ML-on contract tests (boundaries, Bayes
+    bound, dominance, scorer contract) run on this uncalibrated scorer in the
+    public profile. With it present, they run on the real model. Only the
+    fidelity test, which compares the real model to its targets, is private.
     """
     if (_CONFIG_DIR / "model_frozen.yaml").exists():
         return
@@ -349,11 +352,11 @@ class TestArmCCalibration:
         )
 
 
-@requires_frozen_model
 class TestModelFidelity:
-    """The locally frozen model reproduces the configured
-    model targets on the calibration cohort."""
+    """The scorer contract (public, synthetic scorer if the frozen model is
+    absent) and the frozen model's fidelity to its targets (private)."""
 
+    @requires_frozen_model
     def test_frozen_params_hit_targets(self):
         from healthcare_sim_sdk.scenarios.malnutrition_prioritization.subgroup_performance import (
             FrozenSubgroupScorer,
@@ -394,7 +397,6 @@ class TestModelFidelity:
         np.testing.assert_array_equal(scores, scorer.score(state))
 
 
-@requires_frozen_model
 class TestMLBoundaries:
     """R11: exact bit-equality boundaries with the ML arm active."""
 
@@ -453,7 +455,6 @@ class TestMLBoundaries:
         )
 
 
-@requires_frozen_model
 class TestBayesBound:
     """Design doc 8.5: realized ML-flag PPV respects Bayes' theorem."""
 
@@ -477,7 +478,6 @@ class TestBayesBound:
         )
 
 
-@requires_frozen_model
 class TestMLDominance:
     """Design doc 7: with the safety net preserved, ML never hurts --
     at expectation (mean over seeds), per the refined plan."""
