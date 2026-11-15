@@ -3,3 +3,5 @@ max-line-length = 88
 # Equations, URLs, and the historical paper runners contain long prose strings.
 # Keep behavioral and correctness checks enabled throughout the package.
 extend-ignore = E501
+# Deliberately bad code for the lint-rule tests.
+extend-exclude = tests/lint_fixtures

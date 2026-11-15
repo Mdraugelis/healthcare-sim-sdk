@@ -206,15 +206,18 @@ class TestSepsisTreatmentPathway:
     def test_treated_indices_valid_range(self):
         """All treated indices must be in [0, n_patients)."""
         results, n, n_t = _make_sepsis()
+        nonempty = 0
         for t, intv in results.interventions.items():
             indices = intv.treated_indices
             if len(indices) > 0:
+                nonempty += 1
                 assert np.all(indices >= 0), (
                     f"Negative index at t={t}: {indices[indices < 0]}"
                 )
                 assert np.all(indices < n), (
                     f"Index >= n at t={t}: {indices[indices >= n]}"
                 )
+        assert nonempty > 0, "no step treated anyone; range never checked"
 
     def test_treated_indices_unique_per_timestep(self):
         """No duplicate treated indices per timestep."""

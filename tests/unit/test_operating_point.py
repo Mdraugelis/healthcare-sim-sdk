@@ -93,7 +93,7 @@ class TestDegreesOfFreedom:
 
     @pytest.mark.parametrize("bad", [0.0, 1.0, -0.2, 1.5])
     def test_out_of_range_values_rejected(self, bad):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"binding_value must lie in \(0, 1\)"):
             ControlledMLModel(
                 mode="operating_point", binding="ppv", binding_value=bad,
                 goal_value=0.80,
@@ -106,7 +106,8 @@ class TestDegreesOfFreedom:
         dict(binding="sensitivity", binding_value=0.80, target_auc=0.90),
     ])
     def test_well_posed_configs_accepted(self, kwargs):
-        ControlledMLModel(mode="operating_point", **kwargs)
+        model = ControlledMLModel(mode="operating_point", **kwargs)
+        assert model.mode == "operating_point"
 
 
 # -- Operating-point geometry --------------------------------------------
@@ -200,7 +201,7 @@ class TestGate:
         report.update(extra)
         return report
 
-    def test_on_target_passes(self):
+    def test_on_target_passes(self):  # sdk-lint: allow SDK004 -- passes iff no OperatingPointError
         self._model()._enforce_operating_point(
             self._report(ppv=0.15, sens=0.80)
         )

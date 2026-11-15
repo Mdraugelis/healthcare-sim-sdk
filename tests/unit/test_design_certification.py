@@ -81,12 +81,15 @@ def test_failed_fits_remain_in_manifest_not_selected_out(monkeypatch):
     json.dumps(result, allow_nan=False)
 
 
-@pytest.mark.parametrize('change', [
-    {'n_pre': 3}, {'autocorrelation': 1}, {'denominator_variation': 1},
-    {'informative_censoring': 1}, {'temporal_sd': float('nan')},
+@pytest.mark.parametrize('change,match', [
+    ({'n_pre': 3}, 'at least four pre/post periods'),
+    ({'autocorrelation': 1}, 'Autocorrelation must lie strictly'),
+    ({'denominator_variation': 1}, 'Denominator variation must be'),
+    ({'informative_censoring': 1}, 'Informative censoring must be'),
+    ({'temporal_sd': float('nan')}, 'Design parameters must be finite'),
 ])
-def test_invalid_design_rejected(change):
-    with pytest.raises(ValueError):
+def test_invalid_design_rejected(change, match):
+    with pytest.raises(ValueError, match=match):
         run_design_certification(DesignCertificationConfig(
             designs=(replace(ITSDesign('invalid'), **change),), repetitions=2))
 

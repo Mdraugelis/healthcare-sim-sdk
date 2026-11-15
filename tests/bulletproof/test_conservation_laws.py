@@ -16,11 +16,9 @@ import numpy as np
 import pytest
 
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from healthcare_sim_sdk.core.scenario import TimeConfig
 from healthcare_sim_sdk.ml.performance import (
     confusion_matrix_metrics,
     theoretical_ppv,
-    check_target_feasibility,
 )
 from healthcare_sim_sdk.population.temporal_dynamics import (
     annual_risk_to_hazard,
@@ -29,10 +27,6 @@ from healthcare_sim_sdk.population.temporal_dynamics import (
 from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
-)
-from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
-    ClinicConfig,
-    NoShowOverbookingScenario,
 )
 
 
@@ -89,6 +83,7 @@ class TestPopulationConservation:
         results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(200)
 
         reference_ids = None
+        compared = 0
         for t in range(8):
             eids = results.outcomes[t].entity_ids
             if eids is not None:
@@ -96,11 +91,13 @@ class TestPopulationConservation:
                     reference_ids = set(eids.tolist())
                 else:
                     current_ids = set(eids.tolist())
+                    compared += 1
                     assert current_ids == reference_ids, (
                         f"Entity IDs changed at t={t}: "
                         f"missing={reference_ids - current_ids}, "
                         f"extra={current_ids - reference_ids}"
                     )
+        assert compared == 7, f"entity IDs compared at {compared} of 7 steps"
 
 
 # =====================================================================
@@ -154,13 +151,14 @@ class TestConfusionMatrixAccounting:
 
         for threshold in [0.3, 0.5, 0.7]:
             m = confusion_matrix_metrics(y_true, y_pred, threshold)
-            if m["ppv"] > 0 and m["sensitivity"] > 0:
-                expected_f1 = (
-                    2 * m["ppv"] * m["sensitivity"] / (m["ppv"] + m["sensitivity"])
-                )
-                assert abs(m["f1"] - expected_f1) < 1e-10, (
-                    f"F1={m['f1']:.6f} != expected={expected_f1:.6f}"
-                )
+            assert m["ppv"] > 0 and m["sensitivity"] > 0, (
+                f"identity untestable at threshold {threshold}")
+            expected_f1 = (
+                2 * m["ppv"] * m["sensitivity"] / (m["ppv"] + m["sensitivity"])
+            )
+            assert abs(m["f1"] - expected_f1) < 1e-10, (
+                f"F1={m['f1']:.6f} != expected={expected_f1:.6f}"
+            )
 
     def test_flag_rate_identity(self):
         """flag_rate = (TP + FP) / N."""

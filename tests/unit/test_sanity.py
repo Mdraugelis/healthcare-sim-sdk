@@ -512,9 +512,9 @@ class TestMetricConsistency:
 
         m = confusion_matrix_metrics(y_true, y_pred, 0.5)
         n_pos = m["tp"] + m["fn"]
-        if n_pos > 0:
-            fnr = m["fn"] / n_pos
-            assert abs(m["sensitivity"] + fnr - 1.0) < 1e-10
+        assert n_pos == 100
+        fnr = m["fn"] / n_pos
+        assert abs(m["sensitivity"] + fnr - 1.0) < 1e-10
 
     def test_ppv_increases_with_higher_threshold(self):
         """Raising the threshold should increase PPV (fewer, better flags).

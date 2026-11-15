@@ -154,12 +154,12 @@ class TestTargetingEquity:
         results = BranchedSimulationEngine(sc, CounterfactualMode.BRANCHED).run(5000)
 
         call_rates = _get_race_call_rates(results, 30)
-        if "Black" in call_rates and "White" in call_rates:
-            assert call_rates["Black"] >= call_rates["White"], (
-                f"ML should target Black patients more: "
-                f"Black call rate={call_rates['Black']:.3f}, "
-                f"White call rate={call_rates['White']:.3f}"
-            )
+        assert {"Black", "White"} <= set(call_rates), call_rates
+        assert call_rates["Black"] >= call_rates["White"], (
+            f"ML should target Black patients more: "
+            f"Black call rate={call_rates['Black']:.3f}, "
+            f"White call rate={call_rates['White']:.3f}"
+        )
 
 
 class TestDisparityReduction:
@@ -180,14 +180,11 @@ class TestDisparityReduction:
         f_rates = _get_race_noshow_rates(results, 30, "factual")
         cf_rates = _get_race_noshow_rates(results, 30, "counterfactual")
 
-        if "Black" in f_rates and "White" in f_rates:
-            f_gap = f_rates["Black"] - f_rates["White"]
-            cf_gap = cf_rates["Black"] - cf_rates["White"]
-
-            # Same appointments and shared outcome coins imply monotonicity
-            # within each group. They do not imply equal absolute benefits.
-            for race in f_rates:
-                assert f_rates[race] <= cf_rates[race]
+        assert {"Black", "White"} <= set(f_rates), f_rates
+        # Same appointments and shared outcome coins imply monotonicity
+        # within each group. They do not imply equal absolute benefits.
+        for race in f_rates:
+            assert f_rates[race] <= cf_rates[race]
 
     def test_group_benefits_account_for_total_under_both_models(self):
         """Account for benefits by group without assuming an equity conclusion."""
@@ -228,26 +225,19 @@ class TestDisparityReduction:
         rand_f = _get_race_noshow_rates(res_rand, 30, "factual")
         rand_cf = _get_race_noshow_rates(res_rand, 30, "counterfactual")
 
-        if all(
-            "Black" in d and "White" in d for d in [good_f, good_cf, rand_f, rand_cf]
-        ):
-            good_reduction = (good_cf["Black"] - good_cf["White"]) - (
-                good_f["Black"] - good_f["White"]
-            )
-            rand_reduction = (rand_cf["Black"] - rand_cf["White"]) - (
-                rand_f["Black"] - rand_f["White"]
-            )
+        for rates in (good_f, good_cf, rand_f, rand_cf):
+            assert {"Black", "White"} <= set(rates), rates
 
-            for results in (res_good, res_rand):
-                group_saved = 0
-                for t in results.outcomes:
-                    f, c = results.outcomes[t], results.counterfactual_outcomes[t]
-                    for race in np.unique(f.secondary["race_ethnicity"]):
-                        mask = f.secondary["race_ethnicity"] == race
-                        saved = c.events[mask] - f.events[mask]
-                        assert np.all(saved >= 0)
-                        group_saved += saved.sum()
-                assert group_saved == sum(
-                    (results.counterfactual_outcomes[t].events - out.events).sum()
-                    for t, out in results.outcomes.items()
-                )
+        for results in (res_good, res_rand):
+            group_saved = 0
+            for t in results.outcomes:
+                f, c = results.outcomes[t], results.counterfactual_outcomes[t]
+                for race in np.unique(f.secondary["race_ethnicity"]):
+                    mask = f.secondary["race_ethnicity"] == race
+                    saved = c.events[mask] - f.events[mask]
+                    assert np.all(saved >= 0)
+                    group_saved += saved.sum()
+            assert group_saved == sum(
+                (results.counterfactual_outcomes[t].events - out.events).sum()
+                for t, out in results.outcomes.items()
+            )

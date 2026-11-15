@@ -29,16 +29,12 @@ from healthcare_sim_sdk.scenarios.malnutrition_prioritization.scenario import (
 )
 
 
+from tests.private_profile import MALNUTRITION_MODEL, requires_private_files
+
 _CONFIG_DIR = Path("healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs")
-requires_frozen_model = pytest.mark.skipif(
-    not (
-        (_CONFIG_DIR / "model_frozen.yaml").exists()
-        and (_CONFIG_DIR / "model_targets.yaml").exists()
-    ),
-    reason="local model_targets.yaml / model_frozen.yaml not present "
-    "(gitignored institution-specific files; see "
-    "configs/model_targets.example.yaml)",
-)
+# Gitignored institution-specific files; see configs/model_targets.example.yaml
+# and tests/private_profile.py.
+requires_frozen_model = requires_private_files(*MALNUTRITION_MODEL)
 
 
 @pytest.fixture(autouse=True)
@@ -171,14 +167,17 @@ class TestCapacity:
     def test_capacity_binding_when_queue_nonempty(self):
         # With erosion off, leftover queue implies capacity was filled.
         _, res = _make()
+        binding_days = 0
         for t in range(1, len(res.outcomes)):
             out = res.outcomes[t]
             if out.metadata["queue_depth"] > 0:
+                binding_days += 1
                 assert out.metadata["assessed_today"] == 6, (
                     f"t={t}: queue {out.metadata['queue_depth']} "
                     f"but only {out.metadata['assessed_today']} "
                     "assessed"
                 )
+        assert binding_days > 0, "queue never backed up; capacity never tested"
 
     def test_capacity_zero_nobody_assessed(self):
         _, res = _make(rdn_assessments_per_day=0)
@@ -533,6 +532,7 @@ class TestConsultPath:
 
         sc, _ = _make()
         state = sc.create_population(400)
+        contested_days = 0
         for t in range(25):
             state = sc.step(state, t)
             timebound = np.where(
@@ -545,11 +545,13 @@ class TestConsultPath:
                 & (timebound <= t)
             )
             if due_unworked.any():
+                contested_days += 1
                 today = state[ROW_ASSESS_DAY] == t
                 srcs = state[ROW_ASSESS_SOURCE][today]
                 assert (srcs == SOURCE_CONSULT).all(), (
                     f"t={t}: non-consult assessment while a time-bound consult waited"
                 )
+        assert contested_days > 0, "no day had a waiting time-bound consult"
 
     def test_provider_consult_ppv_realized(self):
         """Realized provider-consult PPV (consults arriving before

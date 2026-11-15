@@ -16,14 +16,11 @@ import numpy as np
 import pytest
 
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from healthcare_sim_sdk.core.scenario import TimeConfig
 from healthcare_sim_sdk.ml.model import ControlledMLModel, OperatingPointError
 from healthcare_sim_sdk.ml.performance import (
     auc_exact,
-    auc_score,
     confusion_matrix_metrics,
     theoretical_ppv,
-    calibration_slope,
 )
 from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
 from healthcare_sim_sdk.population.temporal_dynamics import (
@@ -35,14 +32,9 @@ from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
 )
-from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
-    ClinicConfig,
-    NoShowOverbookingScenario,
-)
 
 from .conftest import (
     assert_mean_in_range,
-    assert_rate_in_range,
     assert_no_nan_inf,
     assert_in_unit_interval,
 )
@@ -70,17 +62,22 @@ class TestPopulationDistributions:
             risks, rate, tolerance_sigma=4.0, name=f"beta_risks(rate={rate})"
         )
 
-    @pytest.mark.parametrize("concentration", [0.1, 0.5, 1.0, 2.0])
-    def test_higher_concentration_lower_variance(self, concentration):
-        """Higher concentration should produce lower variance in risks."""
-        rng = np.random.default_rng(42)
-        risks = beta_distributed_risks(
-            n_patients=10000,
-            annual_incident_rate=0.10,
-            concentration=concentration,
-            rng=rng,
-        )
-        return np.var(risks)
+    def test_higher_concentration_lower_variance(self):
+        """Higher concentration should produce lower variance in risks.
+
+        This test previously returned the variance and asserted nothing.
+        """
+        variances = []
+        for concentration in [0.1, 0.5, 1.0, 2.0]:
+            rng = np.random.default_rng(42)
+            risks = beta_distributed_risks(
+                n_patients=10000,
+                annual_incident_rate=0.10,
+                concentration=concentration,
+                rng=rng,
+            )
+            variances.append(np.var(risks))
+        assert all(a > b for a, b in zip(variances, variances[1:])), variances
 
     def test_beta_risks_bounded_01(self):
         """All generated risks must be in (0, 1)."""
@@ -421,16 +418,16 @@ class TestMLModelStatistics:
         scores, binary_labels = model.predict_binary(risks, rng, true_labels=labels)
 
         metrics = confusion_matrix_metrics(labels, scores, report["threshold"])
-        if metrics["sensitivity"] > 0 and metrics["specificity"] < 1:
-            expected_ppv = theoretical_ppv(
-                actual_prev, metrics["sensitivity"], metrics["specificity"]
-            )
-            assert abs(metrics["ppv"] - expected_ppv) < 0.03, (
-                f"PPV={metrics['ppv']:.3f} inconsistent with Bayes "
-                f"(expected={expected_ppv:.3f}, prev={actual_prev:.3f}, "
-                f"sens={metrics['sensitivity']:.3f}, "
-                f"spec={metrics['specificity']:.3f})"
-            )
+        assert metrics["sensitivity"] > 0 and metrics["specificity"] < 1, metrics
+        expected_ppv = theoretical_ppv(
+            actual_prev, metrics["sensitivity"], metrics["specificity"]
+        )
+        assert abs(metrics["ppv"] - expected_ppv) < 0.03, (
+            f"PPV={metrics['ppv']:.3f} inconsistent with Bayes "
+            f"(expected={expected_ppv:.3f}, prev={actual_prev:.3f}, "
+            f"sens={metrics['sensitivity']:.3f}, "
+            f"spec={metrics['specificity']:.3f})"
+        )
 
 
 # =====================================================================

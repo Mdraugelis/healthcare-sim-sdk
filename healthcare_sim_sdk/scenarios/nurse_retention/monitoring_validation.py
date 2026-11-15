@@ -249,10 +249,8 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
         "n_weeks": rc.n_weeks,
         "tier3_mode": tier3_mode,
     }
-    try:
-        finalize_experiment(output_dir, config_dict, metrics)
-    except Exception as exc:
-        logger.warning("finalize_experiment failed: %s", exc)
+    # A failed save must fail the run, not leave an unrecorded result.
+    finalize_experiment(output_dir, config_dict, metrics)
 
     total_time = time.time() - t0
     logger.info(

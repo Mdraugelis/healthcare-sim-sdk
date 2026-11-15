@@ -34,3 +34,24 @@ repos:
         language: python
         stages: [commit-msg]
         pass_filenames: true
+
+      # Issue #8 targeted lint. Uses the tools from the locked environment
+      # (uv pip sync --require-hashes requirements/lock.txt). Full gate:
+      # scripts/quality_gate.sh
+      - id: sdk-lint
+        name: sdk-lint (SDK001-SDK006)
+        entry: python scripts/sdk_lint.py
+        language: system
+        types: [python]
+        exclude: ^tests/lint_fixtures/
+      - id: flake8
+        name: flake8
+        entry: flake8
+        language: system
+        types: [python]
+        exclude: ^tests/lint_fixtures/
+      - id: ruff
+        name: ruff (targeted rules)
+        entry: ruff check --no-cache --force-exclude
+        language: system
+        types: [python]

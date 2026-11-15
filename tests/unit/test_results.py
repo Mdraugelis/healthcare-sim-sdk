@@ -127,7 +127,7 @@ class TestAnalysisDatasetSnapshots:
 
     def test_invalid_timestep(self):
         results = _run_scenario(n=50, n_t=10)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="No outcomes at timestep 99"):
             results.to_analysis().to_entity_snapshots(t=99)
 
 

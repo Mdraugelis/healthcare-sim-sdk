@@ -81,8 +81,9 @@ def test_cap_never_silently_truncates_and_output_projection_is_opt_in():
     wrapped = TracingScenario(ToyScenario(), lambda s: {}, max_records=1)
     with pytest.raises(ValueError, match="max_records"):
         BranchedSimulationEngine(wrapped).run(2)
-    wrapped = TracingScenario(ToyScenario(), lambda s: {}, stages=("outcome",),
-                             output_projector=lambda kind, out: {"first": out.events[0]})
+    wrapped = TracingScenario(
+        ToyScenario(), lambda s: {}, stages=("outcome",),
+        output_projector=lambda kind, out: {"first": out.events[0]})
     result = BranchedSimulationEngine(wrapped).run(2)
     assert len(wrapped.records) == 6
     assert wrapped.to_rows()[0]["facts"]["first"] == result.outcomes[0].events[0]

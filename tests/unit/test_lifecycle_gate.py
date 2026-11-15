@@ -43,7 +43,7 @@ def test_required_failure_is_never_registered(tmp_path, monkeypatch):
 def test_missing_required_check_is_never_registered(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     out = tmp_path / "run"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not registered"):
         finalize_experiment(out, {"seed": 1, "timestamp": "t2"},
                             {"events": 3}, validation_checks=[_passing()],
                             required_checks=["equity_audit"],
@@ -113,7 +113,7 @@ def test_sweep_registration_skips_rejected_cells(tmp_path, monkeypatch):
     finalize_experiment(sweep / "0", {"seed": 1, "timestamp": "a"},
                         {"events": 1}, validation_checks=[_passing()],
                         require_validated=True)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not registered"):
         finalize_experiment(sweep / "1", {"seed": 2, "timestamp": "b"},
                             {"events": 1}, validation_checks=[_failing()],
                             require_validated=True)
@@ -140,7 +140,7 @@ def test_not_applicable_needs_rationale_to_pass_the_gate(tmp_path,
     monkeypatch.chdir(tmp_path)
     bare = Check("simulation_validation", "na", "", "", "",
                  status=CheckStatus.NOT_APPLICABLE)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not registered"):
         finalize_experiment(tmp_path / "r1", {"seed": 1, "timestamp": "n1"},
                             {"events": 1}, validation_checks=[bare],
                             require_validated=True)

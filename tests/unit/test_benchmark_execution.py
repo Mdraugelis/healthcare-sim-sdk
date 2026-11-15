@@ -39,14 +39,16 @@ def test_bundle_is_an_explicit_allowlist(tmp_path, monkeypatch):
         assert (bundle / name).read_bytes() == ex.INITIALIZER_BYTES
 
 
-@pytest.mark.parametrize("update", [
-    {"run_plan": {"adapter": "arbitrary_module", "seeds": [1]}},
-    {"run_plan": {"adapter": "shield_rt_v1", "seeds": [1, 1]}},
-    {"reference": {"outcome": .2}},
+@pytest.mark.parametrize("update,match", [
+    ({"run_plan": {"adapter": "arbitrary_module", "seeds": [1]}},
+     "Only the static shield_rt_v1 adapter"),
+    ({"run_plan": {"adapter": "shield_rt_v1", "seeds": [1, 1]}},
+     "seeds must be nonempty, unique"),
+    ({"reference": {"outcome": .2}}, "Reference evidence is forbidden"),
 ])
-def test_invalid_plan_or_reference_rejected(tmp_path, update):
+def test_invalid_plan_or_reference_rejected(tmp_path, update, match):
     case = _case() | update
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=match):
         ex.run_isolated(case, tmp_path)
 
 

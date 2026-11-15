@@ -286,11 +286,9 @@ def run_replication(config_name: str, seed: int = 42) -> dict:
         "seed": seed,
         **asdict(cfg),
     }
-    try:
-        finalize_experiment(output_dir, config_dict, metrics)
-        logger.info("Results saved to %s", output_dir)
-    except Exception as e:
-        logger.warning("Could not save results: %s", e)
+    # A failed save must fail the run, not be logged and skipped.
+    finalize_experiment(output_dir, config_dict, metrics)
+    logger.info("Results saved to %s", output_dir)
 
     return metrics
 

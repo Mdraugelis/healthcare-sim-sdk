@@ -159,21 +159,26 @@ def test_reference_baseline_does_not_depend_on_assumed_effect():
     )
 
 
-@pytest.mark.parametrize("name,value", [
-    ("n_control", True), ("n_intervention", 0), ("n_control", 1.5),
-    ("baseline_risk", fixed(float("nan"))),
-    ("baseline_risk", fixed(1.01)), ("baseline_risk", fixed(-0.01)),
-    ("uptake", uniform(0, 1.1)), ("uptake", fixed(float("inf"))),
-    ("relative_effect", fixed(float("nan"))),
-    ("relative_effect", fixed(1.01)),
-    ("baseline_risk", {"distribution": "normal", "mean": 0.2}),
-    ("baseline_risk", uniform(0.4, 0.2)),
-    ("baseline_risk", fixed(True)),
+@pytest.mark.parametrize("name,value,match", [
+    ("n_control", True, "n_control must be an integer"),
+    ("n_intervention", 0, "n_intervention must be an integer"),
+    ("n_control", 1.5, "n_control must be an integer"),
+    ("baseline_risk", fixed(float("nan")), "baseline_risk must be a finite"),
+    ("baseline_risk", fixed(1.01), "baseline_risk support must lie in"),
+    ("baseline_risk", fixed(-0.01), "baseline_risk support must lie in"),
+    ("uptake", uniform(0, 1.1), "uptake support must lie in"),
+    ("uptake", fixed(float("inf")), "uptake must be a finite"),
+    ("relative_effect", fixed(float("nan")), "relative_effect must be a finite"),
+    ("relative_effect", fixed(1.01), "Joint baseline_risk/relative_effect"),
+    ("baseline_risk", {"distribution": "normal", "mean": 0.2},
+     "requires fixed/value or uniform"),
+    ("baseline_risk", uniform(0.4, 0.2), "bounds are reversed"),
+    ("baseline_risk", fixed(True), "baseline_risk must be a finite"),
 ])
-def test_invalid_inputs_fail_before_simulation(name, value):
+def test_invalid_inputs_fail_before_simulation(name, value, match):
     spec = case()
     spec["inputs"][name]["value"] = value
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=match):
         validate_inputs(spec)
 
 
