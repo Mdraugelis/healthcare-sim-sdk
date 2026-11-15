@@ -142,7 +142,7 @@ A related principle: **time matters.** We also added Kumar time-dependent treatm
 
 ### 7. Machine-Checked Invariants
 
-Structural invariants are encoded in `.claude/invariants.yaml` and checked by
+Structural invariants are encoded in `config/invariants.yaml` and checked by
 pre-commit hooks. Behavioral invariants require the test suite; CI runs the tests
 and all example notebooks:
 
@@ -158,7 +158,7 @@ If a principle is worth stating, it is worth enforcing mechanically.
 
 The SDK produces analysis-ready data and honest assessment. It does not make go/no-go recommendations. The human, who knows the clinical context, institutional constraints, and patient population, decides.
 
-This is encoded in the agent protocol at `.claude/agents/sim-guide.md`: the agent helps frame questions, configures scenarios, runs verification, and translates findings — but it never says "you should deploy this" or "you should not deploy this."
+This is encoded in the agent protocol at `docs/simulation_protocol.md`: the agent helps frame questions, configures scenarios, runs verification, and translates findings — but it never says "you should deploy this" or "you should not deploy this."
 
 When stakeholders ask "should we deploy?", the answer is "here is what the simulation suggests under these assumptions; here is what would need to be true for the decision to go one way or the other; the decision is yours."
 
@@ -522,9 +522,9 @@ A use case that fails multiple fit criteria is a signal to use a different tool,
 
 ## Agent-Assisted Workflow
 
-The SDK is designed to be used with an AI assistant (Claude Code, Claude Cowork, or similar) as a collaborator. The agent protocol lives in [`.claude/agents/sim-guide.md`](../.claude/agents/sim-guide.md) and covers six phases:
+The SDK is designed to be used with an AI assistant (Claude Code, Claude Cowork, or similar) as a collaborator. The agent protocol lives in [`simulation_protocol.md`](simulation_protocol.md) and covers six phases:
 
-- **Phase 1: Use-case fitness screening** — walk through the five fitness questions with the human; flag issues as they emerge; be direct when the SDK is not the right tool
+- **Phase 1: Use-case fitness screening** — walk through the six fitness questions with the human; flag issues as they emerge; be direct when the SDK is not the right tool
 - **Phase 2: Analytical-first screen** — ask whether closed-form math answers the decision question before building a scenario
 - **Phase 3: Scenario development** — guide the 5-method design conversation, translate domain language into the contract
 - **Phase 4: Verification** — run the five-level protocol on every simulation, refuse to interpret until verification passes
@@ -533,7 +533,7 @@ The SDK is designed to be used with an AI assistant (Claude Code, Claude Cowork,
 
 The agent is a collaborator, not an autopilot. The human frames the question, reviews the scenario, runs verification, and owns the deployment decision. The agent thinks with the human; it does not think for them.
 
-Claude Code and Cowork load the root `CLAUDE.md` automatically. It tells the agent to follow the protocol, which is read on demand.
+Root guidance for any coding agent is `AGENTS.md`; Claude Code and Cowork load it through the `CLAUDE.md` symlink. It tells the agent to follow the protocol, which is read on demand.
 
 ---
 

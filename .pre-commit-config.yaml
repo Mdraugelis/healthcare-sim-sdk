@@ -5,6 +5,8 @@ repos:
         name: SDK invariant checks
         entry: python scripts/check_invariants.py
         language: python
+        # The hook reads config/invariants.yaml.
+        additional_dependencies: [pyyaml]
         always_run: true
         pass_filenames: false
 

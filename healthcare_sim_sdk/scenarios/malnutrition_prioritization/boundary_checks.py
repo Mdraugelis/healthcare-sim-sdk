@@ -263,7 +263,7 @@ def run_boundary_suite(verbose: bool = True) -> bool:
 
 def _case_walkthroughs():
     """Trace 3-5 entities through the default full-scale run and
-    narrate their trajectories (sim-guide Phase 4, Level 4)."""
+    narrate their trajectories (simulation protocol Phase 4, Level 4)."""
     cfg = MalnutritionConfig(ml_enabled=True)
     tc = TimeConfig(
         n_timesteps=84, timestep_duration=1 / 365,

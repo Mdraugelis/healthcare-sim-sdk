@@ -182,7 +182,7 @@ def summarize(rows: List[Dict[str, Any]],
     return out
 
 
-# -- Always-On Verification (sim-guide Phase 4) ---------------------------
+# -- Always-On Verification (simulation protocol Phase 4) ---------------------------
 
 def always_on_verification(cfg: MalnutritionConfig,
                            horizon: int, seed: int) -> Dict[str, Any]:

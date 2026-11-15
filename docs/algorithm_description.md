@@ -87,8 +87,8 @@ Version 0.1 was written alongside a critical read of the code at `main@3b94187`.
 |---|---|
 | `docs/design_principles.md` | Rationale. This document supersedes its "Core Mechanisms" section on points of detail. |
 | `docs/analytical_first_pass.md` | Closed-form screening that should precede any simulation. Section 9.6 links to it. |
-| `.claude/agents/sim-guide.md` | Agent protocol, including the verification checklist that Section 13 formalizes. |
-| `.claude/invariants.yaml` | Machine-readable invariants. Section 6.5 states how each one is enforced. |
+| `docs/simulation_protocol.md` | Agent protocol, including the verification checklist that Section 13 formalizes. |
+| `config/invariants.yaml` | Machine-read invariants. Section 6.5 states how each one is enforced. |
 | `docs/lint_rules.md` | Static rules SDK000–SDK006 and the hermetic quality gate (Section 6.5). |
 | `docs/experiment_verification.md` | Save, verify and register order; the registration gate (Section 13.3). |
 | `docs/analysis_exports.md` | Export semantics: outcome selection, missing periods, entity identity and treatment (Section 10.4). |
@@ -882,7 +882,7 @@ An estimator that uses the counterfactual branch as its control (the oracle conf
 6. **Sweep the design knobs:** population size, horizon, switch-on time, aggregation level, number of sites.
 7. **Choose the smallest design that meets power and type I targets.** Report the design and its operating characteristics.
 
-Sweeps use Hydra YAML grids and `--multirun`, and runners call `finalize_experiment()`, per `CLAUDE.md`.
+Sweeps use Hydra YAML grids and `--multirun`, and runners call `finalize_experiment()`, per `AGENTS.md`.
 
 ### 11.4 Estimators available
 

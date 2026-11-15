@@ -98,7 +98,7 @@ def run_identity(config, model_path=None, source_root=None):
     ]
     relevant = sorted(set(n for n in names if n and (
         n.startswith(("healthcare_sim_sdk/", "scripts/", "tests/"))
-        or n in ("pyproject.toml", ".claude/invariants.yaml")
+        or n in ("pyproject.toml", "config/invariants.yaml")
     ) and Path(n).suffix in (".py", ".yaml", ".yml", ".toml")))
     sources = {n: file_digest(root / n) if (root / n).is_file() else "DELETED"
                for n in relevant}

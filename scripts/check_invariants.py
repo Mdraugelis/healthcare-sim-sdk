@@ -1,40 +1,63 @@
 #!/usr/bin/env python3
 """Pre-commit hook: verify SDK architectural invariants.
 
-Uses AST parsing — no package imports required. Works in
-pre-commit's isolated environment.
+Reads the contract from config/invariants.yaml, the single source, and
+checks the code against it by AST parsing. No package imports.
 
 Checks:
-- BaseScenario has exactly 5 abstract methods
-- RNGStreams has exactly 5 fields
+- BaseScenario has exactly the required abstract methods
+- RNGStreams and STREAM_NAMES hold exactly the required streams
 - Engine does not inspect state internals
+- Every protected file exists
 """
 
 import ast
 import sys
 from pathlib import Path
 
-EXPECTED_ABSTRACT = {
-    "create_population",
-    "step",
-    "predict",
-    "intervene",
-    "measure",
-}
-EXPECTED_STREAMS = {
-    "population",
-    "temporal",
-    "prediction",
-    "intervention",
-    "outcomes",
-}
+ROOT = Path(__file__).resolve().parents[1]
+INVARIANTS = ROOT / "config" / "invariants.yaml"
 
-STATE_NAMES = {
-    "state_factual",
-    "state_counterfactual",
-    "state",
-    "state_snapshot",
-}
+
+def load_invariants(path: Path = INVARIANTS) -> dict:
+    """The parsed invariants file. Exits with a clear message when the
+    file, PyYAML, or a required key is missing."""
+    try:
+        import yaml
+    except ImportError:
+        sys.exit(
+            "check_invariants: PyYAML is not installed. Use the locked "
+            "environment (uv pip sync --require-hashes requirements/lock.txt) "
+            "or `pip install pyyaml`.")
+    try:
+        data = yaml.safe_load(path.read_text())
+    except FileNotFoundError:
+        sys.exit(f"INVARIANT VIOLATION: {path.relative_to(ROOT)} is missing. "
+                 "It is the source of the SDK contract.")
+    except yaml.YAMLError as error:
+        sys.exit(f"check_invariants: {path.relative_to(ROOT)} is not valid "
+                 f"YAML: {error}")
+    try:
+        opacity = next(c for c in data["engine_constraints"]
+                       if c["name"] == "state_opacity")
+        return {
+            "abstract": set(data["scenario_contract"]["required_abstract_methods"]),
+            "streams": set(data["rng_contract"]["required_streams"]),
+            "streams_class": data["rng_contract"]["streams_class"],
+            "state_names": set(opacity["state_variable_names"]),
+            "protected": list(data["protected_files"]["paths"]),
+        }
+    except (KeyError, TypeError, StopIteration) as error:
+        sys.exit(f"check_invariants: {path.relative_to(ROOT)} lacks a "
+                 f"required entry ({error!r}).")
+
+
+_INV = load_invariants()
+EXPECTED_ABSTRACT = _INV["abstract"]
+EXPECTED_STREAMS = _INV["streams"]
+STREAMS_CLASS = _INV["streams_class"]
+STATE_NAMES = _INV["state_names"]
+PROTECTED_FILES = _INV["protected"]
 
 
 def find_abstract_methods(filepath: Path) -> set:
@@ -76,7 +99,7 @@ def check_scenario_contract():
     if abstract != EXPECTED_ABSTRACT:
         added = abstract - EXPECTED_ABSTRACT
         removed = EXPECTED_ABSTRACT - abstract
-        msg = "INVARIANT VIOLATION: 5-method scenario contract\n"
+        msg = "INVARIANT VIOLATION: scenario contract (config/invariants.yaml)\n"
         if added:
             msg += f"  Added: {added}\n"
         if removed:
@@ -97,7 +120,7 @@ def check_rng_streams():
             file=sys.stderr,
         )
         return False
-    fields = find_dataclass_fields(path, "RNGStreams")
+    fields = find_dataclass_fields(path, STREAMS_CLASS)
     if fields != EXPECTED_STREAMS:
         print(
             "INVARIANT VIOLATION: RNGStreams fields changed\n"
@@ -175,11 +198,25 @@ def check_engine_state_opacity():
     return True
 
 
+def check_protected_files():
+    missing = [p for p in PROTECTED_FILES if not (ROOT / p).is_file()]
+    if missing:
+        print(
+            "INVARIANT VIOLATION: protected files listed in "
+            "config/invariants.yaml are missing:\n"
+            + "\n".join(f"  {p}" for p in missing),
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 if __name__ == "__main__":
     results = [
         check_scenario_contract(),
         check_rng_streams(),
         check_engine_state_opacity(),
+        check_protected_files(),
     ]
     if all(results):
         print("All invariant checks passed.")

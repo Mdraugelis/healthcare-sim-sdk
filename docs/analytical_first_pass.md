@@ -6,7 +6,7 @@ The Healthcare Intervention Simulation SDK is a Monte Carlo engine. It exists fo
 
 This document describes the **Analytical-First Principle**: before building a scenario, evaluate whether the primary decision question can be answered with closed-form math. If it can, do the analytical pass first, document assumptions and limits, and escalate to simulation only if gaps remain decision-critical.
 
-The principle applies whether the user is a scenario author, a program manager designing a deployment evaluation, or an agent (`sim-guide`) helping a human explore a new use case.
+The principle applies whether the user is a scenario author, a program manager designing a deployment evaluation, or an agent helping a human explore a new use case.
 
 ---
 
@@ -65,7 +65,7 @@ def power(p1, p2, n1, n2, alpha=0.05, derate=0.85):
 
 ### Step 5 — Run Validation
 
-**Closed-form answers are still subject to the full verification protocol.** See `.claude/agents/sim-guide.md` Phase 2 "Doing the Analytical Pass Well" for the seven-step checklist. In brief:
+**Closed-form answers are still subject to the full verification protocol.** See `docs/simulation_protocol.md` Phase 2 "Doing the Analytical Pass Well" for the seven-step checklist. In brief:
 
 1. Bayes constraint: PPV ≤ (sens × prev) / (sens × prev + (1 − spec) × (1 − prev))
 2. Monotonicity: lower threshold → more flags; higher efficacy → fewer events; effectiveness = 0 → factual = counterfactual
@@ -195,6 +195,6 @@ The Phase-0 results doc explicitly disclosed what it could not answer:
 
 ## Reference Files
 
-- `.claude/invariants.yaml` → `analytical_first_pass` block (closed_form_sufficient_for, sdk_required_for, validation_required_either_way)
-- `.claude/agents/sim-guide.md` → Phase 2 (full protocol the agent follows in a live session)
-- `CLAUDE.md` → Agent Guidance → Analytical-First Principle (one-paragraph summary for humans)
+- `config/invariants.yaml` → `analytical_first_pass` block (closed_form_sufficient_for, sdk_required_for, validation_required_either_way)
+- `docs/simulation_protocol.md` → Phase 2 (full protocol the agent follows in a live session)
+- `AGENTS.md` → Running or interpreting a simulation (the mandatory one-line form)
