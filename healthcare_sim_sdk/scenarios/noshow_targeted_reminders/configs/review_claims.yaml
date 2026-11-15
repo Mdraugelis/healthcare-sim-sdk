@@ -1,0 +1,81 @@
+decision_question: Under the shipped assumptions, how many no-shows do targeted reminder calls prevent at two call capacities, and what evidence is still missing before that number can inform a decision?
+claims:
+  - id: process_integrity
+    question: Are the simulated workflow and its accounting internally consistent?
+    estimand: Resolved appointment slots, calls made and reached, and no-shows on each branch
+    population: All simulated appointment slots over the horizon
+    denominator: Resolved slots per branch
+    comparison: Reminder program (factual branch) versus no program (counterfactual branch)
+    horizon: Resolved horizon_days
+    acceptance: The no-AI branch equals a run with no predictions; both branches see the same schedule; calls never exceed daily capacity; totals reconcile; zero effectiveness gives identical branches; traces match recorded outcomes
+    reviewers: [operations, statistics, engineering]
+    evidence: [counterfactual_is_no_ai_world, branches_share_schedule, call_capacity_respected, outcome_accounting, zero_effect_identity, trace_reconciles]
+  - id: base_rate
+    question: Does the no-program branch reproduce the configured no-show rate?
+    estimand: Pooled no-show rate among resolved slots on the counterfactual branch
+    population: All resolved slots
+    denominator: Resolved slots
+    comparison: Simulated rate versus configured base_noshow_rate
+    horizon: Resolved horizon_days
+    acceptance: Within four binomial standard errors of the configured rate
+    reviewers: [clinical, statistics]
+    evidence: [no_program_rate_matches_config]
+  - id: inspectability
+    question: Can a reviewer follow individual slots that were helped, missed or called without effect?
+    estimand: Individual slot paths; illustrative, not effect estimates
+    population: Seeded random draw within each category
+    denominator: Candidate count per category, including zero
+    comparison: The same slot on the factual and counterfactual branches
+    horizon: Every observed day of the recorded run
+    acceptance: Cases come from the recorded run, with selection rule and candidate counts stated
+    reviewers: [clinical, operations, governance]
+    evidence: [case_traces]
+  - id: model_validation
+    question: Has the simulated model's discrimination been checked on data it was not fitted to?
+    estimand: Held-out AUC of the simulated reminder model
+    population: An independent population drawn with the same settings
+    denominator: Slots with an observed outcome
+    comparison: Delivered AUC versus configured model_auc
+    horizon: Single scoring step
+    acceptance: Held-out AUC within the declared tolerance of the target
+    reviewers: [statistics, engineering]
+    scope: experiment
+    evidence: [model_heldout_auc]
+  - id: study_design
+    question: Has the planned real-world evaluation been shown to recover a known effect?
+    estimand: To be specified for the actual study design
+    population: Intended clinics and eligibility criteria
+    denominator: To be specified by the statistical reviewer
+    comparison: Observable-data estimator against a planted effect
+    horizon: Intended pre/post follow-up
+    acceptance: Bias, coverage, false-positive rate and power with Monte Carlo uncertainty
+    reviewers: [statistics, clinical, governance]
+    scope: experiment
+    evidence: [study_design_validation]
+assumptions:
+  - id: reminder_effect
+    description: A reached patient's no-show probability falls by reminder_effectiveness (0.35), applied once to that appointment.
+    source: Scenario default; the tracked Chong and Rosen replication configs set study-specific values
+    provenance: assumed
+    range: Not supplied
+    owner: Clinical reviewer (unassigned)
+    reviewers: [clinical, statistics]
+  - id: call_success
+    description: 65% of calls reach the patient, independent of risk.
+    source: Scenario default
+    provenance: assumed
+    range: Not supplied
+    owner: Operations reviewer (unassigned)
+    reviewers: [operations]
+  - id: public_synthetic_demonstration
+    description: Synthetic population and shipped defaults; not calibrated to any clinic.
+    source: configs/review_demo.yaml
+    provenance: hypothetical
+    range: Illustrative only
+    owner: All reviewers
+metrics:
+  - {key: noshow_rate_program_pct, label: No-show rate with reminders, unit: percent of resolved slots}
+  - {key: noshow_rate_no_program_pct, label: No-show rate without reminders, unit: percent of resolved slots}
+  - {key: reduction_pp, label: Reduction in no-show rate, unit: percentage points}
+  - {key: noshows_prevented, label: No-shows prevented, unit: appointments}
+  - {key: calls_made, label: Calls made, unit: calls}
