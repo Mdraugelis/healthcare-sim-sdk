@@ -2,7 +2,7 @@
 
 Python SDK for evaluating a healthcare AI deployment before it happens. A discrete-time engine runs one population twice, with the AI and without it, on coupled random streams. The difference between the two runs is the effect of the AI.
 
-This file holds the rules that apply everywhere in the repository. [`docs/AUTHORITY.md`](docs/AUTHORITY.md) says which documents are current rules, which are proposals, and which are records.
+This file holds the rules that apply everywhere in the repository. Each scenario folder and `healthcare_sim_sdk/core/` has its own `AGENTS.md`: read it before you work there. [`docs/AUTHORITY.md`](docs/AUTHORITY.md) says which documents are current rules, which are proposals, and which are records.
 
 ## Invariants
 
@@ -29,6 +29,7 @@ This repository is public. Institution-specific values, names, rates and model f
 - Runners live in their scenario folder and end by calling `finalize_experiment()`. See [`docs/experiment_verification.md`](docs/experiment_verification.md).
 - `outputs/` is never committed.
 - Analysis exports go through `AnalysisDataset`. See [`docs/analysis_exports.md`](docs/analysis_exports.md).
+- A new scenario starts as a copy of `healthcare_sim_sdk/scenarios/_template/`, including its `AGENTS.md`.
 
 ## Running or interpreting a simulation
 

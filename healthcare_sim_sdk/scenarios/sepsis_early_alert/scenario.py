@@ -19,7 +19,7 @@ Key dynamics:
 
 The counterfactual question: "What would have happened without the early alert?"
 
-All parameters grounded in published literature. See config.yaml and README.md.
+All parameters grounded in published literature. See config.yaml and AGENTS.md.
 """
 
 from dataclasses import dataclass, field

@@ -37,7 +37,7 @@ If your change requires modifying an invariant, open a discussion first — see 
 - All changes go through PR review; direct pushes to `main` are not accepted.
 - Keep PRs focused. A scenario, a bug fix, or a doc improvement is a good unit.
 - Include tests under `tests/unit/`, `tests/integration/`, or `tests/bulletproof/` as appropriate.
-- New scenarios should live in their own directory under `healthcare_sim_sdk/scenarios/` and carry their own runners and verification.
+- New scenarios should live in their own directory under `healthcare_sim_sdk/scenarios/` and carry their own runners, verification and `AGENTS.md`. Start from `healthcare_sim_sdk/scenarios/_template/`; `scripts/check_docs.py` fails until the guidance file is filled in.
 
 ## Licensing of contributions
 
