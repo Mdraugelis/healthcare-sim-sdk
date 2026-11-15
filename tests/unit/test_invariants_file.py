@@ -2,6 +2,7 @@
 (issue #9). These tests hold the code, the lint rules and the documents
 that restate it to that file, so a second copy cannot drift unnoticed."""
 
+import ast
 import dataclasses
 import importlib.util
 import re
@@ -178,7 +179,27 @@ def test_every_launchable_script_has_its_hydra_config():
 def test_lint_rule_matches_the_contract_in_the_file():
     contract = INVARIANTS["runner_contract"]
     assert contract["final_call"] == "finalize_experiment"
+    assert contract["final_call_requires"] == [
+        "validation_checks", "require_validated=True"]
     assert contract["entry_decorator"] == "hydra.main"
     assert set(contract["banned_in_runners"]) == (
         sdk_lint.RUNNER_BANNED_IMPORTS | sdk_lint.RUNNER_BANNED_CALLS
         | {"sys.argv"})
+
+
+def test_every_runner_finalize_call_is_strict():
+    """No launchable script can register a run that skipped its checks."""
+    loose = []
+    for rel in LAUNCHABLE:
+        tree = ast.parse((ROOT / rel).read_text())
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", None)
+                    == "finalize_experiment"):
+                given = {k.arg: k.value for k in node.keywords}
+                strict = given.get("require_validated")
+                if not (isinstance(strict, ast.Constant)
+                        and strict.value is True
+                        and "validation_checks" in given):
+                    loose.append(f"{rel}:{node.lineno}")
+    assert loose == []

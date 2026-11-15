@@ -56,7 +56,7 @@ finalize_experiment(out_dir, config, metrics,
                     require_validated=True)
 ```
 
-Use `require_validated=True` for any run whose result will be reported. Leave it off for exploratory runs; they are registered and labeled unverified.
+Every runner under `healthcare_sim_sdk/scenarios/` must pass `validation_checks=` and `require_validated=True`; lint rule SDK007 blocks a runner that does not (`docs/lint_rules.md`). The loose form exists only for exploratory code outside the scenarios folder, such as a notebook. Those runs are registered and labeled unverified, and `list_verified()` leaves them out.
 
 ## Reading `provenance.json`
 

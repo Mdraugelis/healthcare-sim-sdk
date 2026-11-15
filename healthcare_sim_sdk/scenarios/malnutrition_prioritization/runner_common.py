@@ -252,6 +252,32 @@ def always_on_verification(cfg: MalnutritionConfig,
             "all_pass": all(x["pass"] for x in checks)}
 
 
+def lifecycle_checks(v: Dict[str, Any], rows: List[Dict[str, Any]],
+                     n_seeds: int) -> list:
+    """Checks handed to finalize_experiment() for one sweep cell: the
+    always-on verification (run once, on the center cell and first seed)
+    and two checks on this cell's own rows."""
+    from ...experiments.runner import check
+
+    checks = [
+        check(f"always_on:{c['check']}",
+              "Always-on verification, center cell, first seed",
+              c["pass"], detail=c["detail"])
+        for c in v["checks"]]
+    checks.append(check(
+        "cell_seed_count", "Every seed of this cell produced a row",
+        len(rows) == n_seeds, expected=n_seeds, actual=len(rows)))
+    rates = [r[k] for r in rows for k in ("missed_rate_f", "missed_rate_c")]
+    bounded = all(np.isfinite(x) and 0.0 <= x <= 1.0 for x in rates)
+    checks.append(check(
+        "cell_missed_rates_bounded",
+        "Missed rates on both branches are finite and within [0, 1]",
+        bounded, expected="all in [0, 1]",
+        actual="all in [0, 1]" if bounded else "out of range",
+        detail=f"{len(rates)} value(s)"))
+    return checks
+
+
 def format_verification(v: Dict[str, Any]) -> str:
     lines = ["## Always-On Verification", ""]
     for c in v["checks"]:

@@ -29,6 +29,7 @@ from .runner_common import (
     always_on_verification,
     config_from_dict,
     format_verification,
+    lifecycle_checks,
     run_cell,
     summarize,
 )
@@ -244,7 +245,9 @@ def main(cfg: DictConfig) -> None:
              "experiment_name": f"{name}/{campus}/{cell['label']}",
              "seed": seeds[0],
              **cell["config"]},
-            metrics)
+            metrics,
+            validation_checks=lifecycle_checks(v, rows, len(seeds)),
+            require_validated=True)
 
     extra = _experiment_analysis(
         name, cells, cell_rows, cell_summaries, cfg)

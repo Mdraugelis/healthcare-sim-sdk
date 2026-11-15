@@ -41,6 +41,7 @@ from healthcare_sim_sdk.core.engine import (
     CounterfactualMode,
 )
 from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import check
 from healthcare_sim_sdk.scenarios.nurse_retention.monitoring.harness import (
     MonitoringHarness,
 )
@@ -249,8 +250,43 @@ def run_one(cfg: DictConfig) -> Dict[str, Any]:
         "n_weeks": rc.n_weeks,
         "tier3_mode": tier3_mode,
     }
-    # A failed save must fail the run, not leave an unrecorded result.
-    finalize_experiment(output_dir, config_dict, metrics)
+    # A failed save or a failed check must fail the run, not leave an
+    # unrecorded or unverified result.
+    truth = {
+        "factual_departures": mon_run.ground_truth_factual_departures,
+        "cf_departures": mon_run.ground_truth_counterfactual_departures,
+        "factual_retention": mon_run.ground_truth_factual_retention,
+        "cf_retention": mon_run.ground_truth_counterfactual_retention,
+    }
+    present = all(v is not None for v in truth.values())
+    lengths = {k: (len(v) if v is not None else 0)
+               for k, v in truth.items()}
+    finite = present and all(
+        np.isfinite(np.asarray(v, dtype=float)).all()
+        for v in truth.values())
+    rates = (metrics["factual_retention_rate"], metrics["cf_retention_rate"])
+    departures = (f_departures, cf_departures)
+    checks = [
+        check("weekly_series_complete",
+              "Each ground-truth series has one value per week",
+              set(lengths.values()) == {rc.n_weeks},
+              expected=rc.n_weeks, actual=lengths),
+        check("weekly_series_finite",
+              "Ground-truth series contain no NaN or infinity", finite),
+        check("retention_rates_bounded",
+              "Final retention rate on both branches is within [0, 1]",
+              all(0.0 <= r <= 1.0 for r in rates),
+              expected="[0, 1]", actual=list(rates)),
+        check("departures_bounded",
+              "Departures on both branches are between 0 and the cohort",
+              all(0 <= d <= rc.n_nurses for d in departures),
+              expected=f"0 to {rc.n_nurses}", actual=list(departures)),
+        check("harness_returned_ground_truth",
+              "The monitoring harness returned all four grading series",
+              present, category="analysis"),
+    ]
+    finalize_experiment(output_dir, config_dict, metrics,
+                        validation_checks=checks, require_validated=True)
 
     total_time = time.time() - t0
     logger.info(
