@@ -340,6 +340,12 @@ The following tools are already built into the SDK and available for your use:
 
 **`experiments/uncertainty.py`** — `summarize_values()` and `summarize_metrics()` separate the seed range from the Monte Carlo standard error and reject missing or duplicate seeds; `binomial_performance()` gives exact intervals for detection rates.
 
+**`ml/fidelity.py`** — `auc_fidelity(labels, scores, target_auc, independent_cohort=...)` computes exact AUC on supplied scores and returns PASS, FAIL or INCONCLUSIVE (too few of one class). Use it on a population the model was not fitted to; a fit report is not held-out evidence.
+
+**`experiments/analysis/certification.py`** — tests the segmented ITS estimator against planted effects for a declared design grid (Type I error, power, coverage, bias, each with exact Monte Carlo intervals). `scripts/certify_analysis_design.py`; see `docs/analysis_design_certification.md`. DiD has no estimator and stays NOT_RUN.
+
+**`experiments/benchmark/`** — frozen-input evaluation against a published study: seal the reference, freeze inputs, run in an isolated child (macOS sandbox; elsewhere only an explicit development mode that cannot score), then reveal and score. The SHIELD-RT pilot is outcome-exposed development work, not blinded validation. See `docs/blinded_benchmark.md`.
+
 **`scripts/register_sweep.py`** — CLI tool to register a completed Hydra `--multirun` sweep: `python scripts/register_sweep.py outputs/sweep_<timestamp>/`.
 
 **`tests/bulletproof/conftest.py`** — Reusable statistical assertions: `assert_mean_in_range()` (4-sigma CLT bounds), `assert_rate_in_range()` (binomial CI), `assert_no_nan_inf()`, `assert_in_unit_interval()`, `assert_monotone_nondecreasing()`.

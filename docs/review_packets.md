@@ -98,5 +98,7 @@ rows = wrapped.to_rows()
 
 ## Related work
 
-- Held-out model checks, analysis certification and the blinded benchmark come in a following pull request.
+- Held-out model checks: `ml/fidelity.py` (`auc_fidelity`). Use it to supply evidence such as the reminders demo's `model_heldout_auc`.
+- Analysis-design evidence: `docs/analysis_design_certification.md`.
+- Frozen-input benchmark against a published study: `docs/blinded_benchmark.md`.
 - Changes to how the results module exports treatment timing and missing periods are proposed separately and are not part of this feature.

@@ -1,0 +1,22 @@
+{
+  "case_id": "shield_rt_exposed_pilot",
+  "study_id": "hong_2020_shield_rt_during_treatment",
+  "exposure": "published",
+  "targets": {
+    "control_risk": {
+      "value": 0.223,
+      "source": "https://pubmed.ncbi.nlm.nih.gov/32886536/",
+      "note": "Reported rounded proportion during treatment; evaluator reference, never a simulator parameter."
+    },
+    "intervention_risk": {
+      "value": 0.123,
+      "source": "https://pubmed.ncbi.nlm.nih.gov/32886536/",
+      "note": "Reported rounded proportion during treatment."
+    },
+    "risk_difference": {
+      "value": -0.1,
+      "source": "https://pubmed.ncbi.nlm.nih.gov/32886536/",
+      "note": "Reported rounded difference, intervention minus control. Do not substitute the later post-treatment endpoint. No extra publication sampling variance is added to matched-size synthetic trials."
+    }
+  }
+}
