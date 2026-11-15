@@ -25,6 +25,7 @@ reports/*
 !reports/nurse_retention_sweep.md
 !reports/monitoring_validation/
 !reports/monitoring_validation/monitoring_validation.md
+!reports/agent_guidance_2026-11-15.md
 catalog.json
 *_dashboard.html
 
