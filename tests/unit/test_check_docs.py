@@ -37,6 +37,21 @@ None.
 MAP_HEADER = "| Path | Class | Notes |\n|---|---|---|\n"
 
 
+def _symlinks_work(tmp=Path(__file__).parent):
+    """False on a checkout or platform without symlink support."""
+    probe = tmp / ".symlink_probe"
+    try:
+        os.symlink("x", probe)
+    except (OSError, NotImplementedError):
+        return False
+    probe.unlink()
+    return True
+
+
+needs_symlinks = pytest.mark.skipif(
+    not _symlinks_work(), reason="this platform cannot create symlinks")
+
+
 def write(root, rel, text=""):
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,11 +64,14 @@ def tree(tmp_path):
     """A small tree that passes every rule."""
     write(tmp_path, "AGENTS.md",
           "# Rules\n\nSee [the map](docs/AUTHORITY.md) and `docs/guide.md`.\n")
-    os.symlink("AGENTS.md", tmp_path / "CLAUDE.md")
     write(tmp_path, "config/invariants.yaml", "version: 1\n")
     (tmp_path / ".claude").mkdir()
-    os.symlink("../config/invariants.yaml",
-               tmp_path / ".claude" / "invariants.yaml")
+    if _symlinks_work():
+        os.symlink("AGENTS.md", tmp_path / "CLAUDE.md")
+        os.symlink("../config/invariants.yaml",
+                   tmp_path / ".claude" / "invariants.yaml")
+    else:  # the documented form for checkouts without symlinks
+        write(tmp_path, "CLAUDE.md", "@AGENTS.md\n")
     write(tmp_path, ".claude/agents/guide.md",
           "---\nname: guide\ndescription: Follows the guide.\n---\nRead it.\n")
     write(tmp_path, ".claude/rules/nested.md",
@@ -143,6 +161,7 @@ def test_doc003_copy_instead_of_symlink(tree):
     assert "must be a symlink" in finding.message
 
 
+@needs_symlinks
 def test_doc003_wrong_target(tree):
     (tree / "CLAUDE.md").unlink()
     os.symlink("README.md", tree / "CLAUDE.md")
@@ -170,11 +189,13 @@ def test_doc003_checkout_without_symlink_support(tree):
     assert "core.symlinks" in finding.message
 
 
+@needs_symlinks
 def test_doc003_optional_link_may_be_absent(tree):
     (tree / ".claude" / "invariants.yaml").unlink()
     assert found(tree, "DOC003") == []
 
 
+@needs_symlinks
 def test_doc003_dangling_symlink(tree):
     os.symlink("nowhere.md", tree / "docs" / "stray.md")
     (finding,) = found(tree, "DOC003")
@@ -197,6 +218,13 @@ def test_doc004_missing_heading_and_bad_status(tree):
     messages = [f.message for f in found(tree, "DOC004")]
     assert any("'## Verify'" in m for m in messages)
     assert any("status 'finished'" in m for m in messages)
+
+
+def test_doc004_local_guidance_stays_short(tree):
+    padded = GOOD_SCENARIO_GUIDE + "- more\n" * check_docs.LOCAL_BUDGET
+    write(tree, f"{SCENARIO}/AGENTS.md", padded)
+    (finding,) = found(tree, "DOC004")
+    assert f"limit is {check_docs.LOCAL_BUDGET}" in finding.message
 
 
 def test_doc004_copied_template_must_be_filled_in(tree):

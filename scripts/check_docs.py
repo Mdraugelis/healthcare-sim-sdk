@@ -33,6 +33,7 @@ CLASSES = ("current", "rationale", "proposal", "record")
 
 ROOT_GUIDANCE = "AGENTS.md"
 ROOT_BUDGET = 80
+LOCAL_BUDGET = 40
 
 # link path -> (target as written in the link, import line accepted instead,
 #               required)
@@ -404,6 +405,11 @@ def doc004_scenario_guidance(repo: Repo) -> List[Finding]:
                     f"status 'template' belongs to {TEMPLATE_FOLDER}/ alone; "
                     "a copied scenario must state its own status and fill "
                     "in the copied guidance"))
+        if len(lines) > LOCAL_BUDGET:
+            findings.append(Finding(
+                rel, LOCAL_BUDGET + 1, "DOC004",
+                f"{len(lines)} lines; the limit is {LOCAL_BUDGET}. Keep what "
+                "is specific to this folder and link to docs/ for the rest"))
         present = {line.strip() for line in lines}
         for heading in SCENARIO_HEADINGS:
             if heading not in present:

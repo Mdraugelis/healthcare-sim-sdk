@@ -54,7 +54,7 @@ Approved SDK001 locations: `healthcare_sim_sdk/core/rng.py` (the partitioner), `
 | DOC001 | A relative markdown link whose target does not exist | A dead link sends the reader nowhere |
 | DOC002 | A repo path in backticks that does not exist, in a document classed `current` | A current rule must not point at something that is gone. Records are exempt |
 | DOC003 | `CLAUDE.md` that is not a symlink to `AGENTS.md` (or the one-line import `@AGENTS.md`); any dangling symlink | A copy drifts from its source |
-| DOC004 | A scenario folder without an `AGENTS.md`, or one missing its status line or a standard heading; a copy of the template still marked `template` | Local guidance is part of a scenario |
+| DOC004 | A scenario folder without an `AGENTS.md`, or one missing its status line or a standard heading; a copy of the template still marked `template`; one longer than 40 lines | Local guidance is part of a scenario, and stays short |
 | DOC005 | A runner module, test path or file named in a scenario `AGENTS.md` that does not exist. Paths under its "Private files" heading are exempt: those files are ignored by git on purpose | Commands in guidance must be real |
 | DOC006 | A markdown file with no class in [`AUTHORITY.md`](AUTHORITY.md); a row that matches no file, repeats, or has an unknown class | Every document is a current rule, rationale, a proposal or a record |
 | DOC007 | Root `AGENTS.md` longer than 80 lines | It loads in every session |
@@ -70,6 +70,10 @@ The class lived in `scripts/old_tool.py`. <!-- docs-check: allow DOC002 -- remov
 ```
 
 A suppression without a reason is ignored. Tests build their broken trees at run time (`tests/unit/test_check_docs.py`), so no dead link or dangling symlink is tracked.
+
+### Loading smoke check
+
+`scripts/smoke_claude_loading.sh` asks a signed-in Claude Code to read one scenario file and prints every instruction file it loaded. It needs credentials, so it is run by hand and is not a gate step. Results are recorded in `reports/`.
 
 ## Suppressing a finding
 
