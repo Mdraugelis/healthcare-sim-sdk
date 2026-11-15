@@ -1,9 +1,9 @@
 """Controlled probability model for simulation.
 
 Generates probability predictions that achieve target AUC and
-calibration characteristics. Unlike ControlledBinaryClassifier
-which targets PPV/sensitivity at a threshold, this targets overall
-discrimination (AUC) and calibration (slope near 1.0).
+calibration characteristics. It targets overall discrimination (AUC)
+and calibration (slope near 1.0); for a threshold-based operating point
+use ControlledMLModel (healthcare_sim_sdk/ml/model.py).
 """
 
 import warnings
