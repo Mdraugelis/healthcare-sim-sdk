@@ -1,5 +1,7 @@
 # Research: 30-Paper Reproducibility Audit
 
+> **Historical record (April 2026).** This audit's reproduction labels (REPRODUCED, PARTIALLY_REPRODUCED, "zero contradicted") are superseded. Most exercises used the published result to set an input, so they are calibration, not independent reproduction, and the MASAI exercise currently points the wrong way. Current status of each exercise: [`docs/design_principles.md`, Published-Study Calibration Exercises](../docs/design_principles.md#published-study-calibration-exercises). The files below are kept unchanged as a record of how the exercises were built.
+
 **Completed:** April 6, 2026
 **Branch:** `research/30-paper-audit`
 
@@ -61,9 +63,9 @@ now pass (104/104).
 
 ## Usage
 
-Run any scenario as:
+Four exercises have runners: `paper01_epic_esm`, `paper03_kaiser_aam`, `paper04_insight_rct` and `paper05_composer`. Run one as:
 ```bash
-python3 healthcare_sim_sdk/scenarios/paper06_shield_rt/run_evaluation.py
+python3 healthcare_sim_sdk/scenarios/paper03_kaiser_aam/run_evaluation.py
 ```
 
-All scenarios follow the standard 5-method contract and pass structural verification.
+The runners print the simulated result beside the published value. Their checks are sanity checks and do not test the published effect size. SHIELD-RT has no runner; use the frozen-input benchmark in `docs/blinded_benchmark.md`.

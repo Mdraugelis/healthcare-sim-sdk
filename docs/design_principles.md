@@ -2,7 +2,7 @@
 
 > Numerical proof-point claims below are historical. The four revised reports in `reports/` supersede results produced before label-free scoring and the ADD fixes.
 
-> A design principles document for the `healthcare-sim-sdk`. Explains why the SDK is built the way it is, what it enables, what it deliberately excludes, and the lessons we learned building and validating it against 30 published healthcare AI deployment papers.
+> A design principles document for the `healthcare-sim-sdk`. Explains why the SDK is built the way it is, what it enables, what it deliberately excludes, and the lessons we learned building it, including calibration exercises based on published healthcare AI deployment studies.
 
 ---
 
@@ -451,11 +451,11 @@ These tests are the ones that caught the `auc_score` tied-value bug fixed in the
 
 ## What This SDK Enables
 
-Six concrete question types, each with an example drawn from validated work in this repository.
+Six concrete question types, each with an example from work in this repository. Examples marked *calibration exercise* used the published result to set an input. They show how the SDK is used; they are not independent predictions of those results.
 
 ### 1. "How good does the model need to be?"
 
-**Example:** The TREWS 30-seed replication. Running the sepsis scenario at AUC=0.82 with the calibrated TREWS config produces a 4.27pp mean mortality reduction among septic patients (95% CI: 3.30-5.56), consistent with the published 3.3pp adjusted reduction. The sweep across capacity × baseline delay showed that at this AUC, the binding constraint is not model performance but operational capacity — a finding that changes the deployment conversation from "build a better model" to "staff the response team adequately."
+**Example (calibration exercise):** The TREWS 30-seed run. Baseline clinical detection and time-dependent treatment effectiveness were added after a first run fell far short of the published result. With those mechanisms, the sepsis scenario at AUC=0.82 produces a 4.27pp mean mortality reduction among septic patients (95% CI: 3.30-5.56), bracketing the published 3.3pp adjusted reduction. The sweep across capacity × baseline delay showed that at this AUC, the binding constraint is not model performance but operational capacity — a finding that changes the deployment conversation from "build a better model" to "staff the response team adequately."
 
 ### 2. "How many resources should we apply?"
 
@@ -467,7 +467,7 @@ Six concrete question types, each with an example drawn from validated work in t
 
 ### 4. "Will this be equitable?"
 
-**Example:** The Rosen no-show replication. ML-targeted phone reminders produce a 5.3pp no-show reduction for Black patients versus 3.2pp for White patients, narrowing the racial disparity gap by 2.1pp. The equity mechanism emerges automatically from the multiplicative effectiveness model applied to higher-baseline-risk patients — no per-race effectiveness parameters needed. This reproduces the Rosen et al. (2023) finding that ML-targeted interventions can narrow, rather than exacerbate, demographic gaps.
+**Example (calibration exercise):** The Rosen no-show configuration. ML-targeted phone reminders produce a 5.3pp no-show reduction for Black patients versus 3.2pp for White patients, narrowing the racial disparity gap by 2.1pp. The equity mechanism emerges automatically from the multiplicative effectiveness model applied to higher-baseline-risk patients — no per-race effectiveness parameters needed. This matches the direction Rosen et al. (2023) reported, under a configuration set from that study.
 
 ### 5. "Should we buy this vendor's tool?"
 
@@ -479,24 +479,29 @@ Six concrete question types, each with an example drawn from validated work in t
 
 ---
 
-## Validated Against Published Literature
+## Published-Study Calibration Exercises
 
-The SDK has been stress-tested against 30 landmark healthcare AI deployment papers in a systematic reproducibility audit. The results establish three things:
+The repository contains exercises based on published studies. Most used the reported clinical result to set an input such as effectiveness, capacity or baseline care. They are calibration exercises, not independent predictions of those results, and they are not an external-validation score. The historical [30-entry audit](../research/synthesis_report.md) records how they were built; its reproduction labels are superseded by this section.
 
-**The SDK works.** Among papers with sufficient deployment data, the simulation engine correctly models alert burden, intervention direction, and in the cleanest cases, reproduces published effect sizes precisely.
+Status of each exercise on main (review of 14 November 2026):
 
-| Reproducibility | Count | Papers |
-|-----------------|-------|--------|
-| **REPRODUCED** | 3 | Hong (SHIELD-RT), Adams (TREWS), Chong/Rosen (No-Show) |
-| PARTIALLY_REPRODUCED | 4 | Wong (ESM), Escobar (AAM), Boussina (COMPOSER), Manz (Nudges), Lång (MASAI) |
-| NOT_REPRODUCED | **0** | — |
-| UNDERDETERMINED | 6 | Shimabukuro, Wijnberge, Henry, Edelson, Rajkomar, Obermeyer |
+| Exercise | What it shows today |
+|---|---|
+| SHIELD-RT (`paper06_shield_rt`) | Stops with an error at its documented settings: AUC 0.81 against a population ceiling of about 0.72. Its effectiveness was fitted to the trial result, and the effect compounds on each re-flag. The separate frozen-input benchmark (`docs/blinded_benchmark.md`) predicts a −2.69 point risk difference against the published −10.00, and fails its numerical-fit criterion. |
+| MASAI (`paper09_masai`) | Points the wrong way. The simulated AI arm detects 4.30 cancers per 1,000 against 4.57 for control; the trial found 6.7 and 5.0. The no-AI branch is scored as single AI-assisted reading rather than double reading. |
+| Kaiser AAM (`paper03_kaiser_aam`) | Mortality reduction of 1.32 points against 4.6 published. Its runner checks direction and plausibility only. |
+| InSight (`paper04_insight_rct`) | Control mortality 42.3% against 21.3% published. Direction and plausibility checks only. |
+| COMPOSER (`paper05_composer`) | The no-AI branch has 0% bundle compliance, giving a 26-point gain against 5 published. Direction checks only. |
+| Epic ESM (`paper01_epic_esm`) | Prevalence 9.8% against 3.5%. Sanity checks only. |
+| Manz nudges (`paper07_manz_nudges`) | Direction checks only. |
+| TREWS (`sepsis_early_alert`, TREWS config) | Calibrated: baseline detection and treatment timing were added until the result bracketed the published value. |
+| Chong and Rosen (`noshow_targeted_reminders`) | Calibrated to each study. The tracked reports rerun exactly from their configs. |
 
-**Zero papers were NOT_REPRODUCED.** The SDK never produced a result that contradicted a paper's direction of effect. All discrepancies were magnitude gaps, calibration limitations, or missing parameters — not conceptual failures.
+What these exercises do support: the engine runs these study designs, the no-AI branch is a true counterfactual, and the mechanisms respond in the expected direction to their inputs. What they do not support: any claim that the SDK reproduces or predicts a published effect size.
 
-**Scientific reporting quality is the binding constraint, not SDK capability.** The single most common failure mode across the 30 papers was not a simulation architecture problem — it was that papers did not report the parameters needed to independently reproduce their findings. AUC is missing from 36% of deployment papers. Calibration metrics from 100%. Demographic stratification from 73%. The reproducibility crisis in clinical AI is not a lack of trials; it is a lack of reporting discipline in the trials that exist.
+A comparison with a published study needs the standard in [paper-based validation](paper_based_validation.md): inputs sourced independently of the outcome, predictions frozen before the outcome is revealed, and preregistered scoring. The [frozen-input benchmark](blinded_benchmark.md) implements that workflow; its SHIELD-RT case is outcome-exposed development work, not a blinded result.
 
-Full audit results: [`research/synthesis_report.md`](../research/synthesis_report.md) | 30 individual paper verdicts: [`research/paper_verdicts/`](../research/paper_verdicts/) | Deep-dive educational packet: [`research/educational_packet.md`](../research/educational_packet.md)
+Exercise runners print their result beside the published value and label their checks as sanity checks.
 
 ---
 
@@ -538,7 +543,7 @@ Four concrete lessons from the audit and TREWS work, each with a short story.
 
 Initial runs of the TREWS replication produced 0.16pp mortality reduction versus the published 3.3pp — a 20x gap. The root cause was not AUC, not capacity, not calibration. It was that the counterfactual branch assumed nobody detected sepsis without the AI. In reality, clinicians catch sepsis through routine care (vitals, lactate orders, clinical suspicion). The AI's value is the *time advantage* over that baseline, not the total detection benefit.
 
-Fix: implement baseline clinical detection as a per-patient Beta-distributed delay, running on both branches. Add Kumar time-dependent treatment effectiveness to reward earlier detection. Result: 4.27pp mean reduction, 95% CI [3.30, 5.56] across 30 seeds, published value within CI.
+Fix: implement baseline clinical detection as a per-patient Beta-distributed delay, running on both branches. Add Kumar time-dependent treatment effectiveness to reward earlier detection. Result: 4.27pp mean reduction, 95% CI [3.30, 5.56] across 30 seeds, published value within CI. Because these mechanisms were added after seeing the gap, the match is calibration, not prediction.
 
 **Lesson:** The counterfactual in a well-designed healthcare simulation must reflect competent standard of care. Anywhere the SDK is asked "what happens without the AI," the honest answer includes whatever clinicians do anyway.
 
@@ -552,11 +557,11 @@ Reading the Adams et al. paper revealed the reason: TREWS was decentralized with
 
 ### The Reporting Quality Lesson (30-Paper Audit)
 
-Across 30 papers, the SDK never produced a result that contradicted a paper's direction of effect (0 NOT_REPRODUCED). In every case where full reproduction failed, the failure was traced to missing parameters in the published paper: AUC (missing in 36% of deployment papers), calibration (100%), demographic stratification (73%), clinician response rate (all papers), per-patient intervention effectiveness (almost all).
+Building exercises from 30 published papers showed how often the parameters a simulation needs are missing: AUC (missing in 36% of deployment papers), calibration (100%), demographic stratification (73%), clinician response rate (all papers), per-patient intervention effectiveness (almost all). Where a parameter was missing, the exercise had to assume or fit it, often from the very result it was meant to test.
 
-The single paper reproduced to within 2% of its published target (SHIELD-RT) is the only one that reported a binary outcome, a clean AUC range, an explicit threshold, and a randomized counterfactual.
+The audit's original claim that the SDK never contradicted a paper's direction of effect does not hold: the MASAI exercise currently points the wrong way (see the table above).
 
-**Lesson:** The reproducibility crisis in clinical AI is not a lack of trials. It is a lack of reporting discipline in the trials that exist. When papers report what they need to report, the SDK reproduces them precisely. This is a finding about the state of the field, not about the SDK.
+**Lesson:** A published study can test a simulation only when its inputs are reported independently of its outcome. Otherwise the comparison is calibration. Record which inputs came from where before running, and freeze predictions before looking at the result.
 
 ### The Unit-of-Analysis Polymorphism Lesson (Stroke vs No-Show vs Sepsis)
 
@@ -583,7 +588,7 @@ A candid list of items we know we should add, drawn from the reference document 
 
 ### Model Simulation Extensions
 
-- **Detection-timing correlation mode** — make model scores correlate with proximity to disease onset, not just current risk level. Would enable full reproduction of TREWS's "detect before clinical suspicion" mechanism.
+- **Detection-timing correlation mode** — make model scores correlate with proximity to disease onset, not just current risk level. Would let the TREWS exercise represent its "detect before clinical suspicion" mechanism directly.
 
 ### Fairness and Governance
 

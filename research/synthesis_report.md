@@ -1,5 +1,7 @@
 # Healthcare Intervention Simulation SDK: Cross-Paper Synthesis Report
 
+> **Historical record (April 2026).** This audit's reproduction labels (REPRODUCED, PARTIALLY_REPRODUCED, "zero contradicted") are superseded. Most exercises used the published result to set an input, so they are calibration, not independent reproduction, and the MASAI exercise currently points the wrong way. Current status of each exercise: [`docs/design_principles.md`, Published-Study Calibration Exercises](../docs/design_principles.md#published-study-calibration-exercises). The files below are kept unchanged as a record of how the exercises were built.
+
 **30-Paper Reproducibility Audit**
 **Date:** April 6, 2026 (updated April 8, 2026)
 **Scope:** 30 landmark healthcare ML/AI papers evaluated against the Healthcare Intervention Simulation SDK
