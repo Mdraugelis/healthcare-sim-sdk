@@ -17,8 +17,8 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")  # Non-interactive backend
-import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.pyplot as plt  # noqa: E402 (backend must be set first)
+import numpy as np  # noqa: E402
 
 SWEEP_DIR = Path("outputs/monitoring_validation_sweep")
 FIG_DIR = Path("reports/monitoring_validation/figures")

@@ -17,16 +17,12 @@ import pytest
 
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from healthcare_sim_sdk.core.scenario import TimeConfig
-from healthcare_sim_sdk.core.results import SimulationResults, AnalysisDataset
+from healthcare_sim_sdk.core.results import SimulationResults
 from healthcare_sim_sdk.ml.model import ControlledMLModel
 from healthcare_sim_sdk.ml.performance import confusion_matrix_metrics, theoretical_ppv
 from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
-)
-from healthcare_sim_sdk.scenarios.noshow_overbooking.scenario import (
-    ClinicConfig,
-    NoShowOverbookingScenario,
 )
 
 from .conftest import assert_no_nan_inf
@@ -354,7 +350,6 @@ class TestMLModelBoundaries:
 
     def test_threshold_sweep_boundary(self):
         """Confusion matrix should handle threshold at exact score values."""
-        rng = np.random.default_rng(42)
         y_true = np.array([0, 1, 0, 1, 0, 1])
         y_pred = np.array([0.1, 0.3, 0.5, 0.7, 0.9, 0.2])
 

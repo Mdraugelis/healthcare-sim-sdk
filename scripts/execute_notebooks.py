@@ -26,7 +26,7 @@ def main():
             ).execute()
             nbformat.write(notebook, destination / path.name)
             print(f"PASS {path.name}", flush=True)
-        except Exception as exc:
+        except Exception as exc:  # sdk-lint: allow SDK003 -- listed; exit code 1
             failed.append(path.name)
             print(f"FAIL {path.name}: {exc}", flush=True)
     return int(bool(failed))

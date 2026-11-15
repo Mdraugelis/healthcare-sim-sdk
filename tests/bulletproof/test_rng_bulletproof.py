@@ -14,15 +14,12 @@ Categories:
 import numpy as np
 import pytest
 
-from healthcare_sim_sdk.core.rng import RNGPartitioner, RNGStreams
+from healthcare_sim_sdk.core.rng import RNGPartitioner
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
-from healthcare_sim_sdk.core.scenario import TimeConfig
 from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,
 )
-
-from .conftest import assert_no_nan_inf
 
 
 # =====================================================================

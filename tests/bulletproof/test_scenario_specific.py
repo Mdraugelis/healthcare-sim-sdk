@@ -205,23 +205,29 @@ class TestNoShowDomainInvariants:
     def test_utilization_bounded_01(self):
         """Utilization (slot filled or not) must be in {0, 1}."""
         results = self._run_noshow()
+        checked = 0
         for t in results.outcomes:
             out = results.outcomes[t]
             if "utilization" in out.secondary:
+                checked += 1
                 util = out.secondary["utilization"]
                 unique = np.unique(util)
                 assert np.all(np.isin(unique, [0, 1])), (
                     f"Non-binary utilization at t={t}: {unique}"
                 )
+        assert checked > 0, "no outcome carried 'utilization'"
 
     def test_wait_times_non_negative(self):
         """Wait times must be >= 0."""
         results = self._run_noshow()
+        checked = 0
         for t in results.outcomes:
             out = results.outcomes[t]
             if "wait_times" in out.secondary:
+                checked += 1
                 wt = out.secondary["wait_times"]
                 assert np.all(wt >= 0), f"Negative wait time at t={t}: min={wt.min()}"
+        assert checked > 0, "no outcome carried 'wait_times'"
 
     def test_noshow_events_binary(self):
         """No-show events must be binary (0 or 1)."""
@@ -278,12 +284,10 @@ class TestNoShowDomainInvariants:
             if "race_ethnicity" in out.secondary or "insurance_type" in out.secondary:
                 found_demographics = True
                 break
-        # Demographics should be present (unless t=0 has no resolved slots)
-        # Check after first timestep
-        if len(results.outcomes) > 1:
-            assert found_demographics, (
-                "No demographic data found in any outcome secondary dict"
-            )
+        assert len(results.outcomes) > 1
+        assert found_demographics, (
+            "No demographic data found in any outcome secondary dict"
+        )
 
 
 # =====================================================================

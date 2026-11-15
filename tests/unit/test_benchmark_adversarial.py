@@ -78,7 +78,7 @@ def test_plausible_forged_results_cannot_replace_supervised_execution(custody):
     forged = _synthetic_execution(case, session / "not-executed")
     forged["identity"] = read_json(session / "frozen_manifest.json")
     _replace(session / "run_result.json", forged)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="custodian-supervised execution"):
         protocol.commit_submission(session, vault)
 
 
@@ -91,7 +91,7 @@ def test_results_rewritten_after_supervised_execution_are_rejected(
     rewritten = read_json(session / "run_result.json")
     rewritten["runs"][0]["predictions"]["risk_difference"] = 0.123456
     _replace(session / "run_result.json", rewritten)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Frozen artifact changed or missing: run_result"):
         protocol.commit_submission(session, vault)
 
 
@@ -115,9 +115,9 @@ def test_concurrent_rewrite_cannot_be_signed_as_the_supervisors_output(
             attacked.append(True)
 
     monkeypatch.setattr(protocol, "_write", concurrent_write)
-    with pytest.raises(ValueError):
+    # The supervisor itself refuses; commit is never reached.
+    with pytest.raises(ValueError, match="changed before custodian receipt"):
         protocol.execute_registered(session, vault)
-        protocol.commit_submission(session, vault)
     assert attacked
 
 
@@ -131,7 +131,7 @@ def test_frozen_case_and_self_consistent_manifest_cannot_be_rewritten(custody):
     manifest["case_sha256"] = digest(changed)
     _replace(session / "frozen_case.json", changed)
     _replace(session / "frozen_manifest.json", manifest)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Frozen artifact changed or missing: frozen_case"):
         protocol.verify_session(session, vault)
 
 
@@ -153,14 +153,14 @@ def test_rewrite_after_receipt_verification_cannot_enter_submission(
         return verified
 
     monkeypatch.setattr(protocol, "verify_session", verify_then_race)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="does not match custodian receipt"):
         protocol.commit_submission(session, vault)
     assert attacked
 
 
 def test_reveal_before_committed_submission_is_rejected(custody):
     _, session, vault = custody
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="requires an intact frozen prediction"):
         protocol.reveal(session, vault)
     assert not (session / "revealed_reference.json").exists()
 
@@ -177,7 +177,7 @@ def test_revealed_vault_cannot_be_restarted_as_declared_unseen(
     changed["inputs"]["relative_effect"]["value"] = {
         "distribution": "fixed", "value": 0,
     }
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="vault is single-use"):
         protocol.freeze_case(changed, session.parent / "optimized-restart", vault)
 
 
@@ -199,8 +199,8 @@ def test_seed_selection_cannot_be_committed(custody, monkeypatch, attack):
         return result
 
     monkeypatch.setattr(execution, "run_isolated", incomplete)
-    with pytest.raises(ValueError):
-        protocol.execute_registered(session, vault)
+    protocol.execute_registered(session, vault)
+    with pytest.raises(ValueError, match="Missing, reordered, duplicate or unexpected seeds"):
         protocol.commit_submission(session, vault)
 
 
@@ -218,7 +218,7 @@ def test_withheld_target_cannot_be_delivered_through_source_ledger(linked):
             "available_at": "2020-01-01", "derived_from": ["target"],
         }
         case["sources"]["synthetic"]["derived_from"] = ["bridge"]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Prohibited withheld-outcome dependency"):
         validate_case(case)
 
 
@@ -233,5 +233,5 @@ def test_unexecutable_or_redefined_adapter_estimands_fail_before_freeze(attack):
         case["endpoints"][0]["lower_bound"] = -100
     else:
         case["scoring"]["primary_endpoint"] = "control_risk"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must match shield_rt_v1"):
         validate_case(case)

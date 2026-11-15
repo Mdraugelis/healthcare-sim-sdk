@@ -14,13 +14,15 @@ pre-commit install
 
 ## Before you open a PR
 
-Run these locally — CI runs the same checks:
+Run the quality gate locally. CI runs the same script:
 
 ```bash
-flake8 healthcare_sim_sdk/
-mypy healthcare_sim_sdk/
-pytest tests/
+scripts/quality_gate.sh --worktree
 ```
+
+It needs `git`, `uv` and `tar`. It installs Python 3.12 and `requirements/lock.txt` (hash-verified), then runs Flake8, Ruff, sdk-lint, the invariant checks, the public tests, the notebooks, two wheel builds that must be identical, and a smoke test of the installed wheel, with network off where the platform allows. See `docs/lint_rules.md`.
+
+Tests that need institution-private files are marked `private` and are not part of the gate. Run them where the files exist with `SIM_SDK_PRIVATE_TESTS=1 pytest -m private`.
 
 Pre-commit hooks enforce the architecture invariants described in `CLAUDE.md` and `.claude/invariants.yaml`:
 

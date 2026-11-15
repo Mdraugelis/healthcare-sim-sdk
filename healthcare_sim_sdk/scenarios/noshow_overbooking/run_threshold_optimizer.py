@@ -212,10 +212,8 @@ def main(cfg: DictConfig) -> float:
     config_dict["experiment_name"] = "threshold_optimizer"
 
     save_experiment(out_dir, config_dict, metrics)
-    try:
-        register_experiment(out_dir)
-    except Exception as e:
-        logger.warning("Catalog registration failed: %s", e)
+    # A failed registration must fail the run, not be logged and skipped.
+    register_experiment(out_dir)
 
     logger.info(
         "Result: util=%.1f%% coll=%.1f%% WL=%d burden=%d (%.1fs)",

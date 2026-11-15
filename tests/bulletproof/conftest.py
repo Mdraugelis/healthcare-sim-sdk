@@ -9,9 +9,7 @@ import pytest
 
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from healthcare_sim_sdk.core.scenario import TimeConfig
-from healthcare_sim_sdk.core.rng import RNGPartitioner
 from healthcare_sim_sdk.ml.model import ControlledMLModel
-from healthcare_sim_sdk.ml.performance import auc_score, confusion_matrix_metrics
 from healthcare_sim_sdk.scenarios.stroke_prevention.scenario import (
     StrokeConfig,
     StrokePreventionScenario,

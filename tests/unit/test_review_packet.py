@@ -109,7 +109,7 @@ def test_failed_execution_retained(tmp_path):
 
 def test_invalid_cases_and_artifact_paths_rejected(tmp_path):
     p = packet(tmp_path)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not JSON compliant: nan"):
         p.add_run("a", 1, metrics={"rate": float("nan")})
     with pytest.raises(ValueError, match="Artifact"):
         p.add_run("a", 1, artifacts=["../secret"])

@@ -66,7 +66,7 @@ def main():
         raise ValueError("Unsupported static adapter")
     try:
         from healthcare_sim_sdk.experiments.benchmark.shield_rt import run_case
-    except Exception as exc:
+    except Exception as exc:  # sdk-lint: allow SDK003 -- every seed recorded as failed
         result["runs"] = [_failure(seed, exc) for seed in case["run_plan"]["seeds"]]
         _write(result_path, result)
         return 1
@@ -76,7 +76,7 @@ def main():
             if not isinstance(record, dict) or record.get("seed") != seed:
                 raise ValueError("Adapter must return the requested seed record")
             json.dumps(record, allow_nan=False)
-        except Exception as exc:
+        except Exception as exc:  # sdk-lint: allow SDK003 -- seed recorded as failed
             record = _failure(seed, exc)
         result["runs"].append(record)
         _write(result_path, result)

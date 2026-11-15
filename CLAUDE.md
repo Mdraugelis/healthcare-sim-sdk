@@ -40,8 +40,8 @@ The SDK is not the right tool for every problem.
 ## Code Quality
 
 - Pre-commit hooks run automatically on every commit
-- Run `flake8 healthcare_sim_sdk/` before committing
-- Run `pytest tests/` before committing
+- Run `scripts/quality_gate.sh --worktree` before opening a PR. It is the same check CI runs: locked environment (`requirements/lock.txt`), Flake8, Ruff, sdk-lint, invariants, public tests, notebooks, reproducible wheel and a wheel smoke test, with network off. Rules and suppressions: `docs/lint_rules.md`
+- Quick loop while editing: `flake8 healthcare_sim_sdk tests scripts`, `python scripts/sdk_lint.py`, `pytest -m "not private" tests/`
 - Tests go in `tests/unit/`, `tests/integration/`, or `tests/bulletproof/`
 
 ## Key Directories

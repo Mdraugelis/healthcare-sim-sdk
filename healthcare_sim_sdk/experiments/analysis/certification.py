@@ -234,7 +234,7 @@ def run_design_certification(config: DesignCertificationConfig) -> dict[str, Any
                         "observed_denominator_max": int(
                             data.observed_denominators.max()),
                     })
-                except Exception as exc:
+                except Exception as exc:  # sdk-lint: allow SDK003 -- recorded; the arm FAILs
                     errors.append({"repetition": repetition, "seed": seed,
                                    "error": f"{type(exc).__name__}: {exc}"})
             # Retain failed repetitions; never calculate a certified rate from

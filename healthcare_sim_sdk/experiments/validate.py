@@ -293,7 +293,7 @@ def collect_validation(
                         "Scenario validator", "Scenario validator returned no evidence",
                         "one or more checks", "empty", "exact",
                         status=CheckStatus.NOT_RUN, category="scenario"))
-            except Exception as exc:
+            except Exception as exc:  # sdk-lint: allow SDK003 -- recorded as a FAIL check
                 checks.append(Check(
                     "Scenario validator", "Scenario validator must complete",
                     "completed checks", type(exc).__name__, "exact", detail=str(exc),

@@ -42,7 +42,7 @@ def run_demo(output_dir, config_path=DEFAULT_CONFIG) -> Path:
             try:
                 metrics, checks, cases, artifacts = run_reviewed(
                     cell_id, cell, config, seed, output_dir)
-            except Exception as exc:  # recorded, never hidden
+            except Exception as exc:  # sdk-lint: allow SDK003 -- recorded as a failed run
                 packet.add_run(cell_id, seed, error=f"{type(exc).__name__}: "
                                f"{exc}")
                 continue

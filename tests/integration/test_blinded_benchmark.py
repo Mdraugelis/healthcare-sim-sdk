@@ -81,25 +81,29 @@ def test_terminal_failures_stay_visible_and_can_be_reviewed(registered, monkeypa
     assert result["completeness"]["status"] == "FAIL"
 
 
-@pytest.mark.parametrize("mutate", [
-    lambda c: c.update(secret_target=.123),
-    lambda c: c["sources"]["illustrative_assumptions"].update(
-        available_at="2027-01-01"),
-    lambda c: c["inputs"]["n_control"].update(value=True),
-    lambda c: c["inputs"]["baseline_risk"]["value"].update(high=float("nan")),
-    lambda c: c["sources"]["illustrative_assumptions"].update(
-        derived_from=["illustrative_assumptions"]),
+@pytest.mark.parametrize("mutate,match", [
+    (lambda c: c.update(secret_target=.123), "unknown=.'secret_target'"),
+    (lambda c: c["sources"]["illustrative_assumptions"].update(
+        available_at="2027-01-01"), "unavailable at the cutoff"),
+    (lambda c: c["inputs"]["n_control"].update(value=True),
+     "n_control must be an integer"),
+    # Rejected by strict JSON canonicalization before the range check.
+    (lambda c: c["inputs"]["baseline_risk"]["value"].update(high=float("nan")),
+     "not JSON compliant: nan"),
+    (lambda c: c["sources"]["illustrative_assumptions"].update(
+        derived_from=["illustrative_assumptions"]), "Cyclic input provenance"),
 ])
-def test_invalid_input_contract_refused_before_execution(mutate):
+def test_invalid_input_contract_refused_before_execution(mutate, match):
     case = deepcopy(read_json(ROOT / "examples/benchmarks/shield_rt_pilot.json"))
     mutate(case)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=match):
         validate_case(case)
 
 
 def test_nonfinite_and_duplicate_json_are_rejected(tmp_path):
     path = tmp_path / "invalid.json"
-    for text in ('{"x":NaN}', '{"x":1,"x":2}'):
+    for text, match in (('{"x":NaN}', "Nonfinite JSON constant"),
+                        ('{"x":1,"x":2}', "Duplicate JSON key")):
         path.write_text(text)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=match):
             read_json(path)

@@ -59,7 +59,7 @@ def test_interval_score_penalizes_width_and_misses():
     assert interval_score(-10, 10, 1, .1) == 20
     assert interval_score(0, 2, 3, .1) == 22
     assert interval_score(0, 2, -1, .1) == 22
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="lower <= upper"):
         interval_score(2, 0, 1)
 
 

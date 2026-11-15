@@ -6,8 +6,6 @@ should either produce valid numbers or raise a clear error.
 """
 
 import numpy as np
-import pytest
-import warnings
 
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from healthcare_sim_sdk.core.scenario import TimeConfig
@@ -19,7 +17,6 @@ from healthcare_sim_sdk.ml.performance import (
     hosmer_lemeshow_test,
     theoretical_ppv,
 )
-from healthcare_sim_sdk.population.risk_distributions import beta_distributed_risks
 from healthcare_sim_sdk.population.temporal_dynamics import (
     annual_risk_to_hazard,
     hazard_to_timestep_probability,

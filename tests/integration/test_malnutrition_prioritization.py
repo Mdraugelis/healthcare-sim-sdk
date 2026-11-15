@@ -1,10 +1,8 @@
 """Integration tests: step purity, exports, determinism for the
 malnutrition prioritization scenario."""
 
-from pathlib import Path
-
 import numpy as np
-import pytest
+from tests.private_profile import MALNUTRITION_MODEL, requires_private_files
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
@@ -113,14 +111,7 @@ class TestDeterminism:
         assert not np.array_equal(harm_a, harm_b)
 
 
-_CONFIG_DIR = Path(
-    "healthcare_sim_sdk/scenarios/malnutrition_prioritization/configs")
-
-
-@pytest.mark.skipif(
-    not ((_CONFIG_DIR / "model_frozen.yaml").exists()
-         and (_CONFIG_DIR / "model_targets.yaml").exists()),
-    reason="local model_targets.yaml / model_frozen.yaml not present")
+@requires_private_files(*MALNUTRITION_MODEL)
 class TestMalnutritionPurityMLOn:
 
     def test_step_purity_with_ml_arm(self):
