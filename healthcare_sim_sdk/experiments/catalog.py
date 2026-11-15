@@ -10,6 +10,7 @@ Usage:
     catalog.register(output_dir, config, metrics)
     catalog.list_experiments()
     catalog.list_by_scenario("noshow_overbooking")
+    catalog.list_verified()
     exp = catalog.load("20260328_220210")
 """
 
@@ -39,12 +40,20 @@ class ExperimentCatalog:
         config: Dict,
         metrics: Dict,
         notes: str = "",
+        *,
+        validated: Optional[bool] = None,
+        code_revision: Optional[Dict] = None,
     ) -> None:
         """Register a completed experiment.
 
         Stores a standard set of fields plus all metrics as a
         nested dict. Any scenario can store domain-specific
         metrics without changing the catalog schema.
+
+        ``validated`` is True only when every required check passed, False
+        when checks ran and the gate is blocked, and None when no
+        validation record exists. Readers must not treat an entry as a
+        verified result unless ``validated`` is True.
         """
         entry = {
             "timestamp": config.get("timestamp", ""),
@@ -62,6 +71,13 @@ class ExperimentCatalog:
             ),
             "metrics": metrics,
             "notes": notes,
+            "validated": validated,
+            "validation_status": (
+                "verified" if validated is True
+                else "unverified" if validated is False
+                else "no validation record"
+            ),
+            "code_revision": code_revision,
             "registered_at": datetime.now().isoformat(),
         }
 
@@ -84,6 +100,10 @@ class ExperimentCatalog:
             e for e in self._entries
             if e.get("scenario") == scenario
         ]
+
+    def list_verified(self) -> List[Dict]:
+        """List only experiments whose required checks all passed."""
+        return [e for e in self._entries if e.get("validated") is True]
 
     def find(self, timestamp: str) -> Optional[Dict]:
         """Find an experiment entry by timestamp (partial match)."""

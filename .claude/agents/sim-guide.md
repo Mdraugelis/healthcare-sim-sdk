@@ -332,9 +332,9 @@ the engine behavior, this is a signal that either:
 
 The following tools are already built into the SDK and available for your use:
 
-**`experiments/lifecycle.py`** — `finalize_experiment(output_dir, config, metrics)` is the standard post-simulation call. Handles save and catalog registration. For sweeps, `register_sweep(sweep_dir)` batch-registers all cells.
+**`experiments/lifecycle.py`** — `finalize_experiment(output_dir, config, metrics)` is the standard post-simulation call. It saves the run, writes `provenance.json` and `validation.json`, and registers it in the catalog with `validated` true or false. Supply your verification results as `validation_checks`, name the ones that must pass in `required_checks`, and set `require_validated=True` before reporting a result: a blocked run is then kept for diagnosis but never registered. `ExperimentCatalog.list_verified()` returns verified runs only. For sweeps, `register_sweep(sweep_dir)` batch-registers all cells and skips rejected ones. See `docs/experiment_verification.md`.
 
-**`experiments/validate.py`** — Generic validation framework (`validate_generic()` + `format_appendix()`). Scenario-specific validators can be passed as callables. Checks config/metrics existence, seed, timestamp.
+**`experiments/validate.py`** — Generic validation framework (`validate_generic()` + `format_appendix()`). Scenario-specific validators can be passed as callables. Checks config/metrics existence and strict JSON, seed, timestamp, and explicit `MetricRule` bounds. Each check is PASS, FAIL, NOT_RUN, INCONCLUSIVE or NOT_APPLICABLE; `checks_passed()` is the gate.
 
 **`scripts/register_sweep.py`** — CLI tool to register a completed Hydra `--multirun` sweep: `python scripts/register_sweep.py outputs/sweep_<timestamp>/`.
 

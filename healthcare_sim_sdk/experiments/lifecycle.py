@@ -18,10 +18,15 @@ Usage:
 
 import json
 import logging
+from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from healthcare_sim_sdk.experiments.catalog import ExperimentCatalog
+from healthcare_sim_sdk.experiments.provenance import (
+    PROVENANCE_FILE, write_provenance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +83,24 @@ def register_experiment(
         )
         return
 
+    validation = _load_json(output_dir / "validation.json")
+    if validation.get("rejected"):
+        logger.warning(
+            "%s failed required validation — not registered",
+            output_dir,
+        )
+        return
+
+    provenance = _load_json(output_dir / PROVENANCE_FILE)
+
     if catalog is None:
         catalog = ExperimentCatalog()
 
-    catalog.register(output_dir, config, metrics)
+    catalog.register(
+        output_dir, config, metrics,
+        validated=validation.get("validated") if validation else None,
+        code_revision=provenance.get("code_revision"),
+    )
     logger.info(
         "Registered %s in catalog",
         config.get("timestamp", output_dir.name),
@@ -138,16 +157,80 @@ def finalize_experiment(
     metrics: Dict[str, Any],
     results: Optional[Dict[str, Any]] = None,
     notes: str = "",
+    *,
+    validation_checks=None,
+    required_checks=(),
+    require_validated: bool = False,
 ) -> Path:
-    """Full lifecycle: save -> register.
+    """Save, record provenance, validate, then register if allowed.
 
-    This is the recommended single call for runners to use
-    after simulation completes.
+    Saving is not certification. Order of operations:
+
+    1. Save config.json, metrics.json and results.json.
+    2. Write provenance.json: code revision, config hash, seeds,
+       Python and dependency versions.
+    3. Run the generic artifact checks plus the supplied checks and
+       write validation.json.
+    4. Register in the catalog, with ``validated`` set from the gate.
+
+    A run whose artifacts fail the generic checks is never registered.
+    With ``require_validated=True``, a run whose required checks fail or
+    did not run is never registered either: its files are kept for
+    diagnosis, validation.json is marked ``rejected``, and ValueError is
+    raised. Without it, the run is registered as unverified, and only
+    ``ExperimentCatalog.list_verified()`` returns verified runs.
     """
     output_dir = Path(output_dir)
 
+    from .validate import (
+        Check, CheckStatus, checks_passed, ensure_required_checks,
+        validate_generic,
+    )
+    config = dict(config)
+    config.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
     save_experiment(output_dir, config, metrics, results)
-    register_experiment(output_dir)
+    write_provenance(output_dir, config)
+
+    artifact_checks = validate_generic(output_dir)
+    artifacts_ok = checks_passed(artifact_checks)
+    checks = list(artifact_checks)
+    supplied_checks = (list(validation_checks)
+                       if validation_checks is not None else [])
+    if not supplied_checks:
+        checks.extend([
+            Check("simulation_validation", "No simulation checks supplied",
+                  "run-specific checks", None, "declared scope", False,
+                  status=CheckStatus.NOT_RUN, category="simulation"),
+            Check("analysis_validation", "No analysis checks supplied",
+                  "run-specific checks", None, "declared scope", False,
+                  status=CheckStatus.NOT_RUN, category="analysis"),
+        ])
+    else:
+        checks.extend(supplied_checks)
+    checks = ensure_required_checks(checks, required_checks)
+    valid = checks_passed(checks)
+    rejected = require_validated and not valid
+    will_register = artifacts_ok and not rejected
+
+    (output_dir / "validation.json").write_text(json.dumps({
+        "validated": valid,
+        "rejected": rejected,
+        "registered": will_register,
+        "scope": "Only the explicitly supplied checks",
+        "checks": [asdict(check) for check in checks],
+    }, indent=2, default=str, allow_nan=False))
+
+    if will_register:
+        register_experiment(output_dir)
+    elif not artifacts_ok:
+        logger.warning(
+            "%s failed artifact checks — not registered", output_dir,
+        )
+    if rejected:
+        raise ValueError(
+            "Experiment validation incomplete or failed; not registered. "
+            f"Diagnostic files kept in {output_dir}"
+        )
 
     return output_dir
 
