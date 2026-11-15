@@ -1,0 +1,12 @@
+# Power map (Table D2) for the length-of-stay and readmission experiment.
+# Post-processing: it reads the output of a registered queue-stage run
+# (run_los_readmit_sweep) and writes tables beside it.
+#   python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization.power_map root=<queue-stage output dir>
+root: ???           # required: the queue-stage output directory
+cell: "rdn_assessments_per_day=30,true_prevalence=0.3"
+
+hydra:
+  run:
+    dir: outputs/malnutrition_prioritization/power_map/${now:%Y%m%d_%H%M%S}
+  job:
+    chdir: false

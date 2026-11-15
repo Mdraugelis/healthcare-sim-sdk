@@ -3,17 +3,17 @@
 # Sweep across clinic archetypes, model AUCs, and thresholds.
 #
 # Run single config:
-#   python run_threshold_optimizer.py clinic.noshow_rate=0.13 clinic.utilization=90
+#   python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer clinic.noshow_rate=0.13 clinic.utilization=90
 #
 # Run full grid:
-#   python run_threshold_optimizer.py --multirun \
+#   python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer --multirun \
 #     clinic.noshow_rate=0.07,0.13,0.20 \
 #     clinic.utilization=80,90,110 \
 #     model.auc=0.65,0.75,0.83 \
 #     model.threshold=0.20,0.30,0.40,0.50,0.60,0.70,0.80
 #
 # Run just one clinic:
-#   python run_threshold_optimizer.py \
+#   python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_threshold_optimizer \
 #     clinic.noshow_rate=0.13 clinic.utilization=90 \
 #     model.auc=0.83 model.threshold=0.30
 
@@ -41,16 +41,17 @@ policy:
   ar1_rho: 0.95
   ar1_sigma: 0.04
 
-# -- Derived from utilization (overridden at runtime) --
-# These are set automatically based on clinic.utilization:
-#   80%  -> ob_cap=3, waitlist_per_day=2
-#   90%  -> ob_cap=2, waitlist_per_day=5
-#   110% -> ob_cap=1, waitlist_per_day=10
+# -- Operating parameters that follow from utilization --
+# Overbooking cap per provider and new waitlist requests per day.
+utilization_params:
+  80: {ob_cap: 3, wl_day: 2}
+  90: {ob_cap: 2, wl_day: 5}
+  110: {ob_cap: 1, wl_day: 10}
 
 # -- Hydra output --
 hydra:
   run:
-    dir: outputs/${now:%Y%m%d_%H%M%S}
+    dir: outputs/noshow_overbooking/threshold_optimizer/${now:%Y%m%d_%H%M%S}
   sweep:
-    dir: outputs/sweep_${now:%Y%m%d_%H%M%S}
+    dir: outputs/noshow_overbooking/threshold_optimizer/sweep_${now:%Y%m%d_%H%M%S}
     subdir: ${clinic.noshow_rate}_${clinic.utilization}_${model.type}_auc${model.auc}_t${model.threshold}

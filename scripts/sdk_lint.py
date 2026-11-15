@@ -16,6 +16,8 @@ Rules (see docs/lint_rules.md):
   SDK005 warn   Test whose every assertion sits inside an if-branch, so the
                 test can pass having checked nothing.
   SDK006 warn   BaseScenario subclass with an unfinished contract method
+  SDK007 block  launchable scenario script outside the runner contract
+                (Hydra entry, no command-line flags, finalize_experiment())
                 (body is only pass, ..., or raise NotImplementedError).
   SDK000 block  Malformed or stale suppression.
 
@@ -58,6 +60,31 @@ CHECK_CALL = re.compile(r"(^|_)(assert|check|verify|validate)|^testing$|"
 SUPPRESS = re.compile(
     r"#\s*sdk-lint:\s*allow\s+(SDK\d{3})(?:\s*--\s*(.*\S))?")
 BROAD = {"Exception", "BaseException"}
+
+# SDK007: the runner contract (config/invariants.yaml, runner_contract).
+RUNNER_ROOT = "healthcare_sim_sdk/scenarios/"
+RUNNER_BANNED_IMPORTS = {"argparse"}
+RUNNER_BANNED_CALLS = {
+    "ExperimentCatalog", "save_experiment", "register_experiment",
+}
+INVARIANTS_FILE = Path(__file__).resolve().parents[1] / "config" / \
+    "invariants.yaml"
+_EXEMPTIONS: Optional[Set[str]] = None
+
+
+def finalize_exemptions() -> Set[str]:
+    """Scripts listed with a reason in config/invariants.yaml as exempt from
+    the final finalize_experiment() call. Read once."""
+    global _EXEMPTIONS
+    if _EXEMPTIONS is None:
+        import yaml
+        contract = yaml.safe_load(INVARIANTS_FILE.read_text()).get(
+            "runner_contract", {})
+        _EXEMPTIONS = {
+            entry["path"] for entry in contract.get("finalize_exemptions", [])
+            if str(entry.get("reason", "")).strip()}
+    return _EXEMPTIONS
+
 
 # Lint fixtures are deliberately bad code; they are linted only by tests.
 EXCLUDED_DIRS = ("tests/lint_fixtures/",)
@@ -312,6 +339,10 @@ def _unfinished(fn: ast.FunctionDef) -> bool:
     return False
 
 
+# The only way past SDK007 is a reviewed entry in config/invariants.yaml.
+UNSUPPRESSIBLE = {"SDK007"}
+
+
 def _comments(source: str):
     """(line, text) for real comments only; strings are not suppressions."""
     try:
@@ -340,6 +371,11 @@ def _apply_suppressions(rel: str, lines: Sequence[str],
                                f"suppression of {m.group(1)} needs a reason "
                                "after '--'"))
             continue
+        if m.group(1) in UNSUPPRESSIBLE:
+            out.append(Finding(rel, number, 1, "SDK000", BLOCK,
+                               f"{m.group(1)} cannot be suppressed; the "
+                               "exemption list is config/invariants.yaml"))
+            continue
         marks[number] = m.group(1)
     used = set()
     for f in findings:
@@ -356,6 +392,73 @@ def _apply_suppressions(rel: str, lines: Sequence[str],
     return out
 
 
+def _is_main_guard(node: ast.AST) -> bool:
+    return (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+            and isinstance(node.test.left, ast.Name)
+            and node.test.left.id == "__name__")
+
+
+def _runner_contract(tree: ast.Module, rel: str) -> List[Finding]:
+    """SDK007: a launchable scenario script starts through Hydra, takes no
+    command-line flags, and ends an experiment with finalize_experiment()."""
+    guard = next((n for n in tree.body if _is_main_guard(n)), None)
+    if not rel.startswith(RUNNER_ROOT) or guard is None:
+        return []
+    found: List[Finding] = []
+
+    def add(node, message):
+        found.append(Finding(rel, getattr(node, "lineno", 1),
+                             getattr(node, "col_offset", 0) + 1,
+                             "SDK007", BLOCK, message))
+
+    hydra_entry = False
+    finalize_call = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for dec in node.decorator_list:
+                target = dec.func if isinstance(dec, ast.Call) else dec
+                if _dotted(target) == "hydra.main":
+                    hydra_entry = True
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in RUNNER_BANNED_IMPORTS:
+                    add(node, f"runner imports {alias.name}; settings come "
+                              "from the Hydra YAML config, not command-line "
+                              "flags")
+        elif isinstance(node, ast.ImportFrom):
+            if node.module in RUNNER_BANNED_IMPORTS:
+                add(node, f"runner imports {node.module}; settings come "
+                          "from the Hydra YAML config, not command-line flags")
+        elif isinstance(node, ast.Attribute):
+            if _dotted(node) == "sys.argv":
+                add(node, "runner reads sys.argv; settings come from the "
+                          "Hydra YAML config")
+        elif isinstance(node, ast.Call):
+            name = _call_name(node)
+            if name == "finalize_experiment":
+                finalize_call = finalize_call or node
+            elif name in RUNNER_BANNED_CALLS:
+                add(node, f"runner calls {name}() directly; end the run with "
+                          "finalize_experiment(), which saves, validates "
+                          "and then registers")
+    if not hydra_entry:
+        add(guard, "launchable script does not start through Hydra; "
+                   "decorate main() with @hydra.main and keep its settings "
+                   "in the scenario's configs/ folder")
+    exempt = rel in finalize_exemptions()
+    if finalize_call is None and not exempt:
+        add(guard, "runner never calls finalize_experiment(); every "
+                   "experiment ends with it. A script that is not an "
+                   "experiment needs an entry with a reason under "
+                   "runner_contract.finalize_exemptions in "
+                   "config/invariants.yaml")
+    if finalize_call is not None and exempt:
+        add(finalize_call, "script is listed as exempt from "
+                           "finalize_experiment() but calls it; remove its "
+                           "entry from config/invariants.yaml")
+    return found
+
+
 def lint_source(source: str, rel: str) -> List[Finding]:
     lines = source.splitlines()
     try:
@@ -365,7 +468,8 @@ def lint_source(source: str, rel: str) -> List[Finding]:
                         f"syntax error: {exc.msg}")]
     checker = _Checker(rel, lines)
     checker.visit(tree)
-    return sorted(set(_apply_suppressions(rel, lines, checker.findings)))
+    findings = checker.findings + _runner_contract(tree, rel)
+    return sorted(set(_apply_suppressions(rel, lines, findings)))
 
 
 def iter_files(paths: Iterable[str], root: Path) -> List[Path]:

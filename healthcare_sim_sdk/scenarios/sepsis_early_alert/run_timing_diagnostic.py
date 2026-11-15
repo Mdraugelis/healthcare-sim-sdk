@@ -8,21 +8,25 @@ For patients who develop sepsis, compare:
 If positive, ML IS providing earlier treatment.
 If zero, ML detection timing = baseline detection timing.
 
-Usage:
-    python run_timing_diagnostic.py
+The cases are in configs/timing_diagnostic.yaml. Usage:
+    python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_timing_diagnostic
 """
 
 import logging
 
+from pathlib import Path
+
+import hydra
 import numpy as np
 import yaml
-from pathlib import Path
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.engine import (
     BranchedSimulationEngine,
     CounterfactualMode,
 )
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.runner import runner_settings
 from healthcare_sim_sdk.scenarios.sepsis_early_alert.scenario import (
     SepsisConfig,
     SepsisEarlyAlertScenario,
@@ -34,9 +38,10 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 CONFIGS_DIR = Path(__file__).parent / "configs"
 
 
-def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
+def run_diagnostic(max_hours: float, capacity: int, seed: int,
+                   study: str):
     """Run TREWS and extract per-patient treatment timing."""
-    path = CONFIGS_DIR / "trews_replication.yaml"
+    path = CONFIGS_DIR / f"{study}.yaml"
     with open(path) as f:
         raw = yaml.safe_load(f)
 
@@ -328,17 +333,16 @@ def run_diagnostic(max_hours: float, capacity: int, seed: int = 42):
     logger.info("=" * 70)
 
 
-def main():
-    configs = [
-        (24, 10, "Default TREWS config"),
-        (24, 50, "Higher capacity"),
-        (72, 10, "Long baseline delay"),
-        (72, 50, "Long delay + higher capacity"),
-    ]
-
-    for max_hours, capacity, label in configs:
-        logger.info("\n>>> %s <<<", label)
-        run_diagnostic(max_hours, capacity)
+@hydra.main(version_base=None, config_path="configs",
+            config_name="timing_diagnostic")
+def main(cfg: DictConfig) -> None:
+    """A diagnostic, not an experiment: it prints timing distributions and
+    registers nothing (exemption listed in config/invariants.yaml)."""
+    settings = runner_settings(cfg)
+    for case in settings["cases"]:
+        logger.info("\n>>> %s <<<", case["label"])
+        run_diagnostic(case["max_hours"], case["capacity"],
+                       settings["seed"], settings["study"])
 
 
 if __name__ == "__main__":

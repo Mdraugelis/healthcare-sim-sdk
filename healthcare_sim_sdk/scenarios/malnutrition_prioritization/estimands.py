@@ -22,15 +22,18 @@ Estimands (per efficacy cell, per seed, aggregated over seeds):
 
 Usage (from repo root):
   python -m healthcare_sim_sdk.scenarios.malnutrition_prioritization\
-.estimands --root outputs/malnutrition/exp7_los_readmit_queue/example
+.estimands root=outputs/malnutrition/exp7_los_readmit_queue/example
 """
 
-import argparse
 import json
 from pathlib import Path
 from typing import Any, Dict, List
 
+import hydra
 import numpy as np
+from omegaconf import DictConfig
+
+from healthcare_sim_sdk.experiments.runner import runner_settings
 
 from .outcome_overlay import (
     GRID_DETECT_LOS,
@@ -238,19 +241,18 @@ def emit_d3(cell: Dict[str, Any]) -> str:
         "this sentence.*")
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", required=True)
-    ap.add_argument("--cell", default=None,
-                    help="cell label for the D tables (default: "
-                         "capacity 30 / prevalence 0.30)")
-    args = ap.parse_args()
-    root = Path(args.root)
+@hydra.main(version_base=None, config_path="configs",
+            config_name="estimands")
+def main(cfg: DictConfig) -> None:
+    """Post-processing of a registered queue-stage run; registers nothing
+    itself (exemption listed in config/invariants.yaml)."""
+    settings = runner_settings(cfg)
+    root = Path(settings["root"])
     cfg = MalnutritionConfig()
 
     overlay = json.loads((root / "overlay_results.json").read_text())
     summary = json.loads((root / "summary.json").read_text())
-    label = args.cell or "rdn_assessments_per_day=30,true_prevalence=0.3"
+    label = settings["cell"]
     idx = summary["cells"].index(label)
     cell_dir = root / f"cell_{idx:02d}"
 

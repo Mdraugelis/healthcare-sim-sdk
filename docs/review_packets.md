@@ -10,7 +10,7 @@ From the repository root, after `pip install -e ".[dev]"`:
 python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_review_demo
 ```
 
-Open `outputs/review_demo/noshow_reminders/review_packet.md`. The demo runs the targeted-reminders scenario at two call capacities (12 and 24 calls a day), three seeds each, 30 days, 2,000 synthetic patients. It takes about 20 seconds. Cells and seeds are set in `scenarios/noshow_targeted_reminders/configs/review_demo.yaml`; the claims are in `configs/review_claims.yaml`.
+Open `outputs/review_demo/noshow_reminders/review_packet.md`. The demo runs the targeted-reminders scenario at two call capacities (12 and 24 calls a day), three seeds each, 30 days, 2,000 synthetic patients. It takes about 20 seconds. Cells and seeds are set in `scenarios/noshow_targeted_reminders/configs/review_demo.yaml`, and the output folder in `configs/review_demo_run.yaml`; the claims are in `configs/review_claims.yaml`.
 
 The packet's overall machine status is `NOT_RUN`. That is deliberate. Two claims, held-out model validation and real-world study design, have no evidence in this demo, and a packet with missing required evidence cannot read as PASS.
 

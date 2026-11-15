@@ -1,0 +1,21 @@
+# TREWS exercise over many seeds. A calibration exercise: the published
+# result was used to set the study parameters, so agreement with it is
+# not a test of the simulator.
+#   python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_trews_replication
+#   ... run_trews_replication n_seeds=5
+study: trews_replication
+n_seeds: 30
+first_seed: 1
+published_reduction_pp: 3.3        # Adams et al. 2022, adjusted
+# Sanity limits recorded as checks.
+max_sepsis_count_cv: 0.10
+max_reduction_std_pp: 2.0
+
+hydra:
+  run:
+    dir: outputs/sepsis_early_alert/trews_multiseed/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sepsis_early_alert/trews_multiseed/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

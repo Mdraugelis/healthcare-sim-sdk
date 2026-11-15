@@ -1,68 +1,50 @@
-# Nurse Retention — Model Performance x Manager Capacity Sweep
-# =============================================================
+# Nurse retention: model quality (AUC) against manager capacity.
 #
-# Evaluates the interaction between model quality (AUC) and
-# manager capacity (how many check-ins per week). Grounded in
-# a tertiary health system nursing workforce (~6,800 RNs) and
-# Laudio/AONL retention research.
+# There is no threshold dimension on purpose. Manager capacity is the
+# threshold: each manager takes the top K nurses by predicted risk each
+# week, so an absolute score cut would be dominated by capacity.
 #
-# There is intentionally no threshold dimension. The manager's
-# capacity IS the threshold — each manager takes the top K nurses
-# by predicted risk score each week. Any absolute-score threshold
-# would be dominated by capacity in realistic configurations.
-#
-# Single run:
-#   python scenarios/nurse_retention/run_evaluation.py
-#
-# Full sweep (AUC x capacity):
-#   python scenarios/nurse_retention/run_evaluation.py --sweep
-#
-# Or via multirun:
-#   python scenarios/nurse_retention/run_evaluation.py --multirun \
-#     model.auc=0.60,0.65,0.70,0.75 \
-#     policy.max_interventions_per_week=2,4,6,8
-#
-# Span-of-control sweep (adds nurses_per_manager):
-#   python scenarios/nurse_retention/run_evaluation.py --multirun \
-#     model.auc=0.70,0.75 \
-#     policy.max_interventions_per_week=4,6 \
-#     population.nurses_per_manager=50,75,100
-
-# ── Required fields ──
+#   python -m healthcare_sim_sdk.scenarios.nurse_retention.run_evaluation
+#   ... run_evaluation sweep=true                    # the full grid below
+#   ... run_evaluation model_auc=0.75 max_interventions_per_manager_per_week=6
+experiment_name: nurse_retention_evaluation
+timestamp: ${now:%Y%m%d_%H%M%S}
 seed: 42
-scenario: nurse_retention
-experiment_name: nurse_retention_sweep
 
-# ── Population ──
-population:
-  n_nurses: 1000
-  nurses_per_manager: 100
-  annual_turnover_rate: 0.22
-  new_hire_fraction: 0.15
-  new_hire_risk_multiplier: 2.0
-  high_span_turnover_penalty: 0.10
+# Population
+n_nurses: 1000
+nurses_per_manager: 100
+annual_turnover_rate: 0.22
+new_hire_fraction: 0.15
+new_hire_risk_multiplier: 2.0
 
-# ── Simulation ──
+# Simulation
 n_weeks: 52
 ar1_rho: 0.95
 ar1_sigma: 0.04
-prediction_interval: 2   # score nurses every 2 weeks
+prediction_interval: 2          # score nurses every 2 weeks
 
-# ── Model ──
-model:
-  auc: 0.75
+# Model and policy for a single run (sweep: false)
+model_auc: 0.80
+max_interventions_per_manager_per_week: 4
+intervention_effectiveness: 0.50
+decay_halflife_weeks: 6.0
+cooldown_weeks: 4
 
-# ── Policy (manager intervention) ──
-policy:
-  max_interventions_per_week: 4    # per manager (the effective threshold)
-  effectiveness: 0.50              # risk reduction on check-in
-  decay_halflife_weeks: 6.0        # how fast effect wears off
-  cooldown_weeks: 4                # min weeks between re-intervention
+# sweep: false runs the single cell above. sweep: true runs the grid.
+sweep: false
+auc_grid: [0.60, 0.65, 0.70, 0.75]
+capacity_grid: [2, 4, 6, 8]
 
-# ── Hydra output ──
+# Parallel workers for the sweep. 0 = one per CPU, capped by the number
+# of cells; 1 = sequential.
+workers: 0
+
 hydra:
   run:
-    dir: outputs/${now:%Y%m%d_%H%M%S}
+    dir: outputs/nurse_retention/evaluation/${now:%Y%m%d_%H%M%S}
   sweep:
-    dir: outputs/sweep_${now:%Y%m%d_%H%M%S}
-    subdir: auc${model.auc}_cap${policy.max_interventions_per_week}
+    dir: outputs/nurse_retention/evaluation/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

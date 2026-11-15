@@ -1,0 +1,30 @@
+# Targeted reminder evaluation: ML targeting against random calling, plus
+# sweeps over reminder effectiveness and model AUC.
+#   python -m healthcare_sim_sdk.scenarios.noshow_targeted_reminders.run_evaluation
+experiment_name: noshow_targeted_reminders_evaluation
+timestamp: ${now:%Y%m%d_%H%M%S}
+seed: 42
+n_patients: 5000
+n_days: 90
+base_noshow_rate: 0.36
+n_providers: 8
+slots_per_provider: 12
+model_auc: 0.72
+targeting_mode: top_k          # top_k, top_fraction or threshold
+targeting_fraction: 0.25
+call_capacity_per_day: 24
+call_success_rate: 0.65
+reminder_effectiveness: 0.35
+
+# The grids. One run covers each list and writes one comparison.
+effectiveness_sweep: [0.20, 0.35, 0.50, 0.65, 0.80]
+auc_sweep: [0.55, 0.65, 0.74, 0.85]
+
+hydra:
+  run:
+    dir: outputs/noshow_targeted_reminders/evaluation/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/noshow_targeted_reminders/evaluation/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

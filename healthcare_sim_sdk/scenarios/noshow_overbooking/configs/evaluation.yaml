@@ -1,0 +1,30 @@
+# Structured evaluation: no overbooking, staff baseline, and a predictor
+# threshold sweep. Every setting the runner uses is here.
+#   python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_evaluation
+#   ... run_evaluation n_days=90 model_auc=0.87
+experiment_name: noshow_overbooking_evaluation
+timestamp: ${now:%Y%m%d_%H%M%S}
+seed: 42
+n_patients: 2000
+n_days: 60
+base_noshow_rate: 0.13
+n_providers: 6
+slots_per_provider: 12
+max_overbook_per_provider: 2
+new_waitlist_requests_per_day: 5
+model_auc: 0.83
+ar1_rho: 0.95
+ar1_sigma: 0.04
+baseline_threshold: 0.50
+predictor_thresholds: [0.15, 0.20, 0.25, 0.30, 0.40, 0.50]
+max_individual_overbooks: 10
+overbooking_policy: threshold   # or urgent_first
+
+hydra:
+  run:
+    dir: outputs/noshow_overbooking/evaluation/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/noshow_overbooking/evaluation/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

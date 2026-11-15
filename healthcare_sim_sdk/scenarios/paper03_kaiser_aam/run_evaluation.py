@@ -10,34 +10,36 @@ Usage:
 """
 
 import json
+
+import hydra
 import numpy as np
+from omegaconf import DictConfig
 
 from healthcare_sim_sdk.core.scenario import TimeConfig
+from healthcare_sim_sdk.experiments.lifecycle import finalize_experiment
+from healthcare_sim_sdk.experiments.runner import (
+    check, run_dir, runner_settings,
+)
 from healthcare_sim_sdk.core.engine import BranchedSimulationEngine, CounterfactualMode
 from healthcare_sim_sdk.scenarios.paper03_kaiser_aam.scenario import KaiserAAMScenario
 
 
-def run_main():
+def run_main(settings):
     print("\n=== Paper 03: Kaiser AAM (Escobar et al. 2020) ===")
     print("Calibrating to: c-stat=0.845, mortality 14.4%->9.8%")
 
     tc = TimeConfig(
-        n_timesteps=84,
+        n_timesteps=settings["n_timesteps"],
         timestep_duration=4 / 24 / 365,
         timestep_unit="4h",
-        prediction_schedule=list(range(84)),
+        prediction_schedule=list(range(settings["n_timesteps"])),
     )
 
-    n = 5000
+    n = settings["n_patients"]
     scenario = KaiserAAMScenario(
         time_config=tc,
-        seed=42,
-        model_auc=0.845,
-        alert_threshold_percentile=90.0,
-        treatment_effectiveness=0.32,
-        vqnc_review_rate=0.90,
-        vqnc_action_rate=0.60,
-        deterioration_prevalence=0.08,
+        seed=settings["seed"],
+        **settings["scenario"],
     )
 
     engine = BranchedSimulationEngine(
@@ -107,7 +109,32 @@ def run_main():
     }
 
 
-if __name__ == "__main__":
-    r = run_main()
+def _finalize(settings, summary, name):
+    """Save, verify and register the exercise through the lifecycle."""
+    checks = [
+        check(key, f"Sanity check: {key.replace('_', ' ')}", bool(passed),
+              category="sanity")
+        for key, passed in summary["checks"].items()]
+    metrics = {k: v for k, v in summary.items() if k != "checks"}
+    finalize_experiment(
+        run_dir(),
+        {"scenario": name, "experiment_name": f"{name}_evaluation",
+         "exercise": "calibration", **settings},
+        metrics, validation_checks=checks, require_validated=True,
+        notes="Calibration exercise: inputs were set from the published "
+              "result; the checks are sanity checks only.")
+
+
+@hydra.main(version_base=None, config_path="configs",
+            config_name="evaluation")
+def main(cfg: DictConfig) -> None:
+    settings = runner_settings(cfg)
+    summary = run_main(settings)
     print("\n=== SUMMARY ===")
-    print(json.dumps(r, indent=2))
+    print(json.dumps(summary, indent=2))
+    _finalize(settings, summary, "paper03_kaiser_aam")
+    print(f"\nResults saved to: {run_dir()}")
+
+
+if __name__ == "__main__":
+    main()

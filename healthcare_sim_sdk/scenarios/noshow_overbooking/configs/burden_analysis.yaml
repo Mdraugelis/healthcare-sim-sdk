@@ -1,0 +1,28 @@
+# Who carries the overbooking burden, for ethics review.
+#   python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_burden_analysis
+experiment_name: overbooking_burden_analysis
+timestamp: ${now:%Y%m%d_%H%M%S}
+seed: 42
+n_patients: 2000
+n_days: 365
+base_noshow_rate: 0.13
+n_providers: 6
+slots_per_provider: 12
+max_overbook_per_provider: 2
+new_waitlist_requests_per_day: 5
+model_type: predictor
+model_auc: 0.83
+overbooking_threshold: 0.30
+max_individual_overbooks: 10
+overbooking_policy: threshold   # or urgent_first
+ar1_rho: 0.95
+ar1_sigma: 0.04
+
+hydra:
+  run:
+    dir: outputs/noshow_overbooking/burden_analysis/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/noshow_overbooking/burden_analysis/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false

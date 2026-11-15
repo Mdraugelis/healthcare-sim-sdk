@@ -179,15 +179,17 @@ The original reference use case: evaluate whether an ML no-show predictor improv
 **Run an evaluation:**
 ```bash
 python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_evaluation \
-    --n-days 90 --n-patients 2000 --model-auc 0.83 --threshold 0.30
+    n_days=90 n_patients=2000 model_auc=0.83
 ```
+
+Settings are in `configs/evaluation.yaml`. Override any of them with `key=value`; a key that is not in the YAML is refused.
 
 **Run a governance evaluation (48 configs, equity audit):**
 ```bash
 python -m healthcare_sim_sdk.scenarios.noshow_overbooking.run_governance_eval
 ```
 
-Each run produces: `config.json`, `results.json`, `results.csv`, `report.md`, `validation_appendix.md`.
+Each run writes to `outputs/noshow_overbooking/<runner>/<timestamp>/`: `config.json`, `metrics.json`, `provenance.json`, `validation.json`, the runner's tables and report, and Hydra's own `.hydra/` record. A run whose checks fail is kept, marked rejected and left out of the catalog.
 
 ### Key Findings (Simulation)
 

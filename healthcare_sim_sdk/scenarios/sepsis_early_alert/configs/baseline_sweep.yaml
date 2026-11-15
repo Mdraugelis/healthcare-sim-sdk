@@ -1,0 +1,19 @@
+# Usual-care detection delay x rapid-response capacity, on one study's
+# parameters. Used to calibrate the TREWS exercise. One run covers the
+# grid and writes one table.
+#   python -m healthcare_sim_sdk.scenarios.sepsis_early_alert.run_baseline_sweep
+study: trews_replication
+seed: 42
+max_hours_values: [6, 12, 18, 24, 36, 48, 72]
+capacity_values: [10, 25, 50, 100]
+# Cells in this band are starred in the printed table (published ~3 pp).
+target_reduction_pp: [2.0, 4.0]
+
+hydra:
+  run:
+    dir: outputs/sepsis_early_alert/baseline_sweep/${now:%Y%m%d_%H%M%S}
+  sweep:
+    dir: outputs/sepsis_early_alert/baseline_sweep/sweep_${now:%Y%m%d_%H%M%S}
+    subdir: ${hydra.job.num}
+  job:
+    chdir: false
