@@ -22,7 +22,9 @@ from pathlib import Path
 from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
 
 # Rules that run by default. Later changes switch more on as their files land.
-ENABLED: Tuple[str, ...] = ("DOC001", "DOC006")
+ENABLED: Tuple[str, ...] = (
+    "DOC001", "DOC002", "DOC003", "DOC006", "DOC007", "DOC008", "DOC009",
+)
 ALL_CODES: Tuple[str, ...] = (
     "DOC001", "DOC002", "DOC003", "DOC004", "DOC005",
     "DOC006", "DOC007", "DOC008", "DOC009",

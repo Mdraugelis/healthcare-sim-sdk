@@ -37,8 +37,8 @@ def main():
             "     in your scenario directory instead?\n"
             "  2. Should this be proposed as a design change\n"
             "     to the main repo via RFC/discussion?\n"
-            "  3. Does this change break any of the 5 invariants\n"
-            "     documented in CLAUDE.md?\n"
+            "  3. Does this change break any invariant in\n"
+            "     config/invariants.yaml (summarized in AGENTS.md)?\n"
             "\n"
             "  This commit will proceed, but core/ changes\n"
             "  require PR review from a maintainer.\n",

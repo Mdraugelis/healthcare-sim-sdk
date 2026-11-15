@@ -12,6 +12,7 @@ build/
 # Claude Code settings (private), but keep shared files
 .claude/*
 !.claude/agents/
+!.claude/rules/
 !.claude/invariants.yaml
 
 # Generated experiment/simulation outputs (not the package code)

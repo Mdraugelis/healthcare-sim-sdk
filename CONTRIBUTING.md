@@ -20,17 +20,17 @@ Run the quality gate locally. CI runs the same script:
 scripts/quality_gate.sh --worktree
 ```
 
-It needs `git`, `uv` and `tar`. It installs Python 3.12 and `requirements/lock.txt` (hash-verified), then runs Flake8, Ruff, sdk-lint, the invariant checks, the public tests, the notebooks, two wheel builds that must be identical, and a smoke test of the installed wheel, with network off where the platform allows. See `docs/lint_rules.md`.
+It needs `git`, `uv` and `tar`. It installs Python 3.12 and `requirements/lock.txt` (hash-verified), then runs Flake8, Ruff, sdk-lint, docs-check, the invariant checks, the public tests, the notebooks, two wheel builds that must be identical, and a smoke test of the installed wheel, with network off where the platform allows. See `docs/lint_rules.md`.
 
 Tests that need institution-private files are marked `private` and are not part of the gate. Run them where the files exist with `SIM_SDK_PRIVATE_TESTS=1 pytest -m private`.
 
-Pre-commit hooks enforce the architecture invariants described in `CLAUDE.md` and `.claude/invariants.yaml`:
+Pre-commit hooks enforce the architecture invariants described in `AGENTS.md` and defined in `config/invariants.yaml`:
 
 - The 5-method scenario contract (`create_population`, `step`, `predict`, `intervene`, `measure`)
 - `step()` purity and RNG partitioning
 - No bare `np.random` outside `core/rng.py`
 
-If your change requires modifying an invariant, open a discussion first — see the "Invariant Enforcement" section of `CLAUDE.md`.
+If your change requires modifying an invariant, open a discussion first — see the "Invariants" section of `AGENTS.md`.
 
 ## Pull requests
 

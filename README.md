@@ -52,9 +52,9 @@ Either way, the verification protocol is the same (Bayes constraint, monotonicit
 
 This SDK is designed for use with an AI assistant (Claude Code, Claude Cowork, or similar) that works *with* the human throughout the simulation process. The agent guides scenario development, runs verification after every simulation — including case-level walkthroughs and conservation law checks — and helps translate findings into language appropriate for clinical leaders, governance committees, or procurement conversations.
 
-The agent protocol lives in [`.claude/agents/sim-guide.md`](.claude/agents/sim-guide.md). It covers use-case fitness screening, the always-on verification checklist, and stakeholder communication guidance.
+The agent protocol lives in [`docs/simulation_protocol.md`](docs/simulation_protocol.md). It covers use-case fitness screening, the always-on verification checklist, and stakeholder communication guidance.
 
-Claude Code and Cowork load the root [`CLAUDE.md`](CLAUDE.md) automatically. It carries the repo-wide rules and tells the agent to follow the protocol, which is read on demand. The protocol file is not a registered subagent. [`docs/AUTHORITY.md`](docs/AUTHORITY.md) says which documents are current rules, which are proposals, and which are records.
+Repo-wide rules for any coding agent are in [`AGENTS.md`](AGENTS.md). Claude Code and Cowork load it through `CLAUDE.md`, a symlink to it. It tells the agent to follow the protocol, which is read on demand. In Claude Code, `claude --agent sim-guide` starts a session that follows the protocol from the first message; that adapter is `.claude/agents/sim-guide.md`. [`docs/AUTHORITY.md`](docs/AUTHORITY.md) says which documents are current rules, which are proposals, and which are records.
 
 ## Install
 
@@ -214,8 +214,11 @@ healthcare_sim_sdk/
     _template/                  Starter template
   experiments/        Catalog, report generator, validation
 
+AGENTS.md             Repo-wide rules for coding agents (CLAUDE.md links to it)
+config/               invariants.yaml: the machine-read SDK contract
+docs/                 Protocol, rules and design; AUTHORITY.md says which is which
 examples/             14 reference notebooks (read-only)
-reports/              Replication reports and paper drafts
+reports/              Dated reports (records)
 tests/                Unit, integration, and bulletproof tests
 
 local/                Private working space — never tracked (any depth)

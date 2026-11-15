@@ -15,7 +15,7 @@ scripts/quality_gate.sh
 | Flake8 | `.flake8` (Flake8 does not read `pyproject.toml`) | `healthcare_sim_sdk/`, `tests/`, `scripts/` |
 | Ruff, targeted rules only | `[tool.ruff]` in `pyproject.toml` | Whole repository |
 | sdk-lint | `scripts/sdk_lint.py` | `healthcare_sim_sdk/`, `scripts/`, `tests/` |
-| Invariant check | `scripts/check_invariants.py` | Scenario contract, RNG streams, state opacity |
+| Invariant check | `scripts/check_invariants.py`, reading `config/invariants.yaml` | Scenario contract, RNG streams, state opacity, protected files |
 | docs-check | `scripts/check_docs.py` | Markdown files, agent guidance, adapter files |
 
 `tests/lint_fixtures/` holds deliberately bad code. It is excluded from every tool and from test collection, and is linted only by `tests/unit/test_sdk_lint.py`.

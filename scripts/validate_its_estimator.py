@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Statistical validation run for ``experiments/analysis/its``.
 
-Runs the full sim-guide verification protocol against the ITS
+Runs the full verification protocol (docs/simulation_protocol.md) against the ITS
 estimator and prints a structured report. Used to establish
 empirical bounds before locking in tests.
 
